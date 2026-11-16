@@ -45,8 +45,17 @@ can cause visible stretch. Releasing removes every temporary attachment.
 
 ## Select and move points across pieces
 
-In **Edit**, choose **Points** and **Box** or **Lasso**. Drag a selection across
-several patterns. Shift adds points; Shift-click toggles individual anchors.
+In the native CSSimpler **Edit** selection tool, double-click a boundary edge to
+insert a contour point at that location. Curved edges retain their shape and the
+split is one undoable edit. Sewn edges and edges with target lengths retain the
+existing split restrictions; the status bar explains rejected edits.
+
+Hold **Shift** and drag to draw a selection rectangle across patterns. Releasing
+the mouse adds all enclosed contour points to the selection, including points
+on rotated pieces. Selection changes only on release. Escape, losing window
+focus, or switching tools cancels the rectangle. **Shift-click** still toggles
+one point; an unmodified empty-space drag and middle/right drag pan the board.
+
 Drag a selected point to move the group, or use arrow keys for 1 mm increments
 (Shift: 10 mm). Each pattern's board rotation is accounted for. The edit is one
 undoable transaction and still validates contours and seams.

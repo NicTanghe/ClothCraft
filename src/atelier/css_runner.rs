@@ -27,7 +27,6 @@ use cssimpler::renderer::{EngineEvent, FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
 use cssimpler::ui;
 
-use glam::DVec2;
 use clothcraft::authoring::{
     self, Command, CornerRule, History,
     corner_tool::{
@@ -51,6 +50,7 @@ use clothcraft::garment::{
 use clothcraft::gpu_avbd::ContactMethod;
 use clothcraft::render::Camera;
 use clothcraft::vbd::{VbdMetrics, VbdSettings};
+use glam::DVec2;
 
 use super::DocumentFiles;
 use super::worker::{self, Latest, Work};
@@ -180,6 +180,13 @@ pub enum Hover2dTarget {
 
 #[derive(Clone, Debug)]
 pub enum Drag2d {
+    Marquee {
+        start_board_m: DVec2,
+        current_board_m: DVec2,
+        start_pointer: (f32, f32),
+        moved: bool,
+        click_point: Option<(String, usize)>,
+    },
     Pan {
         start_pan: (f64, f64),
         start_pointer: (f32, f32),
@@ -304,6 +311,7 @@ pub struct CssRunnerState {
     pub draft_2d: Option<ToolDraft2d>,
     pub status_message: String,
     pub pointer_down: bool,
+    last_2d_click: Option<(std::time::Instant, (f32, f32), Hover2dTarget)>,
     pub dragging_3d: bool,
     pub last_pointer_pos: (f32, f32),
     pub window_size: (f32, f32),
@@ -382,6 +390,7 @@ impl CssRunnerState {
             draft_2d: None,
             status_message: "Ready".to_string(),
             pointer_down: false,
+            last_2d_click: None,
             dragging_3d: false,
             last_pointer_pos: (0.0, 0.0),
             window_size: (1600.0, 980.0),
@@ -473,8 +482,7 @@ impl CssRunnerState {
 
     pub fn sync_usd_camera(&mut self) {
         if let Some(scene) = &self.usd_scene
-            && let Err(error) =
-                clothcraft::usd_scene::update_viewport_camera(scene, &self.camera)
+            && let Err(error) = clothcraft::usd_scene::update_viewport_camera(scene, &self.camera)
         {
             self.status_message = format!("USD camera error: {error}");
         }
@@ -885,12 +893,14 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
 
 fn set_active_2d_tool(state: &mut CssRunnerState, tool: &str) {
     state.active_2d_tool = tool.to_string();
+    state.last_2d_click = None;
+    state.drag_2d = None;
     state.draft_2d = None;
     state.preview_template = None;
     match tool {
         "Edit" => {
             state.status_message =
-                "2D Tool: Edit — click/drag corners, edges, or Bézier handles".into();
+                "2D Tool: Edit — double-click edges to split; Shift-drag to select points".into();
         }
         "Corner Select" => {
             state.accordion_open[1] = true;
@@ -2278,6 +2288,15 @@ fn nearest_edge_anchor(
 
 pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     match event {
+        EngineEvent::FocusChanged(false) => {
+            state.last_2d_click = None;
+            if matches!(state.drag_2d, Some(Drag2d::Marquee { .. })) {
+                state.pointer_down = false;
+                state.drag_2d = None;
+                return true;
+            }
+            false
+        }
         EngineEvent::ViewportChanged(vp) => {
             let new_size = (vp.width.max(1) as f32, vp.height.max(1) as f32);
             if state.window_size != new_size {
@@ -2406,6 +2425,13 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
                 }
                 if let cssimpler::renderer::KeyIdentity::Named(ref name) = k.logical_key {
                     if name == "Escape" {
+                        state.last_2d_click = None;
+                        if matches!(state.drag_2d, Some(Drag2d::Marquee { .. })) {
+                            state.drag_2d = None;
+                            state.pointer_down = false;
+                            state.status_message = "Cancelled rectangle selection".into();
+                            return true;
+                        }
                         if state.command_palette_open || state.solver_menu_open {
                             state.command_palette_open = false;
                             state.solver_menu_open = false;
@@ -2505,6 +2531,9 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
         } => {
             if state.command_palette_open || state.solver_menu_open {
                 return false;
+            }
+            if modifiers.shift || modifiers.control || modifiers.super_key {
+                state.last_2d_click = None;
             }
             let multi_mod = modifiers.shift || modifiers.control || modifiers.super_key;
             let was_down = state.pointer_down;
@@ -2899,6 +2928,41 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 
                         let hit = hit_test_2d(state, board_m);
                         state.hovered_2d = hit.clone();
+                        let now = std::time::Instant::now();
+                        let double_click =
+                            state
+                                .last_2d_click
+                                .take()
+                                .is_some_and(|(time, pos, target)| {
+                                    now.duration_since(time).as_millis() <= 400
+                                        && (px - pos.0).hypot(py - pos.1) <= 6.0
+                                        && hit.as_ref() == Some(&target)
+                                })
+                                && state.active_2d_tool == "Edit"
+                                && !multi_mod;
+                        if state.active_2d_tool == "Edit" && !multi_mod && !double_click {
+                            state.last_2d_click = hit.clone().map(|target| (now, (px, py), target));
+                        }
+                        if state.active_2d_tool == "Edit" && modifiers.shift {
+                            let click_point = match hit {
+                                Some(Hover2dTarget::Point {
+                                    panel_idx,
+                                    point_idx,
+                                }) => Some((
+                                    state.project.template.panels[panel_idx].id.clone(),
+                                    point_idx,
+                                )),
+                                _ => None,
+                            };
+                            state.drag_2d = Some(Drag2d::Marquee {
+                                start_board_m: board_m,
+                                current_board_m: board_m,
+                                start_pointer: (px, py),
+                                moved: false,
+                                click_point,
+                            });
+                            return true;
+                        }
                         match hit {
                             Some(Hover2dTarget::CornerPreviewHandle {
                                 panel_idx,
@@ -3260,11 +3324,12 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
                                     let pid = p.id.clone();
                                     let pname = p.name.clone();
                                     let ename = edge_name.clone();
-                                    let sampled_opt = if state.active_2d_tool == "Split" {
-                                        poly.edge_points(edge_idx).ok()
-                                    } else {
-                                        None
-                                    };
+                                    let sampled_opt =
+                                        if state.active_2d_tool == "Split" || double_click {
+                                            poly.edge_points(edge_idx).ok()
+                                        } else {
+                                            None
+                                        };
                                     let partners: Vec<String> =
                                         connected_edges(&state.project.template, &pid, &ename)
                                             .into_iter()
@@ -3276,7 +3341,7 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
                                     state.selected_2d_edge = Some((pid.clone(), ename.clone()));
                                     state.accordion_open[1] = true;
                                     state.open_accordion_idx = 1;
-                                    if state.active_2d_tool == "Split" {
+                                    if state.active_2d_tool == "Split" || double_click {
                                         if let Some(sampled) = sampled_opt {
                                             let local = board_to_panel_pt(
                                                 &state.project.template,
@@ -3427,6 +3492,47 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
                 }
                 if let Some(drag) = state.drag_2d.take() {
                     match drag {
+                        Drag2d::Marquee {
+                            start_board_m,
+                            current_board_m,
+                            start_pointer,
+                            moved,
+                            click_point,
+                        } => {
+                            let moved =
+                                moved || (px - start_pointer.0).hypot(py - start_pointer.1) >= 3.0;
+                            if moved {
+                                let end = screen_to_board_unclamped_m(state, px, py)
+                                    .unwrap_or(current_board_m);
+                                let lo = start_board_m.min(end);
+                                let hi = start_board_m.max(end);
+                                let mut points = effective_selected_points(state);
+                                for (idx, panel) in state.project.template.panels.iter().enumerate()
+                                {
+                                    for (point_idx, local) in
+                                        panel_raw_points(panel).into_iter().enumerate()
+                                    {
+                                        let point =
+                                            panel_to_board_pt(&state.project.template, idx, local);
+                                        if point.cmpge(lo).all() && point.cmple(hi).all() {
+                                            let key = (panel.id.clone(), point_idx);
+                                            if !points.contains(&key) {
+                                                points.push(key);
+                                            }
+                                        }
+                                    }
+                                }
+                                state.selected_2d_points = points;
+                                state.sync_selected_point();
+                                state.selected_2d_edge = None;
+                                state.corner_preview_active = false;
+                                state.status_message =
+                                    format!("Selected {} points", state.selected_2d_points.len());
+                            } else if let Some((panel, point)) = click_point {
+                                state.toggle_2d_point(panel, point);
+                            }
+                            return true;
+                        }
                         Drag2d::Point {
                             panel_id,
                             point_idx,
@@ -3553,6 +3659,13 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
             let dx = px - state.last_pointer_pos.0;
             let dy = py - state.last_pointer_pos.1;
             state.last_pointer_pos = (px, py);
+            if state
+                .last_2d_click
+                .as_ref()
+                .is_some_and(|(_, pos, _)| (px - pos.0).hypot(py - pos.1) > 6.0)
+            {
+                state.last_2d_click = None;
+            }
 
             if state.draft_2d.is_some() {
                 let pointer_down = state.pointer_down;
@@ -3620,6 +3733,26 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 
                 let drag = state.drag_2d.take().unwrap();
                 match drag {
+                    Drag2d::Marquee {
+                        start_board_m,
+                        current_board_m,
+                        start_pointer,
+                        moved,
+                        click_point,
+                    } => {
+                        let current_board_m =
+                            screen_to_board_unclamped_m(state, px, py).unwrap_or(current_board_m);
+                        let moved =
+                            moved || (px - start_pointer.0).hypot(py - start_pointer.1) >= 3.0;
+                        state.drag_2d = Some(Drag2d::Marquee {
+                            start_board_m,
+                            current_board_m,
+                            start_pointer,
+                            moved,
+                            click_point,
+                        });
+                        return true;
+                    }
                     Drag2d::Pan {
                         start_pan,
                         start_pointer,
@@ -6282,6 +6415,22 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
         }
     }
 
+    if let Some(Drag2d::Marquee {
+        start_board_m,
+        current_board_m,
+        moved: true,
+        ..
+    }) = &state.drag_2d
+    {
+        let lo = start_board_m.min(*current_board_m) * 1000.0;
+        let size = (*current_board_m - *start_board_m).abs() * 1000.0;
+        nodes.push(ui! {
+            <rect x={format!("{:.2}", lo.x)} y={format!("{:.2}", lo.y)}
+                width={format!("{:.2}", size.x)} height={format!("{:.2}", size.y)}
+                fill="#42b9e822" stroke={hover_cyan} stroke-width={format!("{:.2}", px)}
+                class="selection-marquee" />
+        });
+    }
     (nodes, view_box)
 }
 
@@ -6304,11 +6453,9 @@ pub fn create_runner_app<'a>(
     if let Some(parent) = preview_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let usda =
-        clothcraft::usd_scene::garment_stage_usda(&state.scene.garment, &state.scene.state)
-            .unwrap_or_default();
-    let usda =
-        clothcraft::usd_scene::append_viewport_surface(usda, &state.scene.collider.surface);
+    let usda = clothcraft::usd_scene::garment_stage_usda(&state.scene.garment, &state.scene.state)
+        .unwrap_or_default();
+    let usda = clothcraft::usd_scene::append_viewport_surface(usda, &state.scene.collider.surface);
     let _ = std::fs::write(&preview_path, usda);
 
     let usd_scene = cssimpler::renderer::gpu::usd::UsdScene::open(&preview_path)
@@ -8026,6 +8173,187 @@ mod tests {
             });
             assert_eq!(app.state().layout_mode, expected_mode);
         }
+    }
+
+    fn count_class(nodes: &[Node], target: &str) -> usize {
+        nodes
+            .iter()
+            .map(|n| match n {
+                Node::Element(el) => {
+                    usize::from(el.classes.iter().any(|c| c == target))
+                        + count_class(&el.children, target)
+                }
+                _ => 0,
+            })
+            .sum()
+    }
+
+    fn selection_test_state(dir: &std::path::Path) -> CssRunnerState {
+        let avatar = dir.join("avatar.obj");
+        fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").unwrap();
+        let mut project = FittingProject::basic(GarmentKind::Tshirt, 0, avatar);
+        project.template = GarmentTemplate::load(std::path::Path::new(
+            "examples/templates/curved-panels.json",
+        ))
+        .unwrap();
+        project.template.seams.clear();
+        let scene = project.compile().unwrap();
+        let files = DocumentFiles {
+            output: dir.join("out"),
+            source: None,
+            modified: false,
+        };
+        let (tx, latest) = worker::start_cpu().unwrap();
+        CssRunnerState::new(project, scene, files, tx, latest)
+    }
+
+    #[test]
+    fn test_selection_double_click_splits_curved_edge_and_undoes() {
+        let _guard = worker::WORKER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let mut state = selection_test_state(dir.path());
+        let before = state.project.template.clone();
+        let poly = before.panels[0].polygon.as_ref().unwrap();
+        let edge_idx = 0;
+        let sampled = poly.edge_points(edge_idx).unwrap();
+        let local = sampled[sampled.len() / 2];
+        let pos = board_to_screen_px(&state, panel_to_board_pt(&before, 0, local));
+        handle_runner_event(&mut state, &pointer_move_ev(pos.0, pos.1));
+        assert_eq!(
+            state.hovered_2d,
+            Some(Hover2dTarget::Edge {
+                panel_idx: 0,
+                edge_idx
+            })
+        );
+        handle_runner_event(&mut state, &pointer_btn_ev(true));
+        handle_runner_event(&mut state, &pointer_btn_ev(false));
+        assert!(
+            !state.files.modified,
+            "A single click must only select the edge"
+        );
+        handle_runner_event(&mut state, &pointer_btn_ev(true));
+        handle_runner_event(&mut state, &pointer_btn_ev(false));
+        let split = state.project.template.panels[0].polygon.as_ref().unwrap();
+        assert_eq!(split.points.len(), poly.points.len() + 1);
+        assert!(
+            panel_to_board_pt(&state.project.template, 0, split.points[1])
+                .distance(panel_to_board_pt(&before, 0, local))
+                < 0.001
+        );
+        assert!(undo_redo_2d(&mut state, false));
+        assert_eq!(
+            serde_json::to_value(&state.project.template).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+        assert!(undo_redo_2d(&mut state, true));
+        let roundtrip: GarmentTemplate =
+            serde_json::from_value(serde_json::to_value(&state.project.template).unwrap()).unwrap();
+        assert!(roundtrip.compile().is_ok());
+        assert_eq!(
+            state.project.template.panels[0]
+                .polygon
+                .as_ref()
+                .unwrap()
+                .points
+                .len(),
+            poly.points.len() + 1
+        );
+    }
+
+    #[test]
+    fn test_selection_marquee_selects_on_release_and_escape_cancels() {
+        let _guard = worker::WORKER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let mut state = selection_test_state(dir.path());
+        let before = state.project.template.clone();
+        let pan = state.board_2d_pan;
+        let points: Vec<_> = before
+            .panels
+            .iter()
+            .enumerate()
+            .flat_map(|(i, p)| {
+                panel_raw_points(p)
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(j, v)| (i, j, v))
+            })
+            .collect();
+        let lo = points
+            .iter()
+            .map(|&(i, _, v)| panel_to_board_pt(&before, i, v))
+            .fold(DVec2::splat(f64::INFINITY), DVec2::min)
+            - DVec2::splat(0.01);
+        let hi = points
+            .iter()
+            .map(|&(i, _, v)| panel_to_board_pt(&before, i, v))
+            .fold(DVec2::splat(f64::NEG_INFINITY), DVec2::max)
+            + DVec2::splat(0.01);
+        let start = board_to_screen_px(&state, hi);
+        let end = board_to_screen_px(&state, lo);
+        handle_runner_event(&mut state, &pointer_move_ev(start.0, start.1));
+        handle_runner_event(&mut state, &pointer_btn_mod_ev(true, true, false));
+        handle_runner_event(&mut state, &pointer_move_ev(end.0, end.1));
+        assert!(state.selected_2d_points.is_empty());
+        assert_eq!(
+            count_class(&render_runner_2d_svg(&state).0, "selection-marquee"),
+            1
+        );
+        // Releasing Shift before the button still completes the captured gesture.
+        handle_runner_event(&mut state, &pointer_btn_ev(false));
+        assert_eq!(state.selected_2d_points.len(), points.len());
+        assert_eq!(state.board_2d_pan, pan);
+        assert_eq!(
+            serde_json::to_value(&state.project.template).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+        assert!(!state.files.modified);
+        let selected = state.selected_2d_points.clone();
+        handle_runner_event(&mut state, &pointer_btn_mod_ev(true, true, false));
+        handle_runner_event(&mut state, &pointer_move_ev(start.0, start.1));
+        handle_runner_event(
+            &mut state,
+            &EngineEvent::Key(cssimpler::renderer::KeyboardEvent {
+                logical_key: cssimpler::renderer::KeyIdentity::Named("Escape".into()),
+                physical_key: None,
+                location: cssimpler::renderer::KeyLocation::Standard,
+                state: cssimpler::renderer::ButtonState::Pressed,
+                repeat: false,
+                modifiers: cssimpler::renderer::KeyboardModifiers::default(),
+            }),
+        );
+        handle_runner_event(&mut state, &pointer_btn_ev(false));
+        assert_eq!(state.selected_2d_points, selected);
+        assert!(state.drag_2d.is_none());
+        assert_eq!(
+            count_class(&render_runner_2d_svg(&state).0, "selection-marquee"),
+            0
+        );
+        state.clear_2d_subselection();
+        let anchor = panel_to_board_pt(
+            &before,
+            0,
+            before.panels[0].polygon.as_ref().unwrap().points[0],
+        );
+        let a = board_to_screen_px(&state, anchor - DVec2::splat(0.005));
+        let b = board_to_screen_px(&state, anchor + DVec2::splat(0.005));
+        handle_runner_event(&mut state, &pointer_move_ev(a.0, a.1));
+        handle_runner_event(&mut state, &pointer_btn_mod_ev(true, true, false));
+        handle_runner_event(&mut state, &pointer_move_ev(b.0, b.1));
+        handle_runner_event(&mut state, &pointer_btn_ev(false));
+        assert_eq!(
+            state.selected_2d_points,
+            vec![(before.panels[0].id.clone(), 0)]
+        );
+        handle_runner_event(&mut state, &pointer_btn_mod_ev(true, true, false));
+        handle_runner_event(&mut state, &EngineEvent::FocusChanged(false));
+        assert!(state.drag_2d.is_none());
+        assert!(!state.pointer_down);
+        assert_eq!(state.selected_2d_points.len(), 1);
     }
 
     #[test]
