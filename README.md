@@ -67,7 +67,7 @@ These are implemented foundations, not completed production workflows. See the [
 
 ## Physics: strengths and open problems
 
-The default in desktop-enabled builds is an **independent WGSL finite AVBD / Jacobi pipeline with a squared-distance IPC-style barrier**. Contact search, geometry, forces, path bounds and iteration decisions remain on the GPU; one snapshot returns per step for UI/export. This implements the proposal in issue #242, with explicit [scope, numerical limits and commands](docs/wgsl-avbd-ipc.md). It is not the complete published AVBD or IPC solver, and no dense-garment speedup is claimed. CPU VBD/OGC (`cloth-fit --cpu`), historical hybrid VBD/OGC (`--hybrid-vbd`) and double-precision Newton (`--reference`) remain available.
+The default in desktop-enabled builds is an **independent WGSL finite AVBD / Jacobi pipeline with a squared-distance IPC-style barrier**. Contact search, geometry, forces, path bounds and iteration decisions remain on the GPU; one snapshot returns per step for UI/export. This implements a [proposal in the earlier repository](https://github.com/erythrofr/ClothCraft/issues/242), with explicit [scope, numerical limits and commands](docs/wgsl-avbd-ipc.md). It is not the complete published AVBD or IPC solver, and no dense-garment speedup is claimed. CPU VBD/OGC (`cloth-fit --cpu`), historical hybrid VBD/OGC (`--hybrid-vbd`) and double-precision Newton (`--reference`) remain available.
 
 Contact protections are designed to preserve separation from an initially separated arrangement, within the documented geometric assumptions and local seam exclusions. They do not repair arbitrary initial intersections or guarantee every possible garment. See the [contact contract](docs/ogc.md).
 
@@ -131,6 +131,8 @@ The [architecture](docs/architecture.md), [handoff](docs/handoff.md) and [solver
 ## License and credits
 
 Original source and documentation are [MIT-licensed](LICENSE). The bundled MakeHuman assets retain their [CC0 notice and provenance](assets/makehuman/LICENSE.ASSETS.md); dependencies retain their own licenses. The project icon is documented in the [artwork record](assets/branding/README.md).
+
+This repository began as a snapshot, so its Git history does not show the original contributors. See [contributor credits](CONTRIBUTORS.md) for the people and author identities recorded in the earlier history, and links to the source history.
 
 Some authoring and camera tools were adapted from FireflyTheReal / julienfoss's fork; the [integration notes](docs/firefly-integration.md) record provenance and fixes.
 
