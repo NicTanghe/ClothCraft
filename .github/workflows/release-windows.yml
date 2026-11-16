@@ -1,0 +1,136 @@
+name: Windows portable preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+# One validation per PR revision; main and manual runs keep independent groups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  portable-windows:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RAYON_NUM_THREADS: 2
+      CARGO_INCREMENTAL: 0
+      WGPU_BACKEND: dx12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Cache dependencies only; full-validation runs rebuild package executables.
+      - name: Restore portable Rust dependency cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          prefix-key: clothcraft-deps-v1
+          key: portable-windows-release-desktop-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          env-vars: ImageOS ImageVersion
+          cache-bin: "false"
+          cache-workspace-crates: "false"
+          cache-on-failure: "false"
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Use a supported desktop resolution
+        shell: powershell
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+      - name: Record the hosted Windows graphics adapter
+        run: |
+          $video = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+            Select-Object Name, DriverVersion, Status
+          $video | Format-Table -AutoSize | Out-String | Write-Host
+      # PR/main runs share the mandatory Windows CPU suite in build.yml on the
+      # same windows-2025 image. Standalone manual packaging still runs it.
+      - name: Test the CPU core
+        if: (github.event_name == 'workflow_dispatch')
+        run: cargo test --locked --no-default-features -j 2 -- --test-threads=2
+      - name: Test package manifest coverage
+        run: |
+          $tokens = $null; $errors = $null
+          $scriptPath = (Resolve-Path ./scripts/package-windows.ps1).Path
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { throw $errors[0] }
+          $fn = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Test-PayloadManifest' }, $true)
+          if ($null -eq $fn) { throw 'Package manifest verifier not found' }
+          . ([ScriptBlock]::Create($fn.Extent.Text))
+          $root = Join-Path $env:RUNNER_TEMP ("manifest-fixture-" + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $root | Out-Null
+          [IO.File]::WriteAllText((Join-Path $root 'a.txt'), 'alpha')
+          [IO.File]::WriteAllText((Join-Path $root 'tissu-é.txt'), 'beta')
+          $a = (Get-FileHash -LiteralPath (Join-Path $root 'a.txt') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $b = (Get-FileHash -LiteralPath (Join-Path $root 'tissu-é.txt') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = Join-Path $root 'SHA256SUMS.txt'
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          function Set-FixtureManifest([string[]]$lines) { [IO.File]::WriteAllText($manifest, ($lines -join "`n") + "`n", $utf8) }
+          function Expect-ManifestFailure([string]$case, [string[]]$lines) {
+            Set-FixtureManifest $lines
+            try { [void](Test-PayloadManifest $root) } catch { Write-Host "$case rejected"; return }
+            throw "$case was accepted"
+          }
+          Set-FixtureManifest @("$a  a.txt", "$b  tissu-é.txt")
+          if ((Test-PayloadManifest $root) -ne 2) { throw 'Valid Unicode manifest failed' }
+          Expect-ManifestFailure 'Duplicate alias' @("$a  a.txt", "$a  ./a.txt")
+          Expect-ManifestFailure 'Missing payload' @("$a  a.txt")
+          Expect-ManifestFailure 'Wrong hash' @("$b  a.txt", "$b  tissu-é.txt")
+          Expect-ManifestFailure 'Path escape' @("$a  ../a.txt", "$b  tissu-é.txt")
+          $hidden = Join-Path $root 'hidden.txt'
+          [IO.File]::WriteAllText($hidden, 'hidden')
+          [IO.File]::SetAttributes($hidden, [IO.FileAttributes]::Hidden)
+          $hiddenDir = Join-Path $root 'hidden-dir'
+          New-Item -ItemType Directory -Path $hiddenDir | Out-Null
+          [IO.File]::WriteAllText((Join-Path $hiddenDir 'nested.txt'), 'nested')
+          [IO.File]::SetAttributes($hiddenDir, [IO.FileAttributes]::Hidden -bor [IO.FileAttributes]::Directory)
+          $h = (Get-FileHash -LiteralPath $hidden -Algorithm SHA256).Hash.ToLowerInvariant()
+          $n = (Get-FileHash -LiteralPath (Join-Path $hiddenDir 'nested.txt') -Algorithm SHA256).Hash.ToLowerInvariant()
+          Expect-ManifestFailure 'Hidden payload omitted' @("$a  a.txt", "$b  tissu-é.txt")
+          Set-FixtureManifest @("$a  a.txt", "$b  tissu-é.txt", "$h  hidden.txt", "$n  hidden-dir/nested.txt")
+          if ((Test-PayloadManifest $root) -ne 4) { throw 'Complete hidden-payload manifest failed' }
+          Write-Host 'Package manifest coverage fixtures passed.'
+      - name: Build portable executables
+        run: >-
+          cargo build --locked --release -j 2 --features desktop
+          --bin cloth-fit --bin clothcraft --bin cloth-template --bin cloth-session
+      - name: Package, verify hashes and run native editor launch/capture from a path with spaces
+        timeout-minutes: 10
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'ClothCraft Portable Preview'
+          ./scripts/package-windows.ps1 -Destination $destination -Revision $env:GITHUB_SHA -Verify -UiSmoke
+          $refused = $false
+          try {
+            ./scripts/package-windows.ps1 -Destination $destination -Revision $env:GITHUB_SHA
+          } catch {
+            if ($_.Exception.Message -notlike 'Refusing to overwrite existing path:*') { throw }
+            $refused = $true
+          }
+          if (-not $refused) { throw 'Packaging unexpectedly overwrote an existing destination' }
+      - name: Upload native smoke evidence
+        if: (always())
+        uses: actions/upload-artifact@v4
+        with:
+          name: clothcraft-windows-native-smoke-evidence
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/ClothCraft Portable Preview.verify/ui-smoke
+            ${{ runner.temp }}/ClothCraft Portable Preview.verify/ui-project-seed
+            ${{ runner.temp }}/ClothCraft Portable Preview.verify/ui-smoke.out.log
+            ${{ runner.temp }}/ClothCraft Portable Preview.verify/ui-smoke.err.log
+            ${{ runner.temp }}/ClothCraft Portable Preview.verify/ui-project-seed.out.log
+            ${{ runner.temp }}/ClothCraft Portable Preview.verify/ui-project-seed.err.log
+            ${{ runner.temp }}/ClothCraft Portable Preview.verify/session-output.jsonl
+            ${{ runner.temp }}/ClothCraft Portable Preview.verify/session-error.log
+      - name: Upload portable preview and archive checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: clothcraft-windows-x64-portable-preview
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/ClothCraft Portable Preview.zip
+            ${{ runner.temp }}/ClothCraft Portable Preview.zip.sha256

@@ -1,0 +1,201 @@
+# Install development builds
+
+ClothCraft is **free, open-source software**. The standalone editor and the
+garment simulation do not require a login, AI subscription or payment. This
+is an experimental development build, not a production-ready CLO replacement.
+
+## Cross-platform development artifacts
+
+Successful [cross-platform build runs](https://github.com/erythrofr/ClothCraft/actions/workflows/build.yml)
+provide `clothcraft-linux-x86_64`, `clothcraft-macos-arm64` and
+`clothcraft-windows-x86_64`. Choose the source revision before downloading;
+an unmerged PR artifact is a candidate, not an accepted release. Extract the
+whole artifact and keep its assets, examples and license beside the binaries.
+`BUILD-ENVIRONMENT.txt` records the source revision and toolchain. These are
+unsigned development bundles, not installers or notarized macOS applications.
+They do not carry the Windows portable preview's launcher or checksum manifest.
+
+Each bundle includes `cloth-session` (`cloth-session.exe` on Windows), the
+local CPU authoring process. From a terminal in the extracted directory, run
+`./cloth-session` on Linux/macOS or `.\cloth-session.exe` in PowerShell; it
+reads the versioned JSON-lines protocol on standard input. It does not open an
+editor or simulate cloth. Archive extraction may require restoring executable
+permissions on Unix systems with `chmod +x cloth-session`.
+
+The build workflow copies the staged bundle to an isolated directory with
+spaces and runs `scripts/check-packaged-session.py`: create two panels, sew,
+reject a stale revision, undo/redo, serialize, then reopen in a fresh process
+and reject the previous session's guard. Both processes must exit cleanly on
+EOF. A bounded lifetime prevents a hung client from passing. This is automated
+CPU protocol acceptance, not native UI or GPU/driver certification. To reproduce
+from a source checkout with Python 3, run
+`python scripts/check-packaged-session.py path/to/extracted-artifact`.
+It copies the supplied directory and edits only temporary public fixtures.
+
+## Windows x64 portable preview
+
+Download the `clothcraft-windows-x64-portable-preview` ZIP artifact from a
+successful [Windows portable preview workflow run](https://github.com/erythrofr/ClothCraft/actions/workflows/release-windows.yml).
+For an unmerged pull request, use that PR's check run and inspect its source
+revision before trying its artifact. GitHub may require sign-in to retrieve
+workflow artifacts. The repository's general cross-platform build bundles
+are separate development artifacts.
+
+1. Download the workflow artifact and extract its outer GitHub ZIP to obtain
+   `ClothCraft Portable Preview.zip` and the adjacent `.zip.sha256` file.
+2. Open PowerShell in the folder containing both files and verify the archive:
+
+   ```powershell
+   $expectedHash = ((Get-Content -Raw -LiteralPath '.\ClothCraft Portable Preview.zip.sha256').Trim() -split '\s+')[0]
+   $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath '.\ClothCraft Portable Preview.zip').Hash
+   if ($expectedHash -notmatch '^[0-9a-fA-F]{64}$' -or $actualHash -ne $expectedHash) {
+       throw 'Archive checksum mismatch or invalid checksum file'
+   }
+   'Archive checksum matches'
+   ```
+3. Extract the entire ZIP into a writable folder, for example
+   `C:\Users\YourName\Documents\ClothCraft Preview`. **Do not run the files
+   directly from inside the ZIP.** Keep `assets`, `examples`, `LICENSE`,
+   `BUILD-INFO.txt` and `SHA256SUMS.txt` alongside the `.exe` programs.
+4. Double-click **Start ClothCraft.cmd** from the extracted folder. The script
+   uses the extracted directory as the working directory so relative assets
+   resolve correctly. Alternatively run `cloth-fit.exe --steps 0 --view` from
+   a terminal opened in that directory.
+
+The archive contains `cloth-fit.exe` (native fitting editor),
+`clothcraft.exe` (additional native CLI entrypoint) and
+`cloth-template.exe` (headless CPU template commands), `cloth-session.exe`
+(local JSON-lines authoring process), bundled MakeHuman
+mannequin assets with their independent license notice, original sample
+templates, project README, MIT `LICENSE`, build provenance and per-file SHA256
+hashes. No proprietary garment libraries are bundled. Preserve a saved
+project JSON and its adjacent `.assets` directory together when moving files.
+
+The package is **unsigned and not an installer**: Windows may ask whether to
+run an unrecognized program. Inspect the source revision and checksum first.
+It does not modify the registry or install background services. Windows 10/11
+x64 with a graphics adapter supported by wgpu is the intended target. A
+Microsoft Visual C++ runtime may be required on some systems; obtain it from
+[Microsoft's official downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+if Windows reports a missing runtime DLL. No runtime installer is bundled.
+GPU support, driver versions and performance must be checked on the actual
+machine; building successfully does not certify a particular adapter.
+
+## Check the package without a GPU
+
+From PowerShell inside the extracted directory:
+
+```powershell
+.\cloth-template.exe validate 'examples/templates/two-panel.json'
+.\cloth-template.exe example '.\My First Pattern.json'
+.\cloth-template.exe validate '.\My First Pattern.json'
+```
+
+The `example` command refuses to overwrite an existing file. `SHA256SUMS.txt`
+contains SHA256 hashes of each packaged file (relative to the extracted root).
+`BUILD-INFO.txt` records the revision supplied by the packager (or its checkout
+revision), package time and packaging host environment. The script accepts
+prebuilt binaries and does not verify that their source or build toolchain
+matches this metadata; use the associated workflow run for build provenance.
+The separate `.zip.sha256` covers the archive itself.
+
+## Native editor acceptance checklist
+
+The package verification also launches `cloth-session.exe` from the extracted
+directory and checks its versioned hello response and empty initial snapshot.
+This is CPU-only. The session accepts JSON objects on standard input and returns
+one JSON response per line; it is intended for local automation clients. It
+starts without a document: clients must explicitly send `open` with a native
+template, then use the returned session/revision guard for edits. It supports
+transactional edits and undo/redo, but does not attach to an open editor, run
+physics, or read/write caller-supplied filesystem paths. The client handles
+template files. It needs no AI service or subscription.
+
+The automated Windows workflow compiles binaries, runs CPU tests, verifies the
+ZIP checksums, extracts into a **directory containing spaces**, validates a
+bundled template, and writes/reopens a separate CPU example. It then runs the
+opt-in native launch/capture smoke from that extracted package:
+
+- First it runs the packaged `cloth-fit` headlessly to write a fitting project
+  and its assets. This is a CLI document write; no editor is open yet.
+- Then `--cpu --ui-smoke --project <that file>` opens the CLI-written project
+  in the actual editor, captures `ui.png`, and closes. The CLI also writes the launch
+  output project before the editor starts, so the check covers project
+  load/write plus native window launch/capture, not native Save or Export.
+
+A hosted runner is a fresh Windows environment, but it may expose a software
+adapter such as WARP. The packaged launch/capture check explicitly selects the CPU
+solver with `--cpu`; the normal application launch retains its GPU default.
+The smoke therefore does not certify a physical GPU, driver version, file-dialog interaction, clipboard/focus behavior or a normal
+desktop session. If no usable wgpu adapter or window is available, the smoke
+step fails; the CPU package checks remain valid evidence only.
+
+The longer `--ui-authoring-smoke` pointer suite is deliberately not part of
+the hosted check. Its fixed 40-55 second frame budget cannot complete at a
+supported editor layout on a software adapter; the 1100x700 minimum also makes
+its rectangle drag self-intersect. Run that suite manually on a
+hardware-accelerated Windows desktop before claiming full pointer/authoring
+acceptance.
+
+On an actual Windows desktop, perform the following before calling this a
+clean-machine GUI release:
+
+1. Extract into a new writable directory whose path contains spaces. Launch
+   `Start ClothCraft.cmd` and record Windows version, CPU/GPU, driver and the
+   claimed Git commit in `BUILD-INFO.txt` and corroborate it against the
+   artifact's workflow run. Compare the adapter/backend with the hosted log;
+   a software adapter is not hardware acceptance.
+2. Open a sample garment, select and edit a panel, sew if applicable, then
+   undo and redo. Confirm cancellation of Open and Save As dialogs does not
+   modify the active document.
+3. Save to a new path containing spaces and Unicode characters, close, reopen
+   and check the geometry, seam relationships and any adjacent `.assets` files.
+4. Verify keyboard focus and clipboard actions in text fields and the 2D/3D
+   editor independently. Verify normal exit and a second launch.
+5. Record selected wgpu backend/adapter, warnings, failures and reproducing
+   actions in [EXO-QA-002 issue #23](https://github.com/erythrofr/ClothCraft/issues/23).
+
+Do not infer native edit/save success from the headless example test. The
+floor is currently a visual reference rather than a physical collider; dense
+meshes, residual oscillation and initial intersections can still fail.
+
+## Reproduce the portable build from source
+
+Requires Windows x64, Git, Rust stable with the MSVC target and a working
+Microsoft C++ build toolchain. From the repository root:
+
+```powershell
+cargo test --locked --no-default-features -j 2 -- --test-threads=2
+cargo build --locked --release -j 2 --features desktop --bin cloth-fit --bin clothcraft --bin cloth-template --bin cloth-session
+.\scripts\package-windows.ps1 -Destination "$env:TEMP\ClothCraft Package With Spaces" -BinariesDirectory '.\target\release' -Verify -UiSmoke
+```
+
+The packaging script never overwrites an existing staging folder or archive.
+With `-Verify`, it also refuses an existing `.verify` directory, verifies every
+extracted payload hash, and runs the CPU write/reopen check there. `-UiSmoke`
+requires `-Verify`. It uses the packaged CLI to write and load a fitting
+project, then launches the actual editor, opens that project, captures its
+window, and closes. It does not exercise native Save, Export or editing, and is
+not part of the ordinary CPU test suite. Verification files stay beside the
+archive for inspection. Destinations inside recursively copied
+asset/template folders are rejected. Package from freshly built binaries:
+the recorded source revision identifies the intended checkout, not a signed
+attestation of an arbitrary externally supplied executable.
+Use a new destination for each release. See
+[native platform validation](platform-validation.md) for the separate macOS,
+Linux and Windows CPU compile matrix and its remaining UI acceptance gaps.
+
+
+### Portable CI dependency reuse
+
+Automatic PR/main packaging shares the mandatory `build (windows-x86_64)` CPU
+suite on `windows-2025`; the `portable-windows` job still builds release binaries
+and verifies the extracted package and native launch/capture. Both checks must
+pass on the same revision. Standalone manual packaging runs its own CPU suite.
+A successful packaging job alone is not evidence that the separate CPU job ran.
+
+The portable workflow caches dependencies with a pinned action and a distinct
+release/OS/architecture/lockfile key. Only successful trusted main pushes save
+that cache. Workspace crates and executables are excluded; every run still
+builds the package and performs its verification. No cache hit skips acceptance,
+and no measured speedup is claimed until comparable hosted runs are available.

@@ -1,0 +1,524 @@
+//! Static USD publication, independent of the desktop and the physical solvers.
+//!
+//! This bounded USDA writer is a publication boundary, not a USD parser or stage
+//! implementation. Editable templates remain the source of semantic references;
+//! the future event-thread scene adapter can load the result into cssimpler's
+//! native `openusd::usd::Stage`. See `docs/usd-scene.md` for losses and units.
+use crate::{garment::CompiledGarment, model::State};
+use std::{collections::BTreeSet, fmt::Write as _};
+
+fn quoted(value: &str) -> Result<String, String> {
+    let mut out = String::from("\"");
+    for c in value.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => return Err("USD panel ID contains a control character".into()),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    Ok(out)
+}
+
+/// Stable, injective encoding; no sanitization collisions or panel-order indices.
+fn prim_name(id: &str) -> String {
+    let mut name = String::from("panel_");
+    for byte in id.bytes() {
+        write!(name, "{byte:02x}").unwrap();
+    }
+    name
+}
+
+fn finite_float(value: f64) -> bool {
+    value.is_finite() && (value as f32).is_finite()
+}
+
+/// Publish one world-space snapshot as metre-scale, Y-up USDA polygon meshes.
+///
+/// Each panel becomes a separate Mesh. `points` and `primvars:st` use USD's
+/// standard f32 types; `clothcraft:restUV` retains the original f64 material
+/// coordinates in metres. Indices are local transient mesh topology, never
+/// persistent authoring references. Winding is preserved with `rightHanded`
+/// orientation, two-sided cloth, and explicitly disabled subdivision.
+///
+/// Rejects inconsistent panel partitions, out-of-panel triangles, duplicate IDs,
+/// non-finite data and values outside f32 range before returning any artifact.
+/// No solver, filesystem, GPU, material network or editable-document state is
+/// changed. Velocities, seams, physical properties and other authoring data are
+/// deliberately omitted; this is not a project backup or an import adapter.
+pub fn garment_stage_usda(garment: &CompiledGarment, state: &State) -> Result<String, String> {
+    let mesh = &garment.mesh;
+    if state.x.len() != mesh.uv.len() || !state.time.is_finite() {
+        return Err("USD snapshot requires matching positions and finite time".into());
+    }
+    if garment.panels.is_empty() {
+        return Err("USD snapshot requires at least one panel".into());
+    }
+    if state
+        .x
+        .iter()
+        .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+        || mesh
+            .uv
+            .iter()
+            .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+    {
+        return Err("USD points and UVs must be finite and representable as f32".into());
+    }
+    let mut vertices_seen = vec![false; mesh.uv.len()];
+    let mut triangles_seen = vec![false; mesh.triangles.len()];
+    let mut ids = BTreeSet::new();
+    for panel in &garment.panels {
+        if panel.id.is_empty() || !ids.insert(&panel.id) {
+            return Err("USD snapshot requires unique nonempty panel IDs".into());
+        }
+        quoted(&panel.id)?;
+        if panel.vertices.start >= panel.vertices.end
+            || panel.vertices.end > mesh.uv.len()
+            || panel.triangles.start >= panel.triangles.end
+            || panel.triangles.end > mesh.triangles.len()
+            || panel.vertices.len() > i32::MAX as usize
+        {
+            return Err(format!("USD panel {} has invalid mesh ranges", panel.id));
+        }
+        for i in panel.vertices.clone() {
+            if std::mem::replace(&mut vertices_seen[i], true) {
+                return Err("USD panel vertex ranges overlap".into());
+            }
+        }
+        for i in panel.triangles.clone() {
+            if std::mem::replace(&mut triangles_seen[i], true) {
+                return Err("USD panel triangle ranges overlap".into());
+            }
+            let triangle = &mesh.triangles[i];
+            if triangle
+                .vertices
+                .iter()
+                .any(|v| !panel.vertices.contains(v))
+            {
+                return Err(format!(
+                    "USD panel {} has an out-of-panel triangle",
+                    panel.id
+                ));
+            }
+            let [a, b, c] = triangle.vertices;
+            if a == b || b == c || c == a {
+                return Err("USD triangle repeats a point index".into());
+            }
+        }
+    }
+    if vertices_seen.contains(&false) || triangles_seen.contains(&false) {
+        return Err("USD panel ranges must cover the entire mesh".into());
+    }
+
+    let mut out = String::from(
+        "#usda 1.0\n(\n    defaultPrim = \"World\"\n    metersPerUnit = 1\n    upAxis = \"Y\"\n)\n\ndef Xform \"World\"\n{\n    def Scope \"Garment\"\n    {\n        custom int clothcraft:snapshotVersion = 1\n",
+    );
+    writeln!(
+        out,
+        "        custom double clothcraft:timeSeconds = {}",
+        state.time
+    )
+    .unwrap();
+    for panel in &garment.panels {
+        writeln!(
+            out,
+            "        def Mesh \"{}\"\n        {{",
+            prim_name(&panel.id)
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "            custom string clothcraft:panelId = {}",
+            quoted(&panel.id)?
+        )
+        .unwrap();
+        out.push_str("            uniform token subdivisionScheme = \"none\"\n            uniform token orientation = \"rightHanded\"\n            uniform bool doubleSided = true\n            point3f[] points = [");
+        for (j, p) in state.x[panel.vertices.clone()].iter().enumerate() {
+            if j > 0 {
+                out.push_str(", ");
+            }
+            write!(out, "({}, {}, {})", p.x as f32, p.y as f32, p.z as f32).unwrap();
+        }
+        out.push_str("]\n            int[] faceVertexCounts = [");
+        for j in 0..panel.triangles.len() {
+            if j > 0 {
+                out.push_str(", ");
+            }
+            out.push('3');
+        }
+        out.push_str("]\n            int[] faceVertexIndices = [");
+        for (j, tri) in mesh.triangles[panel.triangles.clone()].iter().enumerate() {
+            if j > 0 {
+                out.push_str(", ");
+            }
+            let [a, b, c] = tri.vertices.map(|v| v - panel.vertices.start);
+            write!(out, "{a}, {b}, {c}").unwrap();
+        }
+        out.push_str("]\n            custom double2[] clothcraft:restUV = [");
+        for (j, uv) in mesh.uv[panel.vertices.clone()].iter().enumerate() {
+            if j > 0 {
+                out.push_str(", ");
+            }
+            write!(out, "({}, {})", uv.x, uv.y).unwrap();
+        }
+        out.push_str("]\n            texCoord2f[] primvars:st = [");
+        for (j, uv) in mesh.uv[panel.vertices.clone()].iter().enumerate() {
+            if j > 0 {
+                out.push_str(", ");
+            }
+            write!(out, "({}, {})", uv.x as f32, uv.y as f32).unwrap();
+        }
+        out.push_str("] (\n                interpolation = \"vertex\"\n            )\n            color3f[] primvars:displayColor = [(0.62, 0.68, 0.78)] (\n                interpolation = \"constant\"\n            )\n        }\n");
+    }
+    out.push_str("    }\n}\n");
+    Ok(out)
+}
+
+/// Publish a single-mesh model state as metre-scale, Y-up USDA polygon mesh.
+pub fn mesh_stage_usda(
+    mesh: &crate::model::Mesh,
+    state: &crate::model::State,
+) -> Result<String, String> {
+    if state.x.len() != mesh.uv.len() || !state.time.is_finite() {
+        return Err("USD snapshot requires matching positions and finite time".into());
+    }
+    if mesh.triangles.is_empty() {
+        return Err("USD snapshot requires at least one triangle".into());
+    }
+    if state
+        .x
+        .iter()
+        .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+        || mesh
+            .uv
+            .iter()
+            .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+    {
+        return Err("USD points and UVs must be finite and representable as f32".into());
+    }
+
+    let mut out = String::from(
+        "#usda 1.0\n(\n    defaultPrim = \"World\"\n    metersPerUnit = 1\n    upAxis = \"Y\"\n)\n\ndef Xform \"World\"\n{\n    def Scope \"Garment\"\n    {\n        custom int clothcraft:snapshotVersion = 1\n",
+    );
+    writeln!(
+        out,
+        "        custom double clothcraft:timeSeconds = {}",
+        state.time
+    )
+    .unwrap();
+    out.push_str("        def Mesh \"cloth_mesh\"\n        {\n            custom string clothcraft:panelId = \"cloth\"\n            uniform token subdivisionScheme = \"none\"\n            uniform token orientation = \"rightHanded\"\n            uniform bool doubleSided = true\n            point3f[] points = [");
+    for (j, p) in state.x.iter().enumerate() {
+        if j > 0 {
+            out.push_str(", ");
+        }
+        write!(out, "({}, {}, {})", p.x as f32, p.y as f32, p.z as f32).unwrap();
+    }
+    out.push_str("]\n            int[] faceVertexCounts = [");
+    for j in 0..mesh.triangles.len() {
+        if j > 0 {
+            out.push_str(", ");
+        }
+        out.push('3');
+    }
+    out.push_str("]\n            int[] faceVertexIndices = [");
+    for (j, tri) in mesh.triangles.iter().enumerate() {
+        if j > 0 {
+            out.push_str(", ");
+        }
+        let [a, b, c] = tri.vertices;
+        write!(out, "{a}, {b}, {c}").unwrap();
+    }
+    out.push_str("]\n            custom double2[] clothcraft:restUV = [");
+    for (j, uv) in mesh.uv.iter().enumerate() {
+        if j > 0 {
+            out.push_str(", ");
+        }
+        write!(out, "({}, {})", uv.x, uv.y).unwrap();
+    }
+    out.push_str("]\n            texCoord2f[] primvars:st = [");
+    for (j, uv) in mesh.uv.iter().enumerate() {
+        if j > 0 {
+            out.push_str(", ");
+        }
+        write!(out, "({}, {})", uv.x as f32, uv.y as f32).unwrap();
+    }
+    out.push_str("] (\n                interpolation = \"vertex\"\n            )\n            color3f[] primvars:displayColor = [(0.62, 0.68, 0.78)] (\n                interpolation = \"constant\"\n            )\n        }\n    }\n}\n");
+    Ok(out)
+}
+
+/// Update transient display positions on the event thread, preserving USD identity.
+#[cfg(feature = "desktop")]
+pub fn update_viewport_points(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    path: &str,
+    positions: &[glam::DVec3],
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::gf;
+    if positions
+        .iter()
+        .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+    {
+        return Err("USD display positions must be finite f32 values".into());
+    }
+    let points: Vec<_> = positions
+        .iter()
+        .map(|p| gf::vec3f(p.x as f32, p.y as f32, p.z as f32))
+        .collect();
+    scene
+        .stage()
+        .attribute(format!("{path}.points"))
+        .map_err(|e| e.to_string())?
+        .set(points)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Transient USD mesh path derived from a semantic panel ID.
+#[cfg(feature = "desktop")]
+pub fn viewport_panel_path(id: &str) -> String {
+    format!("/World/Garment/{}", prim_name(id))
+}
+
+#[cfg(feature = "desktop")]
+pub fn update_viewport_topology(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    mesh: &crate::model::Mesh,
+) -> Result<(), String> {
+    for (name, values) in [
+        ("faceVertexCounts", vec![3_i32; mesh.triangles.len()]),
+        (
+            "faceVertexIndices",
+            mesh.triangles
+                .iter()
+                .flat_map(|t| t.vertices.map(|i| i as i32))
+                .collect(),
+        ),
+    ] {
+        scene
+            .stage()
+            .attribute(format!("/World/Garment/cloth_mesh.{name}"))
+            .map_err(|e| e.to_string())?
+            .set(values)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Update per-panel USD mesh topology, vertex positions, and UVs after authoring edits.
+#[cfg(feature = "desktop")]
+pub fn update_panel_viewport_mesh(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    garment: &CompiledGarment,
+    state: &State,
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::gf;
+    if state.x.len() != garment.mesh.uv.len() {
+        return Err("USD mesh sync requires matching state and UV vertex counts".into());
+    }
+    if state
+        .x
+        .iter()
+        .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+        || garment
+            .mesh
+            .uv
+            .iter()
+            .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+    {
+        return Err("USD display positions and UVs must be finite f32 values".into());
+    }
+    let stage = scene.stage();
+    for panel in &garment.panels {
+        let path = viewport_panel_path(&panel.id);
+        let points: Vec<_> = state.x[panel.vertices.clone()]
+            .iter()
+            .map(|p| gf::vec3f(p.x as f32, p.y as f32, p.z as f32))
+            .collect();
+        let counts = vec![3_i32; panel.triangles.len()];
+        let indices: Vec<i32> = garment.mesh.triangles[panel.triangles.clone()]
+            .iter()
+            .flat_map(|t| t.vertices.map(|v| (v - panel.vertices.start) as i32))
+            .collect();
+        let uvs: Vec<_> = garment.mesh.uv[panel.vertices.clone()]
+            .iter()
+            .map(|uv| gf::vec2f(uv.x as f32, uv.y as f32))
+            .collect();
+        stage
+            .attribute(format!("{path}.points"))
+            .map_err(|e| e.to_string())?
+            .set(points)
+            .map_err(|e| e.to_string())?;
+        stage
+            .attribute(format!("{path}.faceVertexCounts"))
+            .map_err(|e| e.to_string())?
+            .set(counts)
+            .map_err(|e| e.to_string())?;
+        stage
+            .attribute(format!("{path}.faceVertexIndices"))
+            .map_err(|e| e.to_string())?
+            .set(indices)
+            .map_err(|e| e.to_string())?;
+        stage
+            .attribute(format!("{path}.primvars:st"))
+            .map_err(|e| e.to_string())?
+            .set(uvs)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Add a static collision surface to a display stage without changing physics.
+pub fn append_viewport_surface(mut usda: String, surface: &crate::avatar::SurfaceMesh) -> String {
+    // Put the display-only mesh alongside World so garment panel identity is unchanged.
+    usda.push_str("\ndef Mesh \"Collider\"\n{\n uniform token subdivisionScheme = \"none\"\n uniform bool doubleSided = true\n color3f[] primvars:displayColor = [(0.42, 0.44, 0.48)]\n point3f[] points = [");
+    for (i, p) in surface.vertices.iter().enumerate() {
+        if i > 0 {
+            usda.push(',');
+        }
+        write!(usda, "({},{},{})", p.x as f32, p.y as f32, p.z as f32).unwrap();
+    }
+    usda.push_str("]\n int[] faceVertexCounts = [");
+    for i in 0..surface.triangles.len() {
+        if i > 0 {
+            usda.push(',');
+        }
+        usda.push('3');
+    }
+    usda.push_str("]\n int[] faceVertexIndices = [");
+    for (i, t) in surface.triangles.iter().enumerate() {
+        if i > 0 {
+            usda.push(',');
+        }
+        write!(usda, "{},{},{}", t[0], t[1], t[2]).unwrap();
+    }
+    usda.push_str("]\n}\n");
+    usda
+}
+
+/// Tessellate the analytic reference collider for display only.
+pub fn viewport_sphere(sphere: &crate::contact::Sphere) -> crate::avatar::SurfaceMesh {
+    use glam::DVec3;
+    let mut vertices = vec![sphere.center + DVec3::Y * sphere.radius];
+    let mut triangles = Vec::new();
+    const N: usize = 32;
+    const R: usize = 15;
+    for ring in 1..=R {
+        let theta = std::f64::consts::PI * ring as f64 / (R + 1) as f64;
+        for j in 0..N {
+            let phi = std::f64::consts::TAU * j as f64 / N as f64;
+            vertices.push(
+                sphere.center
+                    + sphere.radius
+                        * DVec3::new(
+                            theta.sin() * phi.cos(),
+                            theta.cos(),
+                            theta.sin() * phi.sin(),
+                        ),
+            );
+        }
+    }
+    let bottom = vertices.len();
+    vertices.push(sphere.center - DVec3::Y * sphere.radius);
+    for j in 0..N {
+        let next = (j + 1) % N;
+        triangles.push([0, 1 + next, 1 + j]);
+        for ring in 0..R - 1 {
+            let a = 1 + ring * N + j;
+            let b = 1 + ring * N + next;
+            triangles.push([a, b, a + N]);
+            triangles.push([b, b + N, a + N]);
+        }
+        triangles.push([1 + (R - 1) * N + j, 1 + (R - 1) * N + next, bottom]);
+    }
+    crate::avatar::SurfaceMesh {
+        vertices,
+        triangles,
+    }
+}
+
+#[cfg(feature = "desktop")]
+pub const VIEWPORT_CAMERA_PATH: &str = "/World/ViewportCamera";
+
+#[cfg(feature = "desktop")]
+pub fn default_scene_camera(
+    positions: &[glam::DVec3],
+    surface: Option<&crate::avatar::SurfaceMesh>,
+) -> crate::render::Camera {
+    let mut min = glam::DVec3::splat(f64::INFINITY);
+    let mut max = glam::DVec3::splat(f64::NEG_INFINITY);
+    let mut any = false;
+    let mut include = |pts: &[glam::DVec3]| {
+        for &p in pts {
+            if p.is_finite() {
+                min = min.min(p);
+                max = max.max(p);
+                any = true;
+            }
+        }
+    };
+    include(positions);
+    if let Some(surface) = surface {
+        include(&surface.vertices);
+    }
+    if !any {
+        return crate::render::Camera::default();
+    }
+    let center = ((min + max) * 0.5).as_vec3();
+    let extent = (max - min).length().max(0.01) as f32;
+    let distance = (extent * 1.6).clamp(0.5, 15.0);
+    crate::render::Camera::new(0.5, 0.25, distance, center)
+}
+
+#[cfg(feature = "desktop")]
+pub fn init_viewport_camera(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    camera: &crate::render::Camera,
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::sdf;
+    use cssimpler::renderer::gpu::openusd_schemas::geom::{self, CameraSchema};
+    let stage = scene.stage();
+    let path = sdf::Path::new(VIEWPORT_CAMERA_PATH).map_err(|e| e.to_string())?;
+    let cam = geom::Camera::define(stage, &path).map_err(|e| e.to_string())?;
+    cam.create_focal_length_attr()
+        .map_err(|e| e.to_string())?
+        .set(35.0_f32)
+        .map_err(|e| e.to_string())?;
+    cam.create_vertical_aperture_attr()
+        .map_err(|e| e.to_string())?
+        .set(24.0_f32)
+        .map_err(|e| e.to_string())?;
+    cam.create_horizontal_aperture_attr()
+        .map_err(|e| e.to_string())?
+        .set(36.0_f32)
+        .map_err(|e| e.to_string())?;
+    update_viewport_camera(scene, camera)
+}
+
+#[cfg(feature = "desktop")]
+pub fn update_viewport_camera(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    camera: &crate::render::Camera,
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::{gf, sdf};
+    use cssimpler::renderer::gpu::openusd_schemas::geom::{self, CameraSchema, XformableExt};
+    let stage = scene.stage();
+    let path = sdf::Path::new(VIEWPORT_CAMERA_PATH).map_err(|e| e.to_string())?;
+    let cam = geom::Camera::get(stage, &path)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("USD camera not found: {VIEWPORT_CAMERA_PATH}"))?;
+    let world =
+        glam::camera::rh::view::look_at_mat4(camera.eye(), camera.target, camera.up()).inverse();
+    let dist = camera.distance.max(0.01);
+    cam.create_clipping_range_attr()
+        .map_err(|e| e.to_string())?
+        .set(gf::vec2f((dist * 0.001).max(0.0001), dist * 1000.0))
+        .map_err(|e| e.to_string())?;
+    cam.set_transform(gf::Matrix4d(world.to_cols_array().map(f64::from)))
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}

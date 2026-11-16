@@ -1,0 +1,812 @@
+{
+  "version": 1,
+  "clock": 3.342039609635428,
+  "tickets": [
+    {
+      "id": "FC-0001",
+      "title": "Set up the local software factory",
+      "acceptance": "Gitignored agent mailbox; tested weighted ticket scheduling; feature PR and gh merge workflow with standing review authorization.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 0.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/1"
+    },
+    {
+      "id": "FC-0002",
+      "title": "Integrate upstream provenance, SVG format accuracy, and corner/cutout specifications",
+      "acceptance": "Merge upstream PR #223 (docs/exo-provenance.md), PR #235 (README.md, src/atelier/workspace.rs), PR #240 (docs/corner-tools.md), and EXO-CAD-013 / EXO-CAD-014 backlog specs from PR #232 and PR #239 into docs/rewrite-backlog.md; pass checks and open PR.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 1.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/4"
+    },
+    {
+      "id": "FC-0003",
+      "title": "Integrate workspace profile external-change detection and concurrent migration hardening",
+      "acceptance": "Merge upstream codex/profile-reconcile-test (src/atelier/workspace_profiles.rs) for cross-process profile write serialization, external change detection, reload, and stale-restore prevention; pass checks and open PR.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 1.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/3"
+    },
+    {
+      "id": "FC-0004",
+      "title": "Integrate portable fabric albedo textures and linear-light mipmaps",
+      "acceptance": "Merge upstream PR #208 (codex/fabric-textures: appearance.rs, fabrics_ui.rs, render.rs, cloth.wgsl, gpu_bench.rs, template.rs, tests/appearance.rs, docs/fabric-appearance.md); pass CPU and desktop checks and open PR.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 1.5,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/6"
+    },
+    {
+      "id": "FC-0005",
+      "title": "Integrate persistent pattern piece ruler measurements",
+      "acceptance": "Merge upstream PR #227 (feature/persistent-pattern-measurements: measure.rs, authoring.rs, polygon.rs, linked.rs, geometry.rs, tests/persistent_pattern_measurements.rs, tests/persistent_pom_references.rs) cleanly with current main; pass CPU and desktop checks and open PR.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 1.5,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/8"
+    },
+    {
+      "id": "FC-0006",
+      "title": "Integrate opt-in static physics-inspired mesh preparation",
+      "acceptance": "Merge upstream PR #230 (codex/physics-inspired-mesh-resolution), fixing PolygonPattern struct initializers (notches, seam_allowances, measurements) in src/mesh_resolution/mesh.rs, src/mesh_resolution/preparation.rs, and src/project.rs; pass CPU and desktop checks and open PR.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "normal",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/7"
+    },
+    {
+      "id": "FC-0007",
+      "title": "Integrate construction trims, repeat controls, and 2D/3D interior mesh pinning",
+      "acceptance": "Merge upstream codex/pin-trim-integration-review (combining PR #200, PR #212, PR #213, and PR #215) plus the top 4 commits of PR #215 (6a83b59..44a4631 for 2D board trim draft dragging and immutable material path index caching); pass CPU and desktop checks and open PR.",
+      "points": 4.0,
+      "spent": 4.0,
+      "priority": "normal",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/5"
+    },
+    {
+      "id": "FC-0008",
+      "title": "Integrate command palette and simulation reset guards for pending trim drafts",
+      "acceptance": "Merge upstream PR #224 commits (0a7deb9..ef34209 in src/atelier.rs and src/atelier/command_palette.rs) on top of the trim and pin integration; pass CPU and desktop checks and open PR.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "low",
+      "depends_on": [
+        "FC-0007"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/2"
+    },
+    {
+      "id": "FC-0009",
+      "title": "Extract UI-agnostic AtelierCore state and add cssimpler workspace dependency",
+      "acceptance": "Decouple Atelier workspace state, worker channels, and transient tool drafts from eframe::App; add cssimpler dependency behind desktop feature without breaking CPU-only build.",
+      "points": 3.0,
+      "spent": 0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0008"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/19"
+    },
+    {
+      "id": "FC-0010",
+      "title": "Implement cssimpler Studio V2 app shell, dark/light CSS tokens, and wgpu viewport compositor",
+      "acceptance": "Render exo-sample-3d 5-row/4-column Studio V2 layout via cssimpler::ui! and studio_v2.css with frameless WindowConfig and hybrid 3D wgpu / 2D board surface composition.",
+      "points": 4.0,
+      "spent": 0,
+      "priority": "high",
+      "depends_on": [
+        "FC-0009"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/16"
+    },
+    {
+      "id": "FC-0011",
+      "title": "Port top menu bar, simulation transport, 3D/2D tool rails, radial menu, and command palette to cssimpler",
+      "acceptance": "Route all 12 typed CommandId actions, pending-draft guards (FC-0008), tool switching, and corner tool Radius/Shape controls (FC-0002) through cssimpler.",
+      "points": 3.0,
+      "spent": 0,
+      "priority": "high",
+      "depends_on": [
+        "FC-0010"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/18"
+    },
+    {
+      "id": "FC-0012",
+      "title": "Port left Asset/Piece Browser and right 5-category Object Browser to cssimpler",
+      "acceptance": "Render bundled templates, Piece list, and 5-category Object Browser (2D Pattern, Sewing, 3D Form, Material, Environment) with workspace_profiles persistence (FC-0003).",
+      "points": 3.0,
+      "spent": 0,
+      "priority": "normal",
+      "depends_on": [
+        "FC-0010"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/17"
+    },
+    {
+      "id": "FC-0013",
+      "title": "Port right Property Editor Part 1 (Information, Selected Line, Arrange, Measurements, and Pins) to cssimpler",
+      "acceptance": "Connect numeric point constructions, notches/allowances, persistent ruler measurements (FC-0005), and contour/interior pins (FC-0007) to cssimpler property accordions.",
+      "points": 3.0,
+      "spent": 0,
+      "priority": "normal",
+      "depends_on": [
+        "FC-0010"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/21"
+    },
+    {
+      "id": "FC-0014",
+      "title": "Port right Property Editor Part 2 (Fabric & Appearance, Trims, Mesh Preparation, and Avatar Diagnostics) to cssimpler",
+      "acceptance": "Connect FabricAppearance albedo textures (FC-0004), construction trims & repeat controls (FC-0007), static mesh preparation (FC-0006), and avatar collision diagnostics to cssimpler.",
+      "points": 3.0,
+      "spent": 0,
+      "priority": "normal",
+      "depends_on": [
+        "FC-0010"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.75,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/15"
+    },
+    {
+      "id": "FC-0016",
+      "title": "Guard document replacement against unapplied construction trim drafts",
+      "acceptance": "New/Open/Close detect an unapplied trim draft; discard confirmation and cancellation retain existing lifecycle semantics, with meaningful CPU coverage.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/11"
+    },
+    {
+      "id": "FC-0017",
+      "title": "Expose shared native workspace command registry through CPU library",
+      "acceptance": "Public typed command registry and availability use same definitions as Atelier; CPU-only integration tests import library API; no UI or worker dependency introduced.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/10"
+    },
+    {
+      "id": "FC-0019",
+      "title": "Extract UI-independent viewport gesture controller",
+      "acceptance": "Plain logical coordinates and explicit viewport ownership drive real board pan/zoom first; later hit-testing and 3D staging remain explicit slices with tests.",
+      "points": 4.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "active",
+      "owner": "codex-props2",
+      "vruntime": 3.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/14",
+      "notes": "First slice PR14 merged after all6 CI checks and independent review: metric board transform, captured pan, anchored zoom. Broad ticket remains open: adapter wiring, hit-testing, staged edits and 3D gestures."
+    },
+    {
+      "id": "FC-0020",
+      "title": "Implement CPU corner tooling and synchronized seam cutout domain operations",
+      "acceptance": "Reviewable original Rust geometry transactions for corner radius/shape and synchronized cutouts; preserve semantic references or refuse explicitly; slice delivery must not imply whole-ticket completion.",
+      "points": 5.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/13"
+    },
+    {
+      "id": "FC-0021",
+      "title": "Independently review native UI and hardening PRs",
+      "acceptance": "Review PR12 and incoming native UI source/lifecycle changes with pinned evidence, actionable findings, and validated fixes before merge.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.125,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/32"
+    },
+    {
+      "id": "FC-0015",
+      "title": "Verify upstream hardening and integrate avatar acceptance evidence",
+      "acceptance": "Pin existing glTF/worker changes, preserve avatar import acceptance limits and review PR12 with passing CI.",
+      "points": 2,
+      "spent": 2,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.875,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/12"
+    },
+    {
+      "id": "FC-0022",
+      "title": "Replace egui and eframe completely with cssimpler desktop UI",
+      "acceptance": "Desktop entry points use real cssimpler UI; direct wgpu rendering/compute; no egui or eframe packages in all-features dependency graph or regenerated lockfile; preserve CPU builds and real authoring/worker behavior. No legacy egui feature.",
+      "points": 8.0,
+      "spent": 8.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.9583333333333335,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/32"
+    },
+    {
+      "id": "FC-0023",
+      "title": "Remove eframe reexports from GPU simulation and headless GPU CLI",
+      "acceptance": "Compute modules and headless GPU entry use pinned direct wgpu30 dependency; shader/compute behavior preserved. This prerequisite does not complete full egui removal.",
+      "points": 2.0,
+      "spent": 0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 2.9583333333333335,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/24"
+    },
+    {
+      "id": "FC-0024",
+      "title": "Wire cargo run and cloth-fit --view to launch reworked Studio V2 cssimpler UI",
+      "acceptance": "cargo run launches css_editor; cloth-fit --view launches css_runner; passes CPU and desktop checks; PR22 merged",
+      "points": 3.0,
+      "spent": 0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.027777777777778,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/22"
+    },
+    {
+      "id": "FC-0025",
+      "title": "Integrate cssimpler native 3D GPU viewport into Studio V2",
+      "acceptance": "Upgrade cssimpler to 3D_implementation with gpu-viewport; render 3D garment directly on GPU; pass CPU and desktop checks",
+      "points": 4.0,
+      "spent": 4.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0024"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.027777777777778,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/31"
+    },
+    {
+      "id": "FC-0026",
+      "title": "Port CAD corner rounding toolbar and synchronized seam cutouts from upstream",
+      "acceptance": "Integrate PR #240/#239/#232 logic and tests into src/garment and css_ui rails; pass CPU checks",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.027777777777778,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/29"
+    },
+    {
+      "id": "FC-0027",
+      "title": "Port CAD cut-and-sewn darts and seam allowance guides from upstream",
+      "acceptance": "Integrate PR #1/#6/#7/#66 darts and seam allowance geometry and independent tests; pass CPU checks",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.027777777777778,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/30"
+    },
+    {
+      "id": "FC-0028",
+      "title": "Audit and repair CPU-only regression baseline on Windows",
+      "acceptance": "Run locked CPU checks with two jobs/threads; fix isolated verified failures outside paused UI/CAD areas and record exact evidence in a PR.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.4027777777777777,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/28"
+    },
+    {
+      "id": "FC-0029",
+      "title": "Document and check Windows contributor prerequisites",
+      "acceptance": "Read-only prerequisite checker explains missing Rust/MSVC/Git/Python/GitHub CLI or auth; contributor instructions tested without GPU; separate PR.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.5277777777777777,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/25"
+    },
+    {
+      "id": "FC-0030",
+      "title": "Establish USD-first static interchange contract and independent fixtures",
+      "acceptance": "Inspect USD runtime options and static avatar/garment scope, document supported versus planned behavior, add independent fixtures and validation for the chosen first USD slice; no UI/CAD overlap.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.777777777777778,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/27"
+    },
+    {
+      "id": "FC-0031",
+      "title": "Wire CSSimpler USD 3D viewport into Studio V2 and FEM Workshop",
+      "acceptance": "Update cssimpler dependency to latest main (bba002c) with gpu-viewport feature; bind garment USD scenes to cssimpler native USD viewport via with_usd_viewport in css_editor and css_runner; pass CPU and desktop checks.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [
+        "FC-0030",
+        "FC-0022"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 4.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/33"
+    },
+    {
+      "id": "FC-0032",
+      "title": "Remove duplicate SVG 3D rendering from cssimpler editors",
+      "acceptance": "Both native editors retain their USD viewport registration and contain no SVG 3D mesh generation; 2D SVG boards remain; desktop compilation passes",
+      "points": 1.0,
+      "spent": 1.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.125,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/34"
+    },
+    {
+      "id": "FC-0033",
+      "title": "Fix CSSimpler performance regressions: backend selection, decoupled workers, control signaling, and idle invalidation",
+      "acceptance": "Wire GPU simulation backend into css_runner; decouple ReferenceSolver into background worker; fix pause/reset worker control signaling and eliminate per-frame scene resubmission; return Clean when idle in update_runner; re-wire ui_perf_smoke and smoke flags; pass CPU and desktop checks.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0031",
+        "FC-0032"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/35"
+    },
+    {
+      "id": "FC-0034",
+      "title": "Integrate modular Studio V2 CSS components and true 2D metric pattern board in css_runner to match EXO Studio V2 layout and styling",
+      "acceptance": "Replace inline stubs in css_runner with modular Studio V2 top bar, tool rails (3D & 2D), left asset & piece browser, right 5-category object browser and property accordions; render true 2D metric pattern board SVG from garment panels; update studio_v2.css to match EXO Studio V2 layout and tokens; pass CPU and desktop checks and open PR.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0033"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/36"
+    },
+    {
+      "id": "FC-0035",
+      "title": "Redesign CAD vector icons, remove rail badge overflows, and fix top-bar / right-dock layout",
+      "acceptance": "Replace unclear icons with standard CAD symbols (open hand grab, crisp white seam stitches, dress form avatar, target cam reset, clean scissors/fillet); eliminate rail-overflowing badges and readouts; fix horizontal alignment in top bar right; add right dock scrollbar breathing room; pass CPU and desktop checks.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0034"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/38"
+    },
+    {
+      "id": "FC-0036",
+      "title": "2D pattern board functional interactive overhaul: edge points, B\u00e9zier handles, selection highlights, and isotropic aspect-ratio preservation",
+      "acceptance": "Render smooth cubic B\u00e9zier boundary paths with tangent stalks and interactive handles; draw CAD vertex knobs for all contour points; render piece and edge selection highlights; enforce isotropic 1:1 metric aspect ratio via SVG preserveAspectRatio and symmetric viewbox expansion to eliminate stretching; pass CPU tests and desktop compilation.",
+      "points": 3.0,
+      "spent": 0.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0035"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/39"
+    },
+    {
+      "id": "FC-0037",
+      "title": "Complete CAD vector icon set & tool rail parity matching EXO Studio V2",
+      "acceptance": "Add high-contrast vector SVG icons for all standard CAD and 3D tools (select arrow, curvature point, polygon, circle, dart, notch, seam allowance, pleats, free sew, tape measure, pin, cloth pull, dress form); map tools in 3D and 2D rails with standard CAD hotkeys and active states; pass tests.",
+      "points": 2.0,
+      "spent": 0.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0036"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/40"
+    },
+    {
+      "id": "FC-0038",
+      "title": "Unify normal cargo run (css_editor) and cloth-fit (css_runner) under modular Studio V2 layout and CSS styling",
+      "acceptance": "Refactor css_editor to consume shared Studio V2 top bar, tool rails, 3D viewport, 2D pattern board, and right-dock properties accordions; verify both binaries build cleanly without egui.",
+      "points": 3.0,
+      "spent": 0.0,
+      "priority": "high",
+      "depends_on": [
+        "FC-0037"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/41"
+    },
+    {
+      "id": "FC-0039",
+      "title": "Right dock property editor independent expand/collapse, sleek thin scrollbar styling, and gutter spacing",
+      "acceptance": "Provide independent expand/collapse toggles with individual action dispatches for all right dock property editor sections (1. Piece Information, 2. Boundary & Allowance, 3. Arrange & Transform, 4. Measurements & Tension, 5. Active Simulation, 6. Fabric Material); only render contents when expanded; style accordions with collapsed/open classes; configure thin subtle scrollbars and right gutter padding to prevent text overlap; pass CPU checks.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0038"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/42"
+    },
+    {
+      "id": "FC-0040",
+      "title": "Day/night theme pill switch, command palette vector icons, and interactive 2D piece selection",
+      "acceptance": "Custom day/night switch styled with dark/light mode tokens; command palette rendered with vector SVG icons; interactive 2D pattern piece cards in drawer and browser tree; all CPU tests pass.",
+      "points": 2.0,
+      "spent": 0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0039"
+      ],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/43"
+    },
+    {
+      "id": "FC-0041",
+      "title": "Selectable native solvers and experimental barrier AL contact",
+      "acceptance": "Top bar switches actual solver with explicit state transfer; experimental last-column hybrid has numerical checks and measured optimization",
+      "points": 8.0,
+      "spent": 9.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 4.125,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/37"
+    },
+    {
+      "id": "FC-0042",
+      "title": "Fix global contact throttling in resident WGSL solvers",
+      "acceptance": "Disconnected freefall unaffected by remote close contact; conservative per-vertex bounds; both backends retain collision safety",
+      "points": 4.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/37"
+    },
+    {
+      "id": "FC-0043",
+      "title": "Resolve default-T-shirt protrusion with coupled WGSL convergence",
+      "acceptance": "Unchanged CPU reference; matched 200-step default garment runs remove raised underarm shape, with seam/extension/displacement gates and independent separation audits; preserve force-law defect as a separate open ticket",
+      "points": 8.0,
+      "spent": 8.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 4.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/37"
+    },
+    {
+      "id": "FC-0044",
+      "title": "Remove spurious tangential forces from the resident primitive contact potential",
+      "acceptance": "Flat frictionless slide is invariant across triangulation; multi-wall and self-contact preserved; consistent energy/gradient, nonnegative potentials and independent separation; GPU implementation only",
+      "points": 8.0,
+      "spent": 0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.127958278655143,
+      "pr": null
+    },
+    {
+      "id": "FC-0045",
+      "title": "Reduce resident coupled WGSL solver cost without weakening garment quality",
+      "acceptance": "Measure complete-step baseline against hybrid VBD on identical input; retain GPU-only optimizations with same coupled operator and conservative contact coverage; pass small operator/contact oracles and default T-shirt quality gate, document timings and limits",
+      "points": 5.0,
+      "spent": 5.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.625,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/37"
+    },
+    {
+      "id": "FC-0046",
+      "title": "Write a cited Typst research report on resident WGSL solver quality and performance",
+      "acceptance": "Editable Typst paper and compiled PDF in docs; verified primary-source citations and pinned internal evidence; accurate mathematical scope, timing/quality tables and limitations; compile and visually inspect all pages without simulation changes",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.375,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/37"
+    },
+    {
+      "id": "FC-0047",
+      "title": "Issue 242: GPU-resident WGSL finite AVBD and IPC contact pipeline",
+      "acceptance": "Resident WGSL prediction, finite-material AVBD, finite VF/EE IPC barrier, conservative continuous step bounds, transactional errors; default in fitting and native modes; CPU-only tests and opt-in GPU checks; document limits",
+      "points": 8.0,
+      "spent": 10.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 4.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/37",
+      "notes": "Former branch-local FC-0040 (resident WGSL IPC); renumbered on integration of main e904360, whose canonical FC-0040 is the completed UI feature PR43. Historical source snapshots and reports retain their original ticket references."
+    },
+    {
+      "id": "FC-0048",
+      "title": "Animate day and night theme switch",
+      "acceptance": "Theme toggle animates a moon and sun with stars morphing into clouds in both directions, without AM/PM; preserves theme behavior.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/45"
+    },
+    {
+      "id": "FC-0049",
+      "title": "Adopt cssimpler instance handlers and transition fixes",
+      "acceptance": "Pin the reviewed cssimpler revision; isolate editor and runner actions per instance; preserve existing controls and theme transitions across unrelated changes; verify CPU and desktop checks without GPU execution.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.375,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/47"
+    },
+    {
+      "id": "FC-0050",
+      "title": "Keep theme transitions advancing during simulation updates",
+      "acceptance": "Preserve the tested day/night switch; both editor modes reach both theme endpoints during repeated simulation UI updates and normal idle; keep worker scheduling independent and CPU tests GPU-free.",
+      "points": 2.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.25,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/45"
+    },
+    {
+      "id": "FC-0051",
+      "title": "Implement stable Cosserat rod CPU research solver",
+      "acceptance": "Implement attributed MIT-source-based stable Cosserat position and quasi-static orientation solves with independently specified rest geometry, SI parameters, pinned points and frames, validated steps and CPU falsifiable tests; document exact scope, limits and reproducible rod example without modifying cloth solver.",
+      "points": 5.0,
+      "spent": 5.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.625,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/48"
+    },
+    {
+      "id": "FC-0052",
+      "title": "Define and compile rod-based garment material topology",
+      "acceptance": "Provide explicit, documented physical rod material and topology for garment panels in rest coordinates with stable authored identity, validation, reproducible compilation and cache invalidation; preserve legacy projects and nonphysical fiber guides.",
+      "points": 5.0,
+      "spent": 4.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0051"
+      ],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.5,
+      "pr": null
+    },
+    {
+      "id": "FC-0053",
+      "title": "Integrate rod garment dynamics with sewing and contact",
+      "acceptance": "Advance compiled rod garments with compatible sewing, avatar and self-contact, pins and interaction; preserve rest geometry and provide falsifiable tests and documented limitations.",
+      "points": 5.0,
+      "spent": 0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0052"
+      ],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.0,
+      "pr": null
+    },
+    {
+      "id": "FC-0054",
+      "title": "Expose rod garment solver in the native solver selector",
+      "acceptance": "Select and run the validated rod garment solver from the native menu with coherent worker state, display, project transitions and user-visible errors; exercise real garment workflows in CPU tests.",
+      "points": 3.0,
+      "spent": 0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0053"
+      ],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.0,
+      "pr": null
+    },
+    {
+      "id": "FC-0055",
+      "title": "Compile actual garment panels to rod support and map seams",
+      "acceptance": "Experimentally compile real panel material triangulations into bounded rod networks with correct support mapping and identify seam attachment requirements; prove boundaries, holes, and physical limitations with CPU tests.",
+      "points": 4.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0051"
+      ],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.35,
+      "pr": null
+    },
+    {
+      "id": "FC-0056",
+      "title": "Implement seam-aware rod contact and garment integration",
+      "acceptance": "Integrate sewing and rod self-contact with explicit local exclusions and tested objective, force, bounds and transactional state; continue garment workflow integration on the existing feature branch.",
+      "points": 5.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0051"
+      ],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.4214285714285713,
+      "pr": null
+    },
+    {
+      "id": "FC-0057",
+      "title": "Add garment rod bending and restart foundation",
+      "acceptance": "Add tested rotation-objective bending joints and consistent placed-state orientation for garment rod networks, with explicit parameters and cache compatibility; preserve rest coordinates and existing formats.",
+      "points": 5.0,
+      "spent": 2.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0051"
+      ],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.482034632034632,
+      "pr": null
+    },
+    {
+      "id": "FC-0058",
+      "title": "Integrate avatar contact into garment rod solves",
+      "acceptance": "Use existing safe geometric contact for garment rods and fixed avatar in implicit solves with start validation, conservative bounds, objective and CPU tests; document exclusions and limits.",
+      "points": 5.0,
+      "spent": 1.0,
+      "priority": "urgent",
+      "depends_on": [
+        "FC-0051"
+      ],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.40581511983951,
+      "pr": null
+    },
+    {
+      "id": "FC-0059",
+      "title": "2D pattern board interactive pan/zoom/selection overhaul, sleek CAD styling, and slow theme color transitions with 3D/2D viewport background sync",
+      "acceptance": "2D pattern board supports interactive pan and zoom gestures and piece selection; gorgeous CAD styling with piece badges, dimensions, grainlines, seam notches and theme-matched background/grid; slow smooth transition between day/night colors across the entire studio affecting 3D and 2D viewport backdrops; all CPU tests pass.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "done",
+      "owner": null,
+      "vruntime": 3.0,
+      "pr": "https://github.com/NicTanghe/FoldCraft/pull/50"
+    }
+  ]
+}

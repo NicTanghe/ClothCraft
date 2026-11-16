@@ -1,0 +1,316 @@
+# Packages an already-built Windows x64 ClothCraft preview into a portable ZIP.
+# No installer, elevation, signing, registry edits, or network access required.
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)][string]$Destination,
+    [string]$BinariesDirectory = '',
+    [string]$Revision = '',
+    [switch]$Verify,
+    [switch]$UiSmoke
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+if ($UiSmoke -and -not $Verify) {
+    throw '-UiSmoke requires -Verify so it runs from a freshly extracted package.'
+}
+$repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+if (-not $BinariesDirectory) { $BinariesDirectory = Join-Path $repo 'target/release' }
+$binDir = [System.IO.Path]::GetFullPath($BinariesDirectory)
+$stage = [System.IO.Path]::GetFullPath($Destination).TrimEnd([char[]]'\/')
+$zip = "$stage.zip"
+$zipHash = "$zip.sha256"
+$verifyRoot = "$stage.verify"
+
+# A destination inside a recursively copied source would copy itself forever.
+foreach ($source in @('assets/makehuman', 'examples/templates')) {
+    $sourceRoot = [System.IO.Path]::GetFullPath((Join-Path $repo $source))
+    if ($stage.Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        $stage.StartsWith($sourceRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Destination must not be inside a packaged source: $sourceRoot"
+    }
+}
+
+# Never overwrite an existing installation or an earlier package artifact.
+foreach ($path in @($stage, $zip, $zipHash)) {
+    if (Test-Path -LiteralPath $path) { throw "Refusing to overwrite existing path: $path" }
+}
+if ($Verify -and (Test-Path -LiteralPath $verifyRoot)) {
+    throw "Refusing to overwrite verification directory: $verifyRoot"
+}
+foreach ($binary in @('cloth-fit.exe', 'clothcraft.exe', 'cloth-template.exe', 'cloth-session.exe')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $binDir $binary) -PathType Leaf)) {
+        throw "Missing Windows release binary: $binary in $binDir. Run cargo build --locked --release --features desktop first."
+    }
+}
+foreach ($path in @('assets/makehuman', 'examples/templates', 'LICENSE', 'README.md', 'docs/install.md')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repo $path))) { throw "Required package input missing: $path" }
+}
+
+$null = New-Item -ItemType Directory -Path $stage -Force
+foreach ($binary in @('cloth-fit.exe', 'clothcraft.exe', 'cloth-template.exe', 'cloth-session.exe')) {
+    Copy-Item -LiteralPath (Join-Path $binDir $binary) -Destination (Join-Path $stage $binary)
+}
+$null = New-Item -ItemType Directory -Path (Join-Path $stage 'assets') -Force
+$null = New-Item -ItemType Directory -Path (Join-Path $stage 'examples') -Force
+$null = New-Item -ItemType Directory -Path (Join-Path $stage 'docs') -Force
+Copy-Item -LiteralPath (Join-Path $repo 'assets/makehuman') -Destination (Join-Path $stage 'assets') -Recurse
+Copy-Item -LiteralPath (Join-Path $repo 'examples/templates') -Destination (Join-Path $stage 'examples') -Recurse
+Copy-Item -LiteralPath (Join-Path $repo 'docs/install.md') -Destination (Join-Path $stage 'docs/install.md')
+Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination $stage
+
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+$start = @'
+@echo off
+cd /d "%~dp0"
+"%~dp0cloth-fit.exe" --steps 0 --view --output "%~dp0output\session"
+if errorlevel 1 pause
+'@
+[System.IO.File]::WriteAllText((Join-Path $stage 'Start ClothCraft.cmd'), $start.Replace("`n", "`r`n"), $utf8)
+
+$revisionOrigin = 'supplied by caller'
+if (-not $Revision) {
+    $Revision = (& git -C $repo rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'Could not identify source commit' }
+    $revisionOrigin = 'packaging checkout'
+}
+$version = '0.1.0-preview'
+$rustVersion = (& rustc --version)
+if ($LASTEXITCODE -ne 0) { throw 'rustc is needed to record the build environment' }
+$cargoVersion = (& cargo --version)
+if ($LASTEXITCODE -ne 0) { throw 'cargo is needed to record the build environment' }
+$info = @(
+    'ClothCraft Windows x64 portable preview',
+    "Version: $version",
+    "Claimed source revision ($revisionOrigin): $Revision",
+    'The packager does not verify that the binaries were built from this revision.',
+    "Packaged UTC: $([DateTimeOffset]::UtcNow.ToString('o'))",
+    "Packaging host system: $([System.Environment]::OSVersion.VersionString)",
+    "Packaging host architecture: $env:PROCESSOR_ARCHITECTURE",
+    "Packaging host Rust: $rustVersion",
+    "Packaging host Cargo: $cargoVersion",
+    'The packaging host toolchain does not establish the binary build toolchain.',
+    'License: ClothCraft MIT; bundled MakeHuman files carry their own LICENSE.ASSETS.md',
+    'This development bundle is unsigned and has no native GUI/GPU certification.'
+) -join "`n"
+[System.IO.File]::WriteAllText((Join-Path $stage 'BUILD-INFO.txt'), $info + "`n", $utf8)
+
+# Manifest covers every bundled payload, including provenance, license and build metadata.
+$records = foreach ($file in (Get-ChildItem -LiteralPath $stage -Recurse -File -Force | Sort-Object FullName)) {
+    $relative = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
+    $digest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$digest  $relative"
+}
+[System.IO.File]::WriteAllText((Join-Path $stage 'SHA256SUMS.txt'), (($records -join "`n") + "`n"), $utf8)
+
+# Use a flat archive root so the assets are adjacent to the binaries after extraction.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip)
+$archiveDigest = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+[System.IO.File]::WriteAllText($zipHash, "$archiveDigest  $([System.IO.Path]::GetFileName($zip))`n", $utf8)
+
+function Invoke-PackagedClothFit {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string[]]$EditorArguments,
+        [int]$TimeoutSeconds = 180
+    )
+    $exe = Join-Path $verifyRoot 'cloth-fit.exe'
+    $stdout = Join-Path $verifyRoot "$Label.out.log"
+    $stderr = Join-Path $verifyRoot "$Label.err.log"
+    $quotedArguments = ($EditorArguments | ForEach-Object {
+        if ($_ -match '\s') { '"' + $_ + '"' } else { $_ }
+    }) -join ' '
+    # Keep a process handle on Windows PowerShell 5.1, including for fast
+    # exits, and drain both pipes concurrently to avoid blocking the child.
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $exe
+    $startInfo.Arguments = $quotedArguments
+    $startInfo.WorkingDirectory = $verifyRoot
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw "Could not start $Label" }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
+        if ($timedOut) {
+            $process.Kill()
+            $process.WaitForExit()
+        }
+        [IO.File]::WriteAllText($stdout, $stdoutTask.GetAwaiter().GetResult(), $utf8)
+        [IO.File]::WriteAllText($stderr, $stderrTask.GetAwaiter().GetResult(), $utf8)
+        if ($timedOut) {
+            throw "$Label timed out after $TimeoutSeconds seconds; see $stdout and $stderr"
+        }
+        if ($process.ExitCode -ne 0) {
+            throw "$Label failed with exit code $($process.ExitCode); see $stdout and $stderr"
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
+function Test-PayloadManifest {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd([char[]]'\/')
+    $manifestPath = Join-Path $rootPath 'SHA256SUMS.txt'
+    $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($line in Get-Content -LiteralPath $manifestPath -Encoding UTF8) {
+        if ($line -notmatch '^([0-9a-f]{64})  (.+)$') { throw "Invalid manifest record: $line" }
+        $expectedHash = $Matches[1]
+        $relative = $Matches[2]
+        $payload = [IO.Path]::GetFullPath((Join-Path $rootPath $relative))
+        if (-not $payload.StartsWith($rootPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Manifest path escapes package: $relative"
+        }
+        if (-not $seen.Add($payload)) { throw "Duplicate manifest path: $relative" }
+        if ((Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) {
+            throw "Payload checksum mismatch: $relative"
+        }
+    }
+    $files = @(Get-ChildItem -LiteralPath $rootPath -File -Recurse -Force |
+        Where-Object { $_.FullName -ne $manifestPath })
+    if ($files.Count -ne $seen.Count) { throw 'Manifest does not cover exactly the package payload' }
+    foreach ($file in $files) {
+        if (-not $seen.Contains([IO.Path]::GetFullPath($file.FullName))) {
+            throw "Manifest does not cover package payload: $($file.FullName)"
+        }
+    }
+    return $seen.Count
+}
+
+if ($Verify) {
+    $expected = (Get-Content -LiteralPath $zipHash -Raw).Substring(0, 64)
+    if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+        throw 'Archive checksum mismatch'
+    }
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $verifyRoot)
+    $payloadCount = Test-PayloadManifest -Root $verifyRoot
+    Push-Location -LiteralPath $verifyRoot
+    try {
+        $exe = Join-Path $verifyRoot 'cloth-template.exe'
+        & $exe validate 'examples/templates/two-panel.json'
+        if ($LASTEXITCODE -ne 0) { throw 'Extracted binary failed to validate the bundled template' }
+        & $exe example 'Verification Pattern.json'
+        if ($LASTEXITCODE -ne 0) { throw 'Extracted binary failed to write a new template' }
+        & $exe validate 'Verification Pattern.json'
+        if ($LASTEXITCODE -ne 0) { throw 'Extracted binary failed to reopen its template' }
+    } finally {
+        Pop-Location
+    }
+    Write-Host "Verified $payloadCount payload hashes and extracted CPU example write/reopen."
+
+    # Exercise the shipped local automation process, without opening a window.
+    $sessionInput = Join-Path $verifyRoot 'session-input.jsonl'
+    $sessionOutput = Join-Path $verifyRoot 'session-output.jsonl'
+    $sessionError = Join-Path $verifyRoot 'session-error.log'
+    $requests = @(
+        '{"protocol":"clothcraft.authoring","protocolVersion":1,"requestId":"package-hello","payload":{"op":"hello"}}',
+        '{"protocol":"clothcraft.authoring","protocolVersion":1,"requestId":"package-snapshot","payload":{"op":"snapshot"}}'
+    )
+    [IO.File]::WriteAllText($sessionInput, ($requests -join "`n") + "`n", $utf8)
+    # Start-Process -PassThru can lose a very fast child's exit code on
+    # Windows PowerShell 5.1. Process.Start retains the handle; drain both
+    # redirected streams concurrently so a full pipe cannot block shutdown.
+    $sessionStart = New-Object System.Diagnostics.ProcessStartInfo
+    $sessionStart.FileName = Join-Path $verifyRoot 'cloth-session.exe'
+    $sessionStart.WorkingDirectory = $verifyRoot
+    $sessionStart.UseShellExecute = $false
+    $sessionStart.CreateNoWindow = $true
+    $sessionStart.RedirectStandardInput = $true
+    $sessionStart.RedirectStandardOutput = $true
+    $sessionStart.RedirectStandardError = $true
+    $sessionStart.StandardOutputEncoding = $utf8
+    $sessionStart.StandardErrorEncoding = $utf8
+    $sessionProcess = New-Object System.Diagnostics.Process
+    $sessionProcess.StartInfo = $sessionStart
+    $sessionStarted = $false
+    try {
+        if (-not $sessionProcess.Start()) { throw 'Could not start packaged authoring session' }
+        $sessionStarted = $true
+        $stdoutTask = $sessionProcess.StandardOutput.ReadToEndAsync()
+        $stderrTask = $sessionProcess.StandardError.ReadToEndAsync()
+        $sessionProcess.StandardInput.Write([IO.File]::ReadAllText($sessionInput, $utf8))
+        $sessionProcess.StandardInput.Close()
+        $timedOut = -not $sessionProcess.WaitForExit(30000)
+        if ($timedOut) {
+            $sessionProcess.Kill()
+            $sessionProcess.WaitForExit()
+        }
+        [IO.File]::WriteAllText($sessionOutput, $stdoutTask.GetAwaiter().GetResult(), $utf8)
+        [IO.File]::WriteAllText($sessionError, $stderrTask.GetAwaiter().GetResult(), $utf8)
+        if ($timedOut) { throw 'Packaged authoring session timed out; inspect session-error.log' }
+        if ($sessionProcess.ExitCode -ne 0) { throw 'Packaged authoring session failed; inspect session-error.log' }
+    } finally {
+        if ($sessionStarted -and -not $sessionProcess.HasExited) {
+            $sessionProcess.Kill()
+            $sessionProcess.WaitForExit()
+        }
+        $sessionProcess.Dispose()
+    }
+    $responses = @(Get-Content -LiteralPath $sessionOutput -Encoding UTF8 | ForEach-Object { $_ | ConvertFrom-Json })
+    if ($responses.Count -ne 2) { throw 'Packaged session did not return exactly two JSON responses' }
+    for ($i = 0; $i -lt 2; $i++) {
+        $expectedId = @('package-hello', 'package-snapshot')[$i]
+        if ($responses[$i].ok -ne $true -or $responses[$i].protocol -ne 'clothcraft.authoring' -or
+            $responses[$i].protocolVersion -ne 1 -or $responses[$i].requestId -ne $expectedId) {
+            throw "Invalid packaged session response: $expectedId"
+        }
+    }
+    $hello = $responses[0].data
+    $snapshot = $responses[1].data
+    if ($hello.simulation -ne $false -or $hello.desktopAttachment -ne $false -or
+        $hello.filesystemRequests -ne $false -or $hello.commands -notcontains 'sew' -or
+        $hello.commands -notcontains 'polygon' -or $null -ne $snapshot.template -or
+        $snapshot.revision -ne 0 -or $snapshot.documentSession -ne $hello.session.documentSession) {
+        throw 'Packaged authoring capabilities or empty initial session differ from the contract'
+    }
+    Write-Host 'Extracted CPU authoring protocol handshake and empty snapshot passed.'
+
+    if ($UiSmoke) {
+        # This is an explicit, opt-in native-window check. It is not part of the
+        # ordinary CPU test suite and does not certify a particular GPU or driver.
+        # Hosted runners may render through WARP. Select the CPU solver explicitly:
+        # this check exercises window launch/capture, not hardware GPU computation.
+        $env:WGPU_BACKEND = 'dx12'
+        Push-Location -LiteralPath $verifyRoot
+        try {
+            # The CLI writes the output document before any editor starts. These
+            # files prove a CLI write/load plus a native launch/capture; they are
+            # not evidence of native Save or Export.
+            $seedOutput = Join-Path $verifyRoot 'ui-project-seed'
+            Invoke-PackagedClothFit -Label 'ui-project-seed' `
+                -EditorArguments @('--cpu', '--steps', '0', '--threads', '2', '--output', $seedOutput)
+            $seedProject = Join-Path $seedOutput 'fitting-project.json'
+            if (-not (Test-Path -LiteralPath $seedProject -PathType Leaf)) {
+                throw "CLI project seed did not write fitting-project.json in $seedOutput"
+            }
+
+            $launchOutput = Join-Path $verifyRoot 'ui-smoke'
+            Invoke-PackagedClothFit -Label 'ui-smoke' `
+                -EditorArguments @('--cpu', '--steps', '0', '--threads', '2', '--project', $seedProject, '--ui-smoke', '--output', $launchOutput)
+            foreach ($required in @('ui.png', 'ui.json', 'fitting-project.json')) {
+                if (-not (Test-Path -LiteralPath (Join-Path $launchOutput $required) -PathType Leaf)) {
+                    throw "Editor launch/capture smoke did not produce $required in $launchOutput"
+                }
+            }
+            $capture = Get-Content -LiteralPath (Join-Path $launchOutput 'ui.json') -Raw | ConvertFrom-Json
+            if ($capture.native_frames -lt 2 -or $capture.width -le 0 -or $capture.height -le 0) {
+                throw 'Native USD capture did not report two rendered frames and drawable dimensions'
+            }
+            Write-Host 'CLI project seed/load and native USD viewport launch/capture passed (excludes UI chrome).'
+            Write-Host 'Native Save/Export/edit is not exercised; adapter/driver certification is separate.'
+        } finally {
+            Pop-Location
+        }
+    }
+}
+Write-Host "Portable staging directory: $stage"
+Write-Host "Archive: $zip"
+Write-Host "Archive SHA256: $archiveDigest"

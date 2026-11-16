@@ -1,0 +1,131 @@
+name: Cross-platform build
+
+# Build and package desktop binaries for macOS, Linux and Windows.
+# CPU and desktop tests are separate jobs in cpu.yml; a successful build alone
+# does not validate native interaction or GPU simulation on these platforms.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# One validation per PR revision; main and manual runs keep independent groups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.artifact }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing must not hide the state of the other two.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            artifact: macos-arm64
+          - os: ubuntu-24.04
+            artifact: linux-x86_64
+          - os: windows-2025
+            artifact: windows-x86_64
+    env:
+      RAYON_NUM_THREADS: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Cache dependencies only; full-validation revisions compile and run their checks.
+      - name: Restore Rust dependency cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          prefix-key: clothcraft-deps-v1
+          key: cross-platform-dev-release-desktop-${{ matrix.artifact }}-${{ hashFiles('Cargo.lock') }}
+          env-vars: ImageOS ImageVersion
+          cache-bin: "false"
+          cache-workspace-crates: "false"
+          cache-on-failure: "false"
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # Keep the actual toolchain/image with the artifact: stable evolves.
+      - name: Record build environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "Runner: $RUNNER_OS $RUNNER_ARCH"
+            echo "Image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+            rustc -Vv
+            cargo -V
+          } | tee dist/BUILD-ENVIRONMENT.txt
+          cat dist/BUILD-ENVIRONMENT.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Test the CPU core without graphics features
+        # Automatic Linux runs share the required cpu job in cpu.yml on the same
+        # image. A standalone manual build still executes its own CPU suite.
+        if: (runner.os != 'Linux' || github.event_name == 'workflow_dispatch')
+        run: cargo test --locked --no-default-features -j 2 -- --test-threads=2
+
+      # eframe/winit need X11, Wayland and an OpenGL loader to LINK on Linux,
+      # even though `cargo check` alone would not. Without these the desktop
+      # binaries fail at the link step rather than at compile time.
+      - name: Install Linux desktop link dependencies
+        if: (runner.os == 'Linux')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev \
+            libxrandr-dev libxi-dev libgl1-mesa-dev libasound2-dev \
+            libssl-dev pkg-config
+
+      - name: Build the desktop and CLI binaries
+        run: >
+          cargo build --locked --release -j 2 --features desktop
+          --bin cloth-fit --bin clothcraft --bin cloth-template --bin cloth-session
+
+      # A binary that builds but cannot read a template is not a working build.
+      - name: Validate a shipped template with the built binary
+        shell: bash
+        run: |
+          suffix=""
+          if [ "${{ runner.os }}" = "Windows" ]; then suffix=".exe"; fi
+          "target/release/cloth-template${suffix}" validate examples/templates/two-panel.json
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          suffix=""
+          if [ "${{ runner.os }}" = "Windows" ]; then suffix=".exe"; fi
+          for bin in cloth-fit clothcraft cloth-template cloth-session; do
+            cp "target/release/${bin}${suffix}" "dist/${bin}${suffix}"
+          done
+          mkdir -p dist/assets dist/examples
+          cp -R assets/makehuman dist/assets/
+          cp -R examples/templates dist/examples/
+          cp LICENSE README.md dist/
+          printf '%s\n' 'Run from this directory: ./cloth-fit --steps 0 --view --output output/session' > dist/START.txt
+          ls -l dist
+
+      - name: Verify staged authoring process without graphics
+        timeout-minutes: 5
+        run: python scripts/check-packaged-session.py dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clothcraft-${{ matrix.artifact }}
+          path: dist/
+          if-no-files-found: error
+
+      # Preserve diagnostic metadata even if linking or a test fails.
+      - uses: actions/upload-artifact@v4
+        if: (always())
+        with:
+          name: build-environment-${{ matrix.artifact }}
+          path: dist/BUILD-ENVIRONMENT.txt
+          if-no-files-found: warn
