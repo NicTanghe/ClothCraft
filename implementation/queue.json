@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "clock": 3.342039609635428,
+  "clock": 3.3420396096354286,
   "tickets": [
     {
       "id": "FC-0001",
@@ -807,6 +807,19 @@
       "owner": null,
       "vruntime": 3.0,
       "pr": "https://github.com/NicTanghe/FoldCraft/pull/50"
+    },
+    {
+      "id": "FC-0060",
+      "title": "Selection-mode edge double-click split and Shift-drag point marquee",
+      "acceptance": "In the 2D selection tool, double-clicking an unsewn edge inserts one undoable vertex at the click; Shift-drag shows a rectangle and selects enclosed points on release; Shift-click toggle, cancellation and pan remain functional.",
+      "points": 3.0,
+      "spent": 0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "ready",
+      "owner": null,
+      "vruntime": 3.3420396096354286,
+      "pr": null
     }
   ]
 }
