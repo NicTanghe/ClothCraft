@@ -1,29 +1,32 @@
 //! Tests for independent accordion expand/collapse and thin scrollbar styling.
 #![cfg(feature = "desktop")]
 
-use clothcraft::atelier::css_runner::{
-    ACT_RUN_ACC_0, ACT_RUN_ACC_1, ACT_RUN_ACC_2, ACT_RUN_ACC_3, ACT_RUN_ACC_4, ACT_RUN_ACC_5,
-};
+use clothcraft::atelier::css_runner::RunnerAction;
 
 #[test]
-fn accordion_actions_toggle_independent_bits() {
-    assert_ne!(ACT_RUN_ACC_0, ACT_RUN_ACC_1);
-    assert_ne!(ACT_RUN_ACC_1, ACT_RUN_ACC_2);
-    assert_ne!(ACT_RUN_ACC_2, ACT_RUN_ACC_3);
-    assert_ne!(ACT_RUN_ACC_3, ACT_RUN_ACC_4);
-    assert_ne!(ACT_RUN_ACC_4, ACT_RUN_ACC_5);
+fn typed_action_queue_preserves_order_and_duplicates() {
+    use cssimpler::ActionQueue;
 
-    // Each action must be an isolated single bit
-    for act in [
-        ACT_RUN_ACC_0,
-        ACT_RUN_ACC_1,
-        ACT_RUN_ACC_2,
-        ACT_RUN_ACC_3,
-        ACT_RUN_ACC_4,
-        ACT_RUN_ACC_5,
+    let queue = ActionQueue::new();
+    for action in [
+        RunnerAction::Step,
+        RunnerAction::Accordion(0),
+        RunnerAction::Step,
     ] {
-        assert_eq!(act.count_ones(), 1, "action {act} must be a single bit");
+        queue.push(action);
     }
+
+    let mut batch = Vec::new();
+    queue.drain_into(&mut batch);
+    assert_eq!(
+        batch,
+        [
+            RunnerAction::Step,
+            RunnerAction::Accordion(0),
+            RunnerAction::Step,
+        ],
+        "typed actions retain FIFO order and repeated commands"
+    );
 }
 
 #[test]
@@ -178,99 +181,43 @@ fn day_night_switch_keeps_thumb_craters_and_sky_shapes_in_both_modes() {
 }
 
 #[test]
-fn piece_selection_actions_are_isolated_bits() {
-    use clothcraft::atelier::css_runner::{
-        ACT_RUN_PIECE_0, ACT_RUN_PIECE_1, ACT_RUN_PIECE_2, ACT_RUN_PIECE_3,
-    };
+fn piece_selection_actions_are_distinct() {
+    assert_ne!(RunnerAction::Piece(0), RunnerAction::Piece(1));
+    assert_ne!(RunnerAction::Piece(1), RunnerAction::Piece(2));
+    assert_ne!(RunnerAction::Piece(2), RunnerAction::Piece(3));
+}
 
-    assert_ne!(ACT_RUN_PIECE_0, ACT_RUN_PIECE_1);
-    assert_ne!(ACT_RUN_PIECE_1, ACT_RUN_PIECE_2);
-    assert_ne!(ACT_RUN_PIECE_2, ACT_RUN_PIECE_3);
-
-    for act in [
-        ACT_RUN_PIECE_0,
-        ACT_RUN_PIECE_1,
-        ACT_RUN_PIECE_2,
-        ACT_RUN_PIECE_3,
-    ] {
-        assert_eq!(
-            act.count_ones(),
-            1,
-            "piece action {act} must be a single bit"
-        );
+#[test]
+fn solver_selection_actions_are_distinct_from_editor_actions() {
+    let solvers = [
+        RunnerAction::SolverMenu,
+        RunnerAction::SolverGpu,
+        RunnerAction::SolverCpu,
+        RunnerAction::SolverAl,
+    ];
+    let editor = [
+        RunnerAction::Accordion(0),
+        RunnerAction::Accordion(5),
+        RunnerAction::AccordionToggle,
+        RunnerAction::Piece(0),
+        RunnerAction::Piece(3),
+    ];
+    for solver in &solvers {
+        for action in &editor {
+            assert_ne!(
+                solver, action,
+                "solver selection must not alias accordion or piece actions"
+            );
+        }
     }
 }
 
 #[test]
-fn solver_selection_actions_are_independent_of_accordions_and_pieces() {
-    use clothcraft::atelier::css_runner::{
-        ACT_RUN_ACCORDION_TOGGLE, ACT_RUN_PIECE_0, ACT_RUN_PIECE_1, ACT_RUN_PIECE_2,
-        ACT_RUN_PIECE_3, ACT_RUN_SOLVER_AL, ACT_RUN_SOLVER_CPU, ACT_RUN_SOLVER_GPU,
-        ACT_RUN_SOLVER_MENU,
-    };
-    let accordions = ACT_RUN_ACC_0
-        | ACT_RUN_ACC_1
-        | ACT_RUN_ACC_2
-        | ACT_RUN_ACC_3
-        | ACT_RUN_ACC_4
-        | ACT_RUN_ACC_5
-        | ACT_RUN_ACCORDION_TOGGLE;
-    let pieces = ACT_RUN_PIECE_0 | ACT_RUN_PIECE_1 | ACT_RUN_PIECE_2 | ACT_RUN_PIECE_3;
-    let solvers = ACT_RUN_SOLVER_MENU | ACT_RUN_SOLVER_GPU | ACT_RUN_SOLVER_CPU | ACT_RUN_SOLVER_AL;
-    assert_eq!(
-        accordions & solvers,
-        0,
-        "opening an inspector must not switch the active solver"
-    );
-    assert_eq!(
-        pieces & solvers,
-        0,
-        "selecting a pattern piece must not switch the active solver"
-    );
-    assert_eq!(
-        accordions & pieces,
-        0,
-        "selecting a pattern piece must not toggle an inspector"
-    );
-    assert_eq!(solvers.count_ones(), 4);
-    assert_eq!(pieces.count_ones(), 4);
-}
-
-#[test]
-fn board_2d_actions_are_isolated_bits_and_independent() {
-    use clothcraft::atelier::css_runner::{
-        ACT_RUN_2D_FIT, ACT_RUN_2D_NEXT_PIECE, ACT_RUN_2D_ZOOM_IN, ACT_RUN_2D_ZOOM_OUT,
-        ACT_RUN_ACC_0, ACT_RUN_ACC_5, ACT_RUN_ACCORDION_TOGGLE, ACT_RUN_PIECE_0, ACT_RUN_PIECE_3,
-        ACT_RUN_SOLVER_GPU,
-    };
-
-    assert_ne!(ACT_RUN_2D_ZOOM_IN, ACT_RUN_2D_ZOOM_OUT);
-    assert_ne!(ACT_RUN_2D_ZOOM_OUT, ACT_RUN_2D_FIT);
-    assert_ne!(ACT_RUN_2D_FIT, ACT_RUN_2D_NEXT_PIECE);
-
-    for act in [
-        ACT_RUN_2D_ZOOM_IN,
-        ACT_RUN_2D_ZOOM_OUT,
-        ACT_RUN_2D_FIT,
-        ACT_RUN_2D_NEXT_PIECE,
-    ] {
-        assert_eq!(act.count_ones(), 1, "2D action {act} must be a single bit");
-    }
-
-    let board_2d_mask =
-        ACT_RUN_2D_ZOOM_IN | ACT_RUN_2D_ZOOM_OUT | ACT_RUN_2D_FIT | ACT_RUN_2D_NEXT_PIECE;
-    let other_mask = ACT_RUN_ACC_0
-        | ACT_RUN_ACC_5
-        | ACT_RUN_ACCORDION_TOGGLE
-        | ACT_RUN_PIECE_0
-        | ACT_RUN_PIECE_3
-        | ACT_RUN_SOLVER_GPU;
-
-    assert_eq!(
-        board_2d_mask & other_mask,
-        0,
-        "2D board actions must be disjoint from accordion, piece, and solver actions"
-    );
+fn board_2d_actions_are_distinct() {
+    assert_ne!(RunnerAction::Zoom2dIn, RunnerAction::Zoom2dOut);
+    assert_ne!(RunnerAction::Zoom2dOut, RunnerAction::Zoom2dFit);
+    assert_ne!(RunnerAction::Zoom2dFit, RunnerAction::NextPiece2d);
+    assert_ne!(RunnerAction::Zoom2dIn, RunnerAction::NextPiece2d);
 }
 
 #[test]

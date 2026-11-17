@@ -2,7 +2,7 @@
 
 use super::super::worker::{self, Latest, Work};
 use super::super::{DocumentFiles, perf};
-use super::actions::RunnerUiOp;
+use super::actions::RunnerAction;
 use super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::mesh_preparation;
 use clothcraft::authoring::corner_tool::CIRCLE_TENSION;
@@ -13,7 +13,10 @@ use clothcraft::garment::GarmentTemplate;
 use clothcraft::gpu_avbd::ContactMethod;
 use clothcraft::render::Camera;
 use clothcraft::vbd::{VbdMetrics, VbdSettings};
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use cssimpler::ActionQueue;
+use cssimpler::frame_drag::FrameAlignedDrag;
+use std::cell::RefCell;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
 
 pub(super) const DEFAULT_2D_ZOOM_SPEED: f64 = 1.5;
@@ -31,8 +34,11 @@ pub enum ObjectCategory {
 }
 
 pub struct CssRunnerState {
-    pub(super) actions: Arc<AtomicU64>,
-    pub(super) pending_ui_ops: Arc<Mutex<Vec<RunnerUiOp>>>,
+    pub(super) actions: ActionQueue<RunnerAction>,
+    pub(super) action_batch: Vec<RunnerAction>,
+    pub(super) frame_drag: FrameAlignedDrag,
+    pub(super) input_dirty: bool,
+    pub(super) board_background: RefCell<Option<super::board::rendering::BoardBackgroundCache>>,
     pub(super) native_number_drag: bool,
     pub(super) number_drag: Arc<Mutex<super::input::number::NumberDragState>>,
     pub(super) numeric_text: Arc<Mutex<Option<(String, String)>>>,
@@ -119,12 +125,15 @@ impl CssRunnerState {
         );
 
         Self {
-            actions: Arc::new(AtomicU64::new(0)),
+            actions: ActionQueue::new(),
+            action_batch: Vec::new(),
+            frame_drag: FrameAlignedDrag::new(),
+            input_dirty: false,
+            board_background: RefCell::new(None),
             native_number_drag: false,
             number_drag: Arc::new(Mutex::new(Default::default())),
             numeric_text: Arc::new(Mutex::new(None)),
             numeric_input_active: Arc::new(AtomicBool::new(false)),
-            pending_ui_ops: Arc::new(Mutex::new(Vec::new())),
             smoke: false,
             smoke_done: Default::default(),
             usd_scene: None,

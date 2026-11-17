@@ -51,6 +51,7 @@ pub fn create_runner_app<'a>(
     )
     .with_event_handler(handle_runner_event)
     .with_render_mode(RenderMode::OnInvalidation)
+    .with_frame_aligned_input(true)
     .with_continuous_updates(true)
     .with_exit_when(|state| state.smoke_done.get() || state.should_exit);
 

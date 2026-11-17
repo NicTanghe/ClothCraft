@@ -11,7 +11,29 @@ pub(super) mod motion;
 pub(super) mod number;
 pub(super) mod scroll;
 
+/// Route one engine event and coalesce pointer-driven repaints.
+///
+/// Raw pointer events are still applied in arrival order. Motion and wheel
+/// handling only marks the runner dirty; the next displayed frame repaints the
+/// latest state once. Press, release, keyboard, text and focus events stay
+/// immediate.
 pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
+    state.frame_drag.feed(event);
+    let handled = route_runner_event(state, event);
+    if handled
+        && matches!(
+            event,
+            EngineEvent::PointerMoved { .. } | EngineEvent::Scroll { .. }
+        )
+    {
+        state.input_dirty = true;
+        false
+    } else {
+        handled
+    }
+}
+
+fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     use std::sync::atomic::Ordering;
     let text_editing = state.numeric_input_active.load(Ordering::Relaxed);
     if number::handle_number_event(state, event) {

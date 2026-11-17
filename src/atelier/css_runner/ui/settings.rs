@@ -13,24 +13,24 @@ pub(in super::super) fn build_runner_settings(state: &CssRunnerState) -> Option<
     Some(ui! {
         <div id="settings-layer" class="settings-layer">
             <div id="settings-backdrop" class="settings-backdrop"
-                onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::CloseSettings)} />
+                onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CloseSettings)} />
             <div id="settings-panel" class="settings-panel" onclick_shared={|| {}}>
                 <div class="settings-header">
                     <span class="settings-title">"Settings"</span>
                     <button id="settings-close" class="cad-2d-pill"
-                        onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::CloseSettings)}
+                        onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CloseSettings)}
                         title="Close settings (Escape)">"Close"</button>
                 </div>
                 <div class="settings-entry">
                     <span class="settings-label">"2D zoom speed"</span>
                     <div class="settings-controls">
                         <button id="zoom-speed-dec" class="cad-2d-pill" title="Decrease 2D zoom speed"
-                            onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::Adjust2dZoomSpeed(-0.25))}>"−"</button>
+                            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::Adjust2dZoomSpeed(-0.25))}>"−"</button>
                         {number_field(state, "zoom-speed-value", NumberField::ZoomSpeed)}
                         <button id="zoom-speed-inc" class="cad-2d-pill" title="Increase 2D zoom speed"
-                            onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::Adjust2dZoomSpeed(0.25))}>"+"</button>
+                            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::Adjust2dZoomSpeed(0.25))}>"+"</button>
                         <button id="zoom-speed-reset" class="cad-2d-pill" title="Restore default 2D zoom speed"
-                            onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::Reset2dZoomSpeed)}>"Reset"</button>
+                            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::Reset2dZoomSpeed)}>"Reset"</button>
                     </div>
                     <span class="settings-hint">"Mouse wheel and trackpad"</span>
                 </div>

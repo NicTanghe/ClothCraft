@@ -11,135 +11,77 @@ use clothcraft::css_ui::ViewLayoutMode;
 use clothcraft::fitting::FittingScene;
 use clothcraft::garment::presets::{GarmentKind, basic as basic_garment};
 use clothcraft::gpu_avbd::ContactMethod;
+use cssimpler::ActionQueue;
 use cssimpler::app::Invalidation;
 use cssimpler::renderer::FrameInfo;
 use std::fs;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-pub const ACT_RUN_PLAY_PAUSE: u64 = 1 << 0;
+/// One typed command from native UI callbacks to the runner update.
+///
+/// The runner delivers these FIFO through [`cssimpler::ActionQueue`], so repeated
+/// clicks, payloads and their order are preserved instead of being coalesced into
+/// a bitmask.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RunnerAction {
+    PlayPause,
+    Step,
+    Reset,
+    Save,
+    Export,
+    CleanView,
+    PaletteToggle,
+    ThemeToggle,
+    ViewSplit,
+    View3d,
+    View2d,
+    DrawerToggle,
+    TabPattern,
+    TabSewing,
+    TabForm,
+    TabMaterial,
+    TabEnv,
+    CamReset,
+    PieceNext,
+    ToolSelect,
+    ToolSew,
+    ToolMeasure,
+    ToolCorner,
+    ToolGizmo,
+    ToolGrab,
+    ToolSew3d,
+    ToolPin,
+    ToolMeasure3d,
+    ToolAvatarDiag,
+    ToolEdit2d,
+    ToolRect2d,
+    ToolPen2d,
+    ToolFree2d,
+    ToolSew2d,
+    ToolSplit2d,
+    ToolInternal2d,
+    ToolMeasure2d,
+    ToolTrim2d,
+    ToolCorner2d,
+    PinModeToggle,
+    CornerModeToggle,
+    AccordionToggle,
+    SolverMenu,
+    SolverGpu,
+    SolverCpu,
+    SolverAl,
+    Zoom2dIn,
+    Zoom2dOut,
+    Zoom2dFit,
+    NextPiece2d,
+    ToolCornerSelect2d,
+    Accordion(usize),
+    Piece(usize),
+    /// A command carrying data, such as a numeric edit or preset choice.
+    Ui(RunnerUiOp),
+}
 
-pub const ACT_RUN_STEP: u64 = 1 << 1;
-
-pub const ACT_RUN_RESET: u64 = 1 << 2;
-
-pub const ACT_RUN_SAVE: u64 = 1 << 3;
-
-pub const ACT_RUN_EXPORT: u64 = 1 << 4;
-
-pub const ACT_RUN_CLEAN_VIEW: u64 = 1 << 5;
-
-pub const ACT_RUN_PALETTE_TOGGLE: u64 = 1 << 6;
-
-pub const ACT_RUN_THEME_TOGGLE: u64 = 1 << 7;
-
-pub const ACT_RUN_VIEW_SPLIT: u64 = 1 << 8;
-
-pub const ACT_RUN_VIEW_3D: u64 = 1 << 9;
-
-pub const ACT_RUN_VIEW_2D: u64 = 1 << 10;
-
-pub const ACT_RUN_DRAWER_TOGGLE: u64 = 1 << 11;
-
-pub const ACT_RUN_TAB_PATTERN: u64 = 1 << 12;
-
-pub const ACT_RUN_TAB_SEWING: u64 = 1 << 13;
-
-pub const ACT_RUN_TAB_FORM: u64 = 1 << 14;
-
-pub const ACT_RUN_TAB_MATERIAL: u64 = 1 << 15;
-
-pub const ACT_RUN_TAB_ENV: u64 = 1 << 16;
-
-pub const ACT_RUN_CAM_RESET: u64 = 1 << 17;
-
-pub const ACT_RUN_PIECE_NEXT: u64 = 1 << 18;
-
-pub const ACT_RUN_TOOL_SELECT: u64 = 1 << 19;
-
-pub const ACT_RUN_TOOL_SEW: u64 = 1 << 20;
-
-pub const ACT_RUN_TOOL_MEASURE: u64 = 1 << 21;
-
-pub const ACT_RUN_TOOL_CORNER: u64 = 1 << 22;
-
-pub const ACT_RUN_TOOL_GIZMO: u64 = 1 << 23;
-
-pub const ACT_RUN_TOOL_GRAB: u64 = 1 << 24;
-
-pub const ACT_RUN_TOOL_SEW3D: u64 = 1 << 25;
-
-pub const ACT_RUN_TOOL_PIN: u64 = 1 << 26;
-
-pub const ACT_RUN_TOOL_MEASURE3D: u64 = 1 << 27;
-
-pub const ACT_RUN_TOOL_AVATAR_DIAG: u64 = 1 << 28;
-
-pub const ACT_RUN_TOOL_EDIT2D: u64 = 1 << 29;
-
-pub const ACT_RUN_TOOL_RECT2D: u64 = 1 << 30;
-
-pub const ACT_RUN_TOOL_PEN2D: u64 = 1 << 31;
-
-pub const ACT_RUN_TOOL_FREE2D: u64 = 1 << 32;
-
-pub const ACT_RUN_TOOL_SEW2D: u64 = 1 << 33;
-
-pub const ACT_RUN_TOOL_SPLIT2D: u64 = 1 << 34;
-
-pub const ACT_RUN_TOOL_INTERNAL2D: u64 = 1 << 35;
-
-pub const ACT_RUN_TOOL_MEASURE2D: u64 = 1 << 36;
-
-pub const ACT_RUN_TOOL_TRIM2D: u64 = 1 << 37;
-
-pub const ACT_RUN_TOOL_CORNER2D: u64 = 1 << 38;
-
-pub const ACT_RUN_PIN_MODE_TOGGLE: u64 = 1 << 39;
-
-pub const ACT_RUN_CORNER_MODE_TOGGLE: u64 = 1 << 40;
-
-pub const ACT_RUN_ACC_0: u64 = 1 << 41;
-
-pub const ACT_RUN_ACC_1: u64 = 1 << 42;
-
-pub const ACT_RUN_ACC_2: u64 = 1 << 43;
-
-pub const ACT_RUN_ACC_3: u64 = 1 << 44;
-
-pub const ACT_RUN_ACC_4: u64 = 1 << 45;
-
-pub const ACT_RUN_ACC_5: u64 = 1 << 46;
-
-pub const ACT_RUN_ACCORDION_TOGGLE: u64 = 1 << 47;
-
-pub const ACT_RUN_PIECE_0: u64 = 1 << 48;
-
-pub const ACT_RUN_PIECE_1: u64 = 1 << 49;
-
-pub const ACT_RUN_PIECE_2: u64 = 1 << 50;
-
-pub const ACT_RUN_PIECE_3: u64 = 1 << 51;
-
-pub const ACT_RUN_SOLVER_MENU: u64 = 1 << 52;
-
-pub const ACT_RUN_SOLVER_GPU: u64 = 1 << 53;
-
-pub const ACT_RUN_SOLVER_CPU: u64 = 1 << 54;
-
-pub const ACT_RUN_SOLVER_AL: u64 = 1 << 55;
-
-pub const ACT_RUN_2D_ZOOM_IN: u64 = 1 << 56;
-
-pub const ACT_RUN_2D_ZOOM_OUT: u64 = 1 << 57;
-
-pub const ACT_RUN_2D_FIT: u64 = 1 << 58;
-
-pub const ACT_RUN_2D_NEXT_PIECE: u64 = 1 << 59;
-
-pub const ACT_RUN_TOOL_CORNER_SELECT2D: u64 = 1 << 60;
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RunnerUiOp {
     SetNumber(super::ui::number::NumberField, f64),
     MeshLevel(u8),
@@ -169,6 +111,13 @@ pub enum RunnerUiOp {
 }
 
 pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidation {
+    // Consume one coalesced pointer batch per displayed frame. The event handler
+    // feeds FrameAlignedDrag and defers pointer-driven invalidation to this update.
+    let drag_update = state.frame_drag.begin_frame(frame.frame_index);
+    let input_changed = std::mem::take(&mut state.input_dirty);
+    if drag_update.as_ref().is_some_and(|update| update.overflowed) {
+        state.frame_drag.reset();
+    }
     let number_changed = super::input::number::tick_number_drag(state);
     // 1. Poll simulation worker result
     let done = state
@@ -240,233 +189,19 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         }
     }
 
-    // 2. Process pending UI actions
-    let actions = state.actions.swap(0, Ordering::Relaxed);
-    let mut prev_piece = state.selected_piece_index;
-
-    if actions & ACT_RUN_SOLVER_MENU != 0 {
-        state.solver_menu_open = !state.solver_menu_open;
-        state.settings_open = false;
+    // 2. Process queued typed actions in click order.
+    let previous_piece = state.selected_piece_index;
+    let mut batch = std::mem::take(&mut state.action_batch);
+    state.actions.drain_into(&mut batch);
+    let had_actions = !batch.is_empty();
+    let has_accordion_action = batch
+        .iter()
+        .any(|action| matches!(action, RunnerAction::Accordion(_)));
+    for action in batch.drain(..) {
+        apply_runner_action(state, action, has_accordion_action);
     }
-    if actions & ACT_RUN_SOLVER_GPU != 0 {
-        state.select_solver(true);
-    }
-    if actions & ACT_RUN_SOLVER_AL != 0 {
-        state.select_solver_method(true, ContactMethod::BarrierAl);
-    }
-    if actions & ACT_RUN_SOLVER_CPU != 0 {
-        state.select_solver(false);
-    }
-    if actions & ACT_RUN_PLAY_PAUSE != 0 {
-        state.playing = !state.playing;
-        state.send_control_state(false);
-    }
-    if actions & ACT_RUN_STEP != 0 {
-        state.send_control_state(true);
-    }
-    if actions & ACT_RUN_RESET != 0 {
-        state.reset_simulation();
-    }
-    if actions & ACT_RUN_SAVE != 0 {
-        state.save_project();
-    }
-    if actions & ACT_RUN_EXPORT != 0 {
-        state.export_artifacts();
-    }
-    if actions & ACT_RUN_CLEAN_VIEW != 0 {
-        state.clean_view = !state.clean_view;
-    }
-    if actions & ACT_RUN_PALETTE_TOGGLE != 0 {
-        state.command_palette_open = !state.command_palette_open;
-        state.settings_open = false;
-    }
-    if actions & ACT_RUN_THEME_TOGGLE != 0 {
-        state.theme = state.theme.toggled();
-    }
-    if actions & ACT_RUN_VIEW_SPLIT != 0 {
-        state.layout_mode = ViewLayoutMode::Split;
-    }
-    if actions & ACT_RUN_VIEW_3D != 0 {
-        state.layout_mode = ViewLayoutMode::ThreeDOnly;
-    }
-    if actions & ACT_RUN_VIEW_2D != 0 {
-        state.layout_mode = ViewLayoutMode::TwoDOnly;
-    }
-    if actions & ACT_RUN_DRAWER_TOGGLE != 0 {
-        state.left_drawer_open = !state.left_drawer_open;
-    }
-    if actions & ACT_RUN_TAB_PATTERN != 0 {
-        state.active_category = ObjectCategory::Pattern2D;
-    }
-    if actions & ACT_RUN_TAB_SEWING != 0 {
-        state.active_category = ObjectCategory::Sewing;
-    }
-    if actions & ACT_RUN_TAB_FORM != 0 {
-        state.active_category = ObjectCategory::Form3D;
-    }
-    if actions & ACT_RUN_TAB_MATERIAL != 0 {
-        state.active_category = ObjectCategory::Material;
-    }
-    if actions & ACT_RUN_TAB_ENV != 0 {
-        state.active_category = ObjectCategory::Environment;
-    }
-    if actions & ACT_RUN_CAM_RESET != 0 {
-        state.camera = clothcraft::usd_scene::default_scene_camera(
-            &state.scene.state.x,
-            Some(&state.scene.collider.surface),
-        );
-        state.sync_usd_camera();
-        state.status_message = "Reset 3D camera".to_string();
-    }
-    if actions & ACT_RUN_PIECE_NEXT != 0 {
-        let count = state.project.template.panels.len().max(1);
-        state.selected_piece_index = (state.selected_piece_index + 1) % count;
-    }
-    if actions & ACT_RUN_TOOL_GIZMO != 0 || actions & ACT_RUN_TOOL_SELECT != 0 {
-        state.active_3d_tool = "Gizmo".to_string();
-        state.status_message = "3D Tool: Gizmo — drag 3D viewport to orbit".to_string();
-    }
-    if actions & ACT_RUN_TOOL_GRAB != 0 {
-        state.active_3d_tool = "Grab".to_string();
-        state.status_message = "3D Tool: Grab".to_string();
-    }
-    if actions & ACT_RUN_TOOL_SEW3D != 0 {
-        state.active_3d_tool = "3D Sew".to_string();
-        state.active_category = ObjectCategory::Sewing;
-        state.status_message = "3D Tool: 3D Sew (inspect seams in Object Browser)".to_string();
-    }
-    if actions & ACT_RUN_TOOL_PIN != 0 {
-        state.active_3d_tool = "Pin".to_string();
-        state.accordion_open[3] = true;
-        state.open_accordion_idx = 3;
-        state.status_message = "3D Tool: Pin".to_string();
-    }
-    if actions & ACT_RUN_TOOL_MEASURE3D != 0 {
-        state.active_3d_tool = "Measure".to_string();
-        state.status_message = "3D Tool: 3D Measure".to_string();
-    }
-    if actions & ACT_RUN_TOOL_AVATAR_DIAG != 0 {
-        state.active_3d_tool = "Avatar Diagnostics".to_string();
-        state.active_category = ObjectCategory::Environment;
-        state.accordion_open[5] = true;
-        state.open_accordion_idx = 5;
-        state.status_message = "3D Tool: Avatar Diagnostics".to_string();
-    }
-    if actions & ACT_RUN_TOOL_EDIT2D != 0 {
-        set_active_2d_tool(state, "Edit");
-    }
-    if actions & ACT_RUN_TOOL_RECT2D != 0 {
-        set_active_2d_tool(state, "Rect");
-    }
-    if actions & ACT_RUN_TOOL_PEN2D != 0 {
-        set_active_2d_tool(state, "Pen");
-    }
-    if actions & ACT_RUN_TOOL_FREE2D != 0 {
-        set_active_2d_tool(state, "Freehand");
-    }
-    if actions & ACT_RUN_TOOL_SEW2D != 0 || actions & ACT_RUN_TOOL_SEW != 0 {
-        set_active_2d_tool(state, "Sew");
-    }
-    if actions & ACT_RUN_TOOL_SPLIT2D != 0 {
-        set_active_2d_tool(state, "Split");
-    }
-    if actions & ACT_RUN_TOOL_INTERNAL2D != 0 {
-        set_active_2d_tool(state, "Internal Line");
-    }
-    if actions & ACT_RUN_TOOL_MEASURE2D != 0 || actions & ACT_RUN_TOOL_MEASURE != 0 {
-        set_active_2d_tool(state, "Measure");
-    }
-    if actions & ACT_RUN_TOOL_TRIM2D != 0 {
-        set_active_2d_tool(state, "Trim");
-    }
-    if actions & ACT_RUN_TOOL_CORNER_SELECT2D != 0 {
-        set_active_2d_tool(state, "Corner Select");
-    }
-    if actions & ACT_RUN_TOOL_CORNER2D != 0 || actions & ACT_RUN_TOOL_CORNER != 0 {
-        set_active_2d_tool(state, "Corner");
-    }
-    if actions & ACT_RUN_PIN_MODE_TOGGLE != 0 {
-        state.pin_mode_contour = !state.pin_mode_contour;
-    }
-    if actions & ACT_RUN_CORNER_MODE_TOGGLE != 0 {
-        state.corner_mode_radius = !state.corner_mode_radius;
-        state.corner_preview_active = true;
-    }
-    if actions & ACT_RUN_ACC_0 != 0 {
-        state.accordion_open[0] = !state.accordion_open[0];
-        state.open_accordion_idx = 0;
-    }
-    if actions & ACT_RUN_ACC_1 != 0 {
-        state.accordion_open[1] = !state.accordion_open[1];
-        state.open_accordion_idx = 1;
-    }
-    if actions & ACT_RUN_ACC_2 != 0 {
-        state.accordion_open[2] = !state.accordion_open[2];
-        state.open_accordion_idx = 2;
-    }
-    if actions & ACT_RUN_ACC_3 != 0 {
-        state.accordion_open[3] = !state.accordion_open[3];
-        state.open_accordion_idx = 3;
-    }
-    if actions & ACT_RUN_ACC_4 != 0 {
-        state.accordion_open[4] = !state.accordion_open[4];
-        state.open_accordion_idx = 4;
-    }
-    if actions & ACT_RUN_ACC_5 != 0 {
-        state.accordion_open[5] = !state.accordion_open[5];
-        state.open_accordion_idx = 5;
-    }
-    if actions & ACT_RUN_ACCORDION_TOGGLE != 0
-        && (actions
-            & (ACT_RUN_ACC_0
-                | ACT_RUN_ACC_1
-                | ACT_RUN_ACC_2
-                | ACT_RUN_ACC_3
-                | ACT_RUN_ACC_4
-                | ACT_RUN_ACC_5)
-            == 0)
-    {
-        state.open_accordion_idx = (state.open_accordion_idx + 1) % 6;
-        state.accordion_open[state.open_accordion_idx] =
-            !state.accordion_open[state.open_accordion_idx];
-    }
-    if actions & ACT_RUN_PIECE_0 != 0 && !state.project.template.panels.is_empty() {
-        state.selected_piece_index = 0;
-    }
-    if actions & ACT_RUN_PIECE_1 != 0 && state.project.template.panels.len() > 1 {
-        state.selected_piece_index = 1;
-    }
-    if actions & ACT_RUN_PIECE_2 != 0 && state.project.template.panels.len() > 2 {
-        state.selected_piece_index = 2;
-    }
-    if actions & ACT_RUN_PIECE_3 != 0 && state.project.template.panels.len() > 3 {
-        state.selected_piece_index = 3;
-    }
-    if actions & ACT_RUN_2D_ZOOM_IN != 0 {
-        state.board_2d_zoom = (state.board_2d_zoom * 1.25).clamp(0.25, 10.0);
-    }
-    if actions & ACT_RUN_2D_ZOOM_OUT != 0 {
-        state.board_2d_zoom = (state.board_2d_zoom / 1.25).clamp(0.25, 10.0);
-    }
-    if actions & ACT_RUN_2D_FIT != 0 {
-        state.board_2d_pan = (0.0, 0.0);
-        state.board_2d_zoom = 1.0;
-    }
-    if actions & ACT_RUN_2D_NEXT_PIECE != 0 {
-        let count = state.project.template.panels.len().max(1);
-        state.selected_piece_index = (state.selected_piece_index + 1) % count;
-        if let Some(p) = state
-            .project
-            .template
-            .panels
-            .get(state.selected_piece_index)
-        {
-            state.status_message = format!("Selected piece: {} ({})", p.name, p.id);
-        }
-    }
-    if state.selected_piece_index != prev_piece {
-        prev_piece = state.selected_piece_index;
-        let _ = prev_piece;
+    state.action_batch = batch;
+    if state.selected_piece_index != previous_piece {
         state.clear_2d_subselection();
     }
 
@@ -478,17 +213,8 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
     if state.mesh_draft.panel_id.as_deref() != selected_mesh_panel.map(|p| p.id.as_str()) {
         state.mesh_draft = mesh_preparation::MeshDraft::from_panel(selected_mesh_panel);
     }
-    let ui_ops: Vec<RunnerUiOp> = state
-        .pending_ui_ops
-        .lock()
-        .map(|mut g| std::mem::take(&mut *g))
-        .unwrap_or_default();
-    let had_ui_ops = !ui_ops.is_empty();
-    for op in ui_ops {
-        apply_runner_ui_op(state, op);
-    }
 
-    if number_changed || actions != 0 || had_ui_ops || (had_result && !state.playing) {
+    if number_changed || input_changed || had_actions || (had_result && !state.playing) {
         Invalidation::Structure
     } else if had_result {
         Invalidation::Paint
@@ -497,26 +223,163 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
     }
 }
 
-pub(super) fn queue_action(
-    actions: &Arc<AtomicU64>,
-    action: u64,
-) -> impl Fn() + Send + Sync + 'static {
-    let actions = Arc::clone(actions);
-    move || {
-        actions.fetch_or(action, Ordering::Relaxed);
+pub(super) fn apply_runner_action(
+    state: &mut CssRunnerState,
+    action: RunnerAction,
+    has_accordion_action: bool,
+) {
+    match action {
+        RunnerAction::PlayPause => {
+            state.playing = !state.playing;
+            state.send_control_state(false);
+        }
+        RunnerAction::Step => state.send_control_state(true),
+        RunnerAction::Reset => state.reset_simulation(),
+        RunnerAction::Save => state.save_project(),
+        RunnerAction::Export => state.export_artifacts(),
+        RunnerAction::CleanView => state.clean_view = !state.clean_view,
+        RunnerAction::PaletteToggle => {
+            state.command_palette_open = !state.command_palette_open;
+            state.settings_open = false;
+        }
+        RunnerAction::ThemeToggle => state.theme = state.theme.toggled(),
+        RunnerAction::ViewSplit => state.layout_mode = ViewLayoutMode::Split,
+        RunnerAction::View3d => state.layout_mode = ViewLayoutMode::ThreeDOnly,
+        RunnerAction::View2d => state.layout_mode = ViewLayoutMode::TwoDOnly,
+        RunnerAction::DrawerToggle => state.left_drawer_open = !state.left_drawer_open,
+        RunnerAction::TabPattern => state.active_category = ObjectCategory::Pattern2D,
+        RunnerAction::TabSewing => state.active_category = ObjectCategory::Sewing,
+        RunnerAction::TabForm => state.active_category = ObjectCategory::Form3D,
+        RunnerAction::TabMaterial => state.active_category = ObjectCategory::Material,
+        RunnerAction::TabEnv => state.active_category = ObjectCategory::Environment,
+        RunnerAction::CamReset => {
+            state.camera = clothcraft::usd_scene::default_scene_camera(
+                &state.scene.state.x,
+                Some(&state.scene.collider.surface),
+            );
+            state.sync_usd_camera();
+            state.status_message = "Reset 3D camera".to_string();
+        }
+        RunnerAction::PieceNext => {
+            let count = state.project.template.panels.len().max(1);
+            state.selected_piece_index = (state.selected_piece_index + 1) % count;
+        }
+        RunnerAction::ToolGizmo | RunnerAction::ToolSelect => {
+            state.active_3d_tool = "Gizmo".to_string();
+            state.status_message = "3D Tool: Gizmo — drag 3D viewport to orbit".to_string();
+        }
+        RunnerAction::ToolGrab => {
+            state.active_3d_tool = "Grab".to_string();
+            state.status_message = "3D Tool: Grab".to_string();
+        }
+        RunnerAction::ToolSew3d => {
+            state.active_3d_tool = "3D Sew".to_string();
+            state.active_category = ObjectCategory::Sewing;
+            state.status_message = "3D Tool: 3D Sew (inspect seams in Object Browser)".to_string();
+        }
+        RunnerAction::ToolPin => {
+            state.active_3d_tool = "Pin".to_string();
+            state.accordion_open[3] = true;
+            state.open_accordion_idx = 3;
+            state.status_message = "3D Tool: Pin".to_string();
+        }
+        RunnerAction::ToolMeasure3d => {
+            state.active_3d_tool = "Measure".to_string();
+            state.status_message = "3D Tool: 3D Measure".to_string();
+        }
+        RunnerAction::ToolAvatarDiag => {
+            state.active_3d_tool = "Avatar Diagnostics".to_string();
+            state.active_category = ObjectCategory::Environment;
+            state.accordion_open[5] = true;
+            state.open_accordion_idx = 5;
+            state.status_message = "3D Tool: Avatar Diagnostics".to_string();
+        }
+        RunnerAction::ToolEdit2d => set_active_2d_tool(state, "Edit"),
+        RunnerAction::ToolRect2d => set_active_2d_tool(state, "Rect"),
+        RunnerAction::ToolPen2d => set_active_2d_tool(state, "Pen"),
+        RunnerAction::ToolFree2d => set_active_2d_tool(state, "Freehand"),
+        RunnerAction::ToolSew | RunnerAction::ToolSew2d => set_active_2d_tool(state, "Sew"),
+        RunnerAction::ToolSplit2d => set_active_2d_tool(state, "Split"),
+        RunnerAction::ToolInternal2d => set_active_2d_tool(state, "Internal Line"),
+        RunnerAction::ToolMeasure | RunnerAction::ToolMeasure2d => {
+            set_active_2d_tool(state, "Measure")
+        }
+        RunnerAction::ToolTrim2d => set_active_2d_tool(state, "Trim"),
+        RunnerAction::ToolCornerSelect2d => set_active_2d_tool(state, "Corner Select"),
+        RunnerAction::ToolCorner | RunnerAction::ToolCorner2d => {
+            set_active_2d_tool(state, "Corner")
+        }
+        RunnerAction::PinModeToggle => state.pin_mode_contour = !state.pin_mode_contour,
+        RunnerAction::CornerModeToggle => {
+            state.corner_mode_radius = !state.corner_mode_radius;
+            state.corner_preview_active = true;
+        }
+        RunnerAction::Accordion(index) => {
+            if let Some(open) = state.accordion_open.get_mut(index) {
+                *open = !*open;
+                state.open_accordion_idx = index;
+            }
+        }
+        RunnerAction::AccordionToggle => {
+            // A direct accordion selection in the same batch owns the result,
+            // matching the previous bitmask batch semantics.
+            if !has_accordion_action {
+                state.open_accordion_idx = (state.open_accordion_idx + 1) % 6;
+                state.accordion_open[state.open_accordion_idx] =
+                    !state.accordion_open[state.open_accordion_idx];
+            }
+        }
+        RunnerAction::Piece(index) => {
+            if state.project.template.panels.len() > index {
+                state.selected_piece_index = index;
+            }
+        }
+        RunnerAction::SolverMenu => {
+            state.solver_menu_open = !state.solver_menu_open;
+            state.settings_open = false;
+        }
+        RunnerAction::SolverGpu => state.select_solver(true),
+        RunnerAction::SolverAl => state.select_solver_method(true, ContactMethod::BarrierAl),
+        RunnerAction::SolverCpu => state.select_solver(false),
+        RunnerAction::Zoom2dIn => {
+            state.board_2d_zoom = (state.board_2d_zoom * 1.25).clamp(0.25, 10.0);
+        }
+        RunnerAction::Zoom2dOut => {
+            state.board_2d_zoom = (state.board_2d_zoom / 1.25).clamp(0.25, 10.0);
+        }
+        RunnerAction::Zoom2dFit => {
+            state.board_2d_pan = (0.0, 0.0);
+            state.board_2d_zoom = 1.0;
+        }
+        RunnerAction::NextPiece2d => {
+            let count = state.project.template.panels.len().max(1);
+            state.selected_piece_index = (state.selected_piece_index + 1) % count;
+            if let Some(p) = state
+                .project
+                .template
+                .panels
+                .get(state.selected_piece_index)
+            {
+                state.status_message = format!("Selected piece: {} ({})", p.name, p.id);
+            }
+        }
+        RunnerAction::Ui(op) => apply_runner_ui_op(state, op),
     }
 }
 
+pub(super) fn queue_action(
+    actions: &ActionQueue<RunnerAction>,
+    action: RunnerAction,
+) -> impl Fn() + Send + Sync + 'static {
+    let actions = actions.clone();
+    move || actions.push(action.clone())
+}
+
 pub(super) fn queue_ui_op(
-    ops: &Arc<Mutex<Vec<RunnerUiOp>>>,
+    actions: &ActionQueue<RunnerAction>,
     op: RunnerUiOp,
 ) -> impl Fn() + Send + Sync + 'static {
-    let ops = Arc::clone(ops);
-    move || {
-        if let Ok(mut guard) = ops.lock() {
-            guard.push(op.clone());
-        }
-    }
+    queue_action(actions, RunnerAction::Ui(op))
 }
 
 pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {

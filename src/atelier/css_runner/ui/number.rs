@@ -1,9 +1,12 @@
 //! Shared native numeric editor for adjustable workspace values.
-use super::super::{actions::RunnerUiOp, state::CssRunnerState};
+use super::super::{
+    actions::{RunnerAction, RunnerUiOp},
+    state::CssRunnerState,
+};
 use cssimpler::{core::Node, ui};
 use std::sync::atomic::Ordering;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NumberField {
     ZoomSpeed,
     CornerRadius,
@@ -22,7 +25,7 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
     let initial_mode_radius = state.corner_mode_radius;
     let initial_preview_active = state.corner_preview_active;
     let handle_id = format!("{id}-drag");
-    let pending = state.pending_ui_ops.clone();
+    let actions = state.actions.clone();
     let active = state.numeric_input_active.clone();
     let displayed = state
         .numeric_text
@@ -50,7 +53,7 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
                     // text editing owns focus. Parsing must not remove the dot.
                     *input_text.lock().unwrap() = Some((input_id.clone(), text.to_owned()));
                     if let Ok(value) = text.parse::<f64>() && value.is_finite() {
-                        pending.lock().unwrap().push(RunnerUiOp::SetNumber(field, value));
+                        actions.push(RunnerAction::Ui(RunnerUiOp::SetNumber(field, value)));
                     }
                 }} />
             <button id={handle_id} class="cad-number-drag"

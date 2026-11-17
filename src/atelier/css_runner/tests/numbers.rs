@@ -1,12 +1,12 @@
 //! Native typing and ClothCraft drag-handle integration, without a GPU run.
 use super::super::{
-    actions::{RunnerUiOp, apply_runner_ui_op},
+    actions::{RunnerUiOp, apply_runner_ui_op, update_runner},
     input::{handle_runner_event, number::tick_number_drag},
     ui::number::{NumberField, number_field},
 };
 use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
 use cssimpler::{
-    app::{App, Invalidation},
+    app::App,
     core::Node,
     renderer::{EngineEvent, FrameInfo, TextInputEvent},
 };
@@ -32,10 +32,15 @@ fn number_drag_tracks_motion_with_shift_and_control_precision() {
     handle_runner_event(&mut state, &pointer_move_ev(100.0, 100.0));
     press_handle(&state, NumberField::CornerRadius);
     let initial = state.corner_radius_mm;
-    assert!(handle_runner_event(
+    assert!(!handle_runner_event(
         &mut state,
         &pointer_move_ev(100.0, 96.0)
     ));
+    assert_eq!(
+        state.corner_radius_mm, initial,
+        "motion is applied once per displayed frame"
+    );
+    assert!(tick_number_drag(&mut state));
     assert_eq!(state.corner_radius_mm, initial + 1.0);
     for _ in 0..20 {
         assert!(!tick_number_drag(&mut state));
@@ -53,6 +58,7 @@ fn number_drag_tracks_motion_with_shift_and_control_precision() {
         modifiers.shift = true;
     }
     handle_runner_event(&mut state, &movement);
+    assert!(tick_number_drag(&mut state));
     assert_eq!(state.corner_radius_mm, initial + 11.0);
     let mut movement = pointer_move_ev(100.0, 88.0);
     if let EngineEvent::PointerMoved {
@@ -62,9 +68,11 @@ fn number_drag_tracks_motion_with_shift_and_control_precision() {
         modifiers.control = true;
     }
     handle_runner_event(&mut state, &movement);
+    assert!(tick_number_drag(&mut state));
     assert!((state.corner_radius_mm - initial - 11.1).abs() < 1e-9);
     let fine = state.corner_radius_mm;
     handle_runner_event(&mut state, &pointer_move_ev(100.0, 92.0));
+    assert!(tick_number_drag(&mut state));
     assert!((state.corner_radius_mm - (fine - 1.0)).abs() < 1e-9);
     assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
     let released = state.corner_radius_mm;
@@ -86,12 +94,8 @@ fn numeric_input_uses_native_text_editing_and_clamps_model_values() {
     let mut app = App::new(
         state,
         &stylesheet,
-        |state: &mut super::super::state::CssRunnerState, _: FrameInfo| {
-            let ops = std::mem::take(&mut *state.pending_ui_ops.lock().unwrap());
-            for op in ops {
-                apply_runner_ui_op(state, op);
-            }
-            Invalidation::Structure
+        |state: &mut super::super::state::CssRunnerState, frame: FrameInfo| {
+            update_runner(state, frame)
         },
         |state: &super::super::state::CssRunnerState| {
             number_field(state, "test-number", NumberField::ZoomSpeed)
@@ -168,6 +172,7 @@ fn drag_cancel_restores_value_and_limits_are_enforced() {
     handle_runner_event(&mut state, &pointer_move_ev(0.0, 500.0));
     press_handle(&state, NumberField::CornerTension);
     handle_runner_event(&mut state, &pointer_move_ev(0.0, 0.0));
+    assert!(tick_number_drag(&mut state));
 
     assert_eq!(state.corner_tension, 1.5);
     let escape = EngineEvent::Key(cssimpler::renderer::KeyboardEvent {
@@ -185,6 +190,7 @@ fn drag_cancel_restores_value_and_limits_are_enforced() {
     assert!(!tick_number_drag(&mut state));
     press_handle(&state, NumberField::CornerTension);
     handle_runner_event(&mut state, &pointer_move_ev(0.0, 500.0));
+    assert!(tick_number_drag(&mut state));
 
     assert_eq!(state.corner_tension, 0.05);
 }
@@ -211,6 +217,7 @@ fn control_drag_exposes_finer_decimal_places_for_zoom_and_tension() {
             },
         };
         handle_runner_event(&mut state, &movement);
+        assert!(tick_number_drag(&mut state));
         let Node::Element(control) = number_field(&state, "fine", field) else {
             panic!()
         };

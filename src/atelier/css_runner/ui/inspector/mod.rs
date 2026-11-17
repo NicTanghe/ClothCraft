@@ -5,10 +5,7 @@ use self::categories::{
     build_cat_sewing,
 };
 use self::properties::build_runner_property_accordions;
-use super::super::actions::{
-    ACT_RUN_TAB_ENV, ACT_RUN_TAB_FORM, ACT_RUN_TAB_MATERIAL, ACT_RUN_TAB_PATTERN,
-    ACT_RUN_TAB_SEWING, queue_action,
-};
+use super::super::actions::{RunnerAction, queue_action};
 use super::super::state::{CssRunnerState, ObjectCategory};
 use cssimpler::core::Node;
 use cssimpler::ui;
@@ -72,11 +69,11 @@ pub(in super::super) fn build_runner_right_dock(state: &CssRunnerState) -> Node 
             <div id="object-browser">
                 <div class="dock-section-title">"Object Browser"</div>
                 <div class="dock-tabs">
-                    <button class={tp} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_PATTERN)} title="2D Pattern">"2D"</button>
-                    <button class={ts} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_SEWING)} title="Sewing">"Sew"</button>
-                    <button class={tf} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_FORM)} title="3D Form">"3D"</button>
-                    <button class={tm} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_MATERIAL)} title="Material">"Mat."</button>
-                    <button class={te} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_ENV)} title="Environment">"Env."</button>
+                    <button class={tp} onclick_shared={queue_action(&state.actions, RunnerAction::TabPattern)} title="2D Pattern">"2D"</button>
+                    <button class={ts} onclick_shared={queue_action(&state.actions, RunnerAction::TabSewing)} title="Sewing">"Sew"</button>
+                    <button class={tf} onclick_shared={queue_action(&state.actions, RunnerAction::TabForm)} title="3D Form">"3D"</button>
+                    <button class={tm} onclick_shared={queue_action(&state.actions, RunnerAction::TabMaterial)} title="Material">"Mat."</button>
+                    <button class={te} onclick_shared={queue_action(&state.actions, RunnerAction::TabEnv)} title="Environment">"Env."</button>
                 </div>
                 <div class="object-browser-content-viewport">
                     {content}

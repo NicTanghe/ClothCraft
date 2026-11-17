@@ -33,7 +33,7 @@ pub(in super::super::super) fn build_cat_pattern_2d(state: &CssRunnerState) -> N
             format!("{:.0}°", p.grain_degrees)
         };
         piece_rows.push(ui! {
-            <div class={item_class} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SelectPiece(idx))}>
+            <div class={item_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SelectPiece(idx))}>
                 <span>{label}</span>
                 <span>{grain_str}</span>
             </div>

@@ -1,8 +1,6 @@
 //! Bundled templates, import/export actions and piece cards.
 
-use super::super::actions::{
-    ACT_RUN_EXPORT, ACT_RUN_PIECE_NEXT, RunnerUiOp, queue_action, queue_ui_op,
-};
+use super::super::actions::{RunnerAction, RunnerUiOp, queue_action, queue_ui_op};
 use super::super::board::selection::compute_connected_2d_highlight;
 use super::super::state::CssRunnerState;
 use clothcraft::garment::presets::GarmentKind;
@@ -36,7 +34,7 @@ pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Nod
         };
         let meta_str = format!("Fabric: {} · Grain: {:.0}°", p.fabric, p.grain_degrees);
         piece_cards.push(ui! {
-            <div class={card_class} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SelectPiece(idx))}>
+            <div class={card_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SelectPiece(idx))}>
                 <div class="piece-header">
                     <span class="piece-name">{label}</span>
                     <span class="piece-id">{id_str}</span>
@@ -61,21 +59,21 @@ pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Nod
                         <span class="section-subtitle">"Engineering fixtures (metres)"</span>
                     </div>
                     <div class="template-cards-container">
-                        <div class="template-entry pointer-item" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::LoadPreset(GarmentKind::Tshirt))}>
+                        <div class="template-entry pointer-item" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::LoadPreset(GarmentKind::Tshirt))}>
                             <div class="template-header">
                                 <span class="template-title">"T-shirt"</span>
                                 <span class="template-meta">"2 panels · 4 seams"</span>
                             </div>
                             <span class="template-description">"Two-panel engineering fixture for MakeHuman mannequin."</span>
                         </div>
-                        <div class="template-entry pointer-item" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::LoadPreset(GarmentKind::Dress))}>
+                        <div class="template-entry pointer-item" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::LoadPreset(GarmentKind::Dress))}>
                             <div class="template-header">
                                 <span class="template-title">"Dress"</span>
                                 <span class="template-meta">"2 panels · 4 seams"</span>
                             </div>
                             <span class="template-description">"Two-panel dress fixture with curved seams."</span>
                         </div>
-                        <div class="template-entry pointer-item" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::StatusNote("Apron fixture is planned (use T-shirt or Dress)".into()))}>
+                        <div class="template-entry pointer-item" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Apron fixture is planned (use T-shirt or Dress)".into()))}>
                             <div class="template-header">
                                 <span class="template-title">"Apron"</span>
                                 <span class="template-meta">"3 panels · 4 seams"</span>
@@ -92,16 +90,16 @@ pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Nod
                     <div class="quick-action-group">
                         <span class="group-label">"Import"</span>
                         <div class="quick-actions-row">
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::StatusNote("Use CLI --project or File menu to import DXF".into()))}>"DXF"</button>
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::StatusNote("Use CLI or File menu to import SVG".into()))}>"SVG"</button>
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::StatusNote("Use CLI --avatar to swap mannequin OBJ".into()))}>"Avatar"</button>
+                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI --project or File menu to import DXF".into()))}>"DXF"</button>
+                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI or File menu to import SVG".into()))}>"SVG"</button>
+                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI --avatar to swap mannequin OBJ".into()))}>"Avatar"</button>
                         </div>
                     </div>
                     <div class="quick-action-group">
                         <span class="group-label">"Export"</span>
                         <div class="quick-actions-row">
-                            <button class="btn-action" onclick_shared={queue_action(&state.actions, ACT_RUN_EXPORT)}>"Export OBJ"</button>
-                            <button class="btn-action btn-action-accent" onclick_shared={queue_action(&state.actions, ACT_RUN_EXPORT)}>"True-Scale SVG"</button>
+                            <button class="btn-action" onclick_shared={queue_action(&state.actions, RunnerAction::Export)}>"Export OBJ"</button>
+                            <button class="btn-action btn-action-accent" onclick_shared={queue_action(&state.actions, RunnerAction::Export)}>"True-Scale SVG"</button>
                         </div>
                         <div class="export-accuracy-note-box">
                             <p class="export-note-text">
@@ -118,7 +116,7 @@ pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Nod
                     <div class="piece-cards-list">
                         {piece_cards}
                     </div>
-                    <button class="action-btn" onclick_shared={queue_action(&state.actions, ACT_RUN_PIECE_NEXT)}>"Select Next Piece"</button>
+                    <button class="action-btn" onclick_shared={queue_action(&state.actions, RunnerAction::PieceNext)}>"Select Next Piece"</button>
                 </div>
             </div>
         </aside>

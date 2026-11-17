@@ -17,8 +17,26 @@ use cssimpler::core::PathCommand::{Close, CubicTo, LineTo, MoveTo};
 use cssimpler::core::{Color, VectorViewBox};
 use glam::DVec2;
 
+/// Everything the static board background (colour, grid, axes) depends on.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct BoardBackgroundKey {
+    theme: Theme,
+    min_x_bits: u64,
+    min_y_bits: u64,
+    width_bits: u64,
+    height_bits: u64,
+    px_bits: u64,
+}
+
+/// Retains the background paths so their shared geometry identity survives a
+/// view rebuild. cssimpler's layer-cache key follows `VectorGeometry` identity;
+/// rebuilding identical commands would otherwise miss the cached grid raster.
+pub(crate) struct BoardBackgroundCache {
+    pub(super) key: BoardBackgroundKey,
+    paths: Vec<BoardPath>,
+}
+
 pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, VectorViewBox) {
-    let mut nodes = Vec::new();
     let template = state.active_template();
     let panels = &template.panels;
 
@@ -212,61 +230,90 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
     let accent_emerald = Some(Color::rgb(16, 185, 129));
     let hover_cyan = Some(Color::rgb(125, 211, 252));
 
-    // Background rect
-    nodes.push(BoardPath::new(
-        rectangle(vb_min_x, vb_min_y, vb_w, vb_h),
-        bg_color,
-        None,
-        0.0,
-        "",
-    ));
+    let background_key = BoardBackgroundKey {
+        theme: state.theme,
+        min_x_bits: vb_min_x.to_bits(),
+        min_y_bits: vb_min_y.to_bits(),
+        width_bits: vb_w.to_bits(),
+        height_bits: vb_h.to_bits(),
+        px_bits: px.to_bits(),
+    };
+    let cached_background = {
+        let cache = state.board_background.borrow();
+        cache
+            .as_ref()
+            .filter(|cache| cache.key == background_key)
+            .map(|cache| cache.paths.clone())
+    };
+    let mut nodes = match cached_background {
+        Some(paths) => paths,
+        None => {
+            let mut background = Vec::new();
+            // Background rect
+            background.push(BoardPath::new(
+                rectangle(vb_min_x, vb_min_y, vb_w, vb_h),
+                bg_color,
+                None,
+                0.0,
+                "",
+            ));
 
-    // Drafting grid (minor 100 mm, major 500 mm)
-    let grid_step = 100.0_f64;
-    let start_gx = (vb_min_x / grid_step).floor() * grid_step;
-    let mut gx = start_gx;
-    while gx <= vb_min_x + vb_w {
-        let is_major = ((gx / 500.0) - (gx / 500.0).round()).abs() < 1e-4;
-        let stroke = if is_major { grid_major } else { grid_minor };
-        let sw = if is_major { 1.1 * px } else { 0.7 * px };
-        let pts = polyline(&[(gx, vb_min_y), (gx, vb_min_y + vb_h)], false);
-        nodes.push(BoardPath::new(pts, None, stroke, sw, ""));
-        gx += grid_step;
-    }
-    let start_gy = (vb_min_y / grid_step).floor() * grid_step;
-    let mut gy = start_gy;
-    while gy <= vb_min_y + vb_h {
-        let is_major = ((gy / 500.0) - (gy / 500.0).round()).abs() < 1e-4;
-        let stroke = if is_major { grid_major } else { grid_minor };
-        let sw = if is_major { 1.1 * px } else { 0.7 * px };
-        let pts = polyline(&[(vb_min_x, gy), (vb_min_x + vb_w, gy)], false);
-        nodes.push(BoardPath::new(pts, None, stroke, sw, ""));
-        gy += grid_step;
-    }
+            // Drafting grid (minor 100 mm, major 500 mm)
+            let grid_step = 100.0_f64;
+            let start_gx = (vb_min_x / grid_step).floor() * grid_step;
+            let mut gx = start_gx;
+            while gx <= vb_min_x + vb_w {
+                let is_major = ((gx / 500.0) - (gx / 500.0).round()).abs() < 1e-4;
+                let stroke = if is_major { grid_major } else { grid_minor };
+                let sw = if is_major { 1.1 * px } else { 0.7 * px };
+                let pts = polyline(&[(gx, vb_min_y), (gx, vb_min_y + vb_h)], false);
+                background.push(BoardPath::new(pts, None, stroke, sw, ""));
+                gx += grid_step;
+            }
+            let start_gy = (vb_min_y / grid_step).floor() * grid_step;
+            let mut gy = start_gy;
+            while gy <= vb_min_y + vb_h {
+                let is_major = ((gy / 500.0) - (gy / 500.0).round()).abs() < 1e-4;
+                let stroke = if is_major { grid_major } else { grid_minor };
+                let sw = if is_major { 1.1 * px } else { 0.7 * px };
+                let pts = polyline(&[(vb_min_x, gy), (vb_min_x + vb_w, gy)], false);
+                background.push(BoardPath::new(pts, None, stroke, sw, ""));
+                gy += grid_step;
+            }
 
-    // Origin axes reference
-    if vb_min_x <= 0.0 && vb_min_x + vb_w >= 0.0 {
-        nodes.push(BoardPath::new(
-            polyline(&[(0.0, vb_min_y), (0.0, vb_min_y + vb_h)], false),
-            None,
-            origin_color,
-            1.2 * px,
-            "",
-        ));
-    }
-    if vb_min_y <= 0.0 && vb_min_y + vb_h >= 0.0 {
-        nodes.push(BoardPath::new(
-            polyline(&[(vb_min_x, 0.0), (vb_min_x + vb_w, 0.0)], false),
-            None,
-            origin_color,
-            1.2 * px,
-            "",
-        ));
-    }
+            // Origin axes reference
+            if vb_min_x <= 0.0 && vb_min_x + vb_w >= 0.0 {
+                background.push(BoardPath::new(
+                    polyline(&[(0.0, vb_min_y), (0.0, vb_min_y + vb_h)], false),
+                    None,
+                    origin_color,
+                    1.2 * px,
+                    "",
+                ));
+            }
+            if vb_min_y <= 0.0 && vb_min_y + vb_h >= 0.0 {
+                background.push(BoardPath::new(
+                    polyline(&[(vb_min_x, 0.0), (vb_min_x + vb_w, 0.0)], false),
+                    None,
+                    origin_color,
+                    1.2 * px,
+                    "",
+                ));
+            }
 
-    for path in &mut nodes {
-        path.background = true;
-    }
+            for path in &mut background {
+                path.background = true;
+            }
+            state
+                .board_background
+                .borrow_mut()
+                .replace(BoardBackgroundCache {
+                    key: background_key,
+                    paths: background.clone(),
+                });
+            background
+        }
+    };
 
     let fillet_previews = active_fillet_previews(state);
     let corner_tool_active = state.active_2d_tool == "Corner";
