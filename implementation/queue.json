@@ -862,6 +862,20 @@
     },
     {
       "id": "FC-0064",
+      "title": "Static physics mesh preparation with Coarse\u2013Fine slider and feature hints",
+      "acceptance": "Native scope and named-path fold/gathering/down-fill controls persist and compile transactionally; slider, transitions, CPU invariants, history and native input checks pass",
+      "points": 8.0,
+      "spent": 7.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "review",
+      "owner": null,
+      "vruntime": 3.5920396096354286,
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/8",
+      "notes": "Explicit user assignment in this session. Renumbered from local FC-0062 after fetching concurrent runner/settings work. Research issue #7 is separate."
+    },
+    {
+      "id": "FC-0065",
       "title": "Draggable editable numeric fields in ClothCraft",
       "acceptance": "Native click-to-type for zoom speed, corner radius and tension; local motion-based arrow handles with Shift 10x, Ctrl 0.1x precision, bounds and keyboard ownership; stationary holds do not repeat; screen-edge wrapping excludes synthetic movement; cancellation restores preview; CPU and desktop checks.",
       "points": 3.0,
@@ -871,7 +885,8 @@
       "status": "review",
       "owner": null,
       "vruntime": 3.7170396096354286,
-      "pr": "https://github.com/NicTanghe/ClothCraft/pull/9"
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/9",
+      "notes": "Renumbered from branch-local FC-0064 to preserve concurrent mesh preparation task FC-0064."
     }
   ]
 }
