@@ -12,7 +12,7 @@ use clothcraft::garment::GarmentTemplate;
 use clothcraft::gpu_avbd::ContactMethod;
 use clothcraft::render::Camera;
 use clothcraft::vbd::{VbdMetrics, VbdSettings};
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex, mpsc};
 
 pub(super) const DEFAULT_2D_ZOOM_SPEED: f64 = 1.5;
@@ -32,6 +32,10 @@ pub enum ObjectCategory {
 pub struct CssRunnerState {
     pub(super) actions: Arc<AtomicU64>,
     pub(super) pending_ui_ops: Arc<Mutex<Vec<RunnerUiOp>>>,
+    pub(super) native_number_drag: bool,
+    pub(super) number_drag: Arc<Mutex<super::input::number::NumberDragState>>,
+    pub(super) numeric_text: Arc<Mutex<Option<(String, String)>>>,
+    pub(super) numeric_input_active: Arc<AtomicBool>,
     pub smoke: bool,
     pub smoke_done: std::rc::Rc<std::cell::Cell<bool>>,
     pub usd_scene: Option<cssimpler::renderer::gpu::usd::UsdScene>,
@@ -112,6 +116,10 @@ impl CssRunnerState {
 
         Self {
             actions: Arc::new(AtomicU64::new(0)),
+            native_number_drag: false,
+            number_drag: Arc::new(Mutex::new(Default::default())),
+            numeric_text: Arc::new(Mutex::new(None)),
+            numeric_input_active: Arc::new(AtomicBool::new(false)),
             pending_ui_ops: Arc::new(Mutex::new(Vec::new())),
             smoke: false,
             smoke_done: Default::default(),

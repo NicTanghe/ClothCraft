@@ -283,3 +283,23 @@ original requested destination remains pending across inspector frames.
 History changes retain dirty draft text but disable Apply if the saved record
 or geometry no longer matches; restore the corresponding state or explicitly
 cancel the draft before selecting the current saved record.
+
+### Numeric workspace controls
+
+The 2D corner radius (mm), corner tension and Settings → 2D zoom speed (×)
+accept typed numbers. Click the value to edit using native text selection and
+keyboard editing. Values are limited to their existing ranges.
+
+Hold the adjacent ↕ button and drag up to increase or down to decrease. Only
+mouse movement changes the value; holding still does nothing. Each four pixels
+changes the value by one normal step. Shift gives 10× larger increments; Ctrl
+gives 10× smaller increments, including additional displayed decimal places.
+Both modifiers together give normal increments. Release to finish; Escape
+restores the starting value. Focus loss stops the drag. These controls stage
+corner previews; the existing Round action commits geometry.
+
+On Windows, macOS and X11, the pointer recenters near the display's vertical
+edges during a drag and returns to its original position when finished. This
+lets continued physical mouse movement keep adjusting without counting the
+synthetic recenter motion. Native Wayland currently uses ordinary in-window
+dragging because cssimpler does not expose relative pointer capture.

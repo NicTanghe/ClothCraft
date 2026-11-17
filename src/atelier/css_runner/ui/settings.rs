@@ -2,6 +2,7 @@
 
 use super::super::actions::{RunnerUiOp, queue_ui_op};
 use super::super::state::CssRunnerState;
+use super::number::{NumberField, number_field};
 use cssimpler::core::Node;
 use cssimpler::ui;
 
@@ -25,7 +26,7 @@ pub(in super::super) fn build_runner_settings(state: &CssRunnerState) -> Option<
                     <div class="settings-controls">
                         <button id="zoom-speed-dec" class="cad-2d-pill" title="Decrease 2D zoom speed"
                             onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::Adjust2dZoomSpeed(-0.25))}>"−"</button>
-                        <span id="zoom-speed-value" class="cad-2d-value">{format!("{:.2}×", state.board_2d_zoom_speed)}</span>
+                        {number_field(state, "zoom-speed-value", NumberField::ZoomSpeed)}
                         <button id="zoom-speed-inc" class="cad-2d-pill" title="Increase 2D zoom speed"
                             onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::Adjust2dZoomSpeed(0.25))}>"+"</button>
                         <button id="zoom-speed-reset" class="cad-2d-pill" title="Restore default 2D zoom speed"

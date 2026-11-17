@@ -10,6 +10,7 @@ use super::super::super::board::selection::{
     compute_connected_2d_highlight, effective_selected_points,
 };
 use super::super::super::state::CssRunnerState;
+use super::super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::icons::{icon_chevron_down, icon_chevron_right};
 use cssimpler::core::Node;
@@ -314,12 +315,12 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
                             </div>
                             <div class="cad-prop-actions">
                                 <button id="prop-radius-dec" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerRadiusMm(-2.0))}>"-2 mm"</button>
-                                <span class="cad-2d-value">{format!("{:.1} mm", state.corner_radius_mm)}</span>
+                                {number_field(state, "prop-radius-value", NumberField::CornerRadius)}
                                 <button id="prop-radius-inc" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerRadiusMm(2.0))}>"+2 mm"</button>
                             </div>
                             <div class="cad-prop-actions">
                                 <button id="prop-tension-dec" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerTension(-0.05))}>"T-"</button>
-                                <span class="cad-2d-value">{format!("T {:.2}", state.corner_tension)}</span>
+                                {number_field(state, "prop-tension-value", NumberField::CornerTension)}
                                 <button id="prop-tension-inc" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerTension(0.05))}>"T+"</button>
                             </div>
                             <div class="cad-prop-actions">

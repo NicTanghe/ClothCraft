@@ -1820,3 +1820,18 @@ button {
 .settings-label { font-size: 12px; }
 .settings-controls { display: flex; align-items: center; gap: 6px; }
 .settings-hint { font-size: 10px; color: var(--text-muted); }
+
+/* Adjustable numbers share native typing and vertical scrubbing. */
+.cad-number-input {
+  width: 52px;
+  height: 20px;
+  padding: 1px 4px;
+  background-color: var(--surface-input);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.cad-number-control { display: flex; align-items: center; gap: 2px; }
+.cad-number-drag { width: 18px; height: 20px; cursor: ns-resize; background-color: var(--surface-raised); border-radius: 4px; }
