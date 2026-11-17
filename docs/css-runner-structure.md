@@ -57,3 +57,6 @@ all-target desktop and CPU Clippy and repository formatting passed. A move audit
 also compared 83 function/test bodies, 15 state methods and seven event match
 arms with the original runner; their bodies are unchanged apart from qualified
 module paths and formatting.
+
+The [refactor report](reports/css-runner-refactor.md) records the changes,
+decision rationale, validation evidence and deferred widget work.
