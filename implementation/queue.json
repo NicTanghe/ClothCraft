@@ -868,10 +868,10 @@
       "spent": 7.0,
       "priority": "urgent",
       "depends_on": [],
-      "status": "active",
-      "owner": "mesh-slider",
+      "status": "review",
+      "owner": null,
       "vruntime": 3.5920396096354286,
-      "pr": null,
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/8",
       "notes": "Explicit user assignment in this session. Renumbered from local FC-0062 after fetching concurrent runner/settings work. Research issue #7 is separate."
     }
   ]
