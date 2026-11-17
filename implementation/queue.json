@@ -833,6 +833,19 @@
       "owner": null,
       "vruntime": 4.592039609635428,
       "pr": "https://github.com/NicTanghe/ClothCraft/pull/4"
+    },
+    {
+      "id": "FC-0062",
+      "title": "Split the CSS runner into focused modules",
+      "acceptance": "Separate state/actions, board geometry/picking/rendering, input and UI categories; preserve existing public paths, all editing behavior and regression tests; CPU/desktop suites, formatting and strict Clippy pass; publish a reviewable PR without merging.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "active",
+      "owner": "runner-modules",
+      "vruntime": 4.092039609635428,
+      "pr": null
     }
   ]
 }
