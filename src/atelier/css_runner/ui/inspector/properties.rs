@@ -489,6 +489,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             {acc_arrange}
             {acc_pins}
             {acc_fabric}
+            {super::super::super::mesh_preparation::render(state)}
             {acc_sim}
         </div>
     }

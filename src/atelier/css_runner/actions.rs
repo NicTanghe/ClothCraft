@@ -2,6 +2,7 @@
 
 use super::board::interaction::set_active_2d_tool;
 use super::editing::{round_selected_corner, toggle_selected_curve, undo_redo_2d};
+use super::mesh_preparation;
 use super::state::{
     CssRunnerState, DEFAULT_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED, MIN_2D_ZOOM_SPEED, ObjectCategory,
 };
@@ -140,6 +141,15 @@ pub const ACT_RUN_TOOL_CORNER_SELECT2D: u64 = 1 << 60;
 
 #[derive(Clone, Debug)]
 pub enum RunnerUiOp {
+    MeshLevel(u8),
+    MeshToggle(usize),
+    MeshChoosePath(String),
+    MeshReload,
+    MeshInputFocus,
+    MeshToggleOpen,
+    MeshField(usize, String),
+    PrepareMesh(bool),
+
     ToggleSettings,
     CloseSettings,
     Adjust2dZoomSpeed(f64),
@@ -458,6 +468,14 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         state.clear_2d_subselection();
     }
 
+    let selected_mesh_panel = state
+        .project
+        .template
+        .panels
+        .get(state.selected_piece_index);
+    if state.mesh_draft.panel_id.as_deref() != selected_mesh_panel.map(|p| p.id.as_str()) {
+        state.mesh_draft = mesh_preparation::MeshDraft::from_panel(selected_mesh_panel);
+    }
     let ui_ops: Vec<RunnerUiOp> = state
         .pending_ui_ops
         .lock()
@@ -501,6 +519,50 @@ pub(super) fn queue_ui_op(
 
 pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
     match op {
+        RunnerUiOp::MeshToggleOpen => {
+            state.mesh_draft.open = !state.mesh_draft.open;
+        }
+        RunnerUiOp::MeshInputFocus => {
+            state.mesh_input_focus = true;
+        }
+        RunnerUiOp::MeshToggle(i) => {
+            if let Some(option) = state.mesh_draft.options.get_mut(i) {
+                *option = !*option;
+            }
+        }
+        RunnerUiOp::MeshChoosePath(path) => {
+            state.mesh_draft.choose_path(
+                state
+                    .project
+                    .template
+                    .panels
+                    .get(state.selected_piece_index),
+                path,
+            );
+        }
+        RunnerUiOp::MeshReload => {
+            state.mesh_draft = mesh_preparation::MeshDraft::from_panel(
+                state
+                    .project
+                    .template
+                    .panels
+                    .get(state.selected_piece_index),
+            );
+        }
+        RunnerUiOp::MeshLevel(level) => {
+            state.mesh_draft.level = level.min(16);
+        }
+        RunnerUiOp::MeshField(field, value) => {
+            if let Some(slot) = state.mesh_draft.fields.get_mut(field) {
+                *slot = value;
+            }
+        }
+        RunnerUiOp::PrepareMesh(physics) => {
+            if let Err(error) = mesh_preparation::apply(state, physics) {
+                state.status_message = format!("Mesh preparation rejected: {error}");
+            }
+        }
+
         RunnerUiOp::ToggleSettings => {
             state.settings_open = !state.settings_open;
             if state.settings_open {

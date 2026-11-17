@@ -530,6 +530,21 @@ impl CssEditorState {
                 boundary_ratio: ratio,
                 transition_m: trans_mm * 0.001,
                 seed: 42,
+                spacing_scale: self
+                    .active
+                    .physics_sizing
+                    .as_ref()
+                    .map_or(1.0, |p| p.spacing_scale),
+                smooth_transitions: self
+                    .active
+                    .physics_sizing
+                    .as_ref()
+                    .is_none_or(|p| p.smooth_transitions),
+                features: self
+                    .active
+                    .physics_sizing
+                    .as_ref()
+                    .map_or_else(Vec::new, |p| p.features.clone()),
             };
             plan.validate()?;
             Ok(plan)

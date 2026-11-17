@@ -412,7 +412,23 @@ impl PolygonPattern {
             uv,
             faces,
             boundaries: parts,
-        } = if self.holes.is_empty() && self.lines.is_empty() {
+        } = if let Some(plan) = &settings.physics_sizing {
+            let named = self
+                .edges
+                .iter()
+                .enumerate()
+                .map(|(i, name)| Ok((name.clone(), self.edge_points(i)?)))
+                .collect::<Result<BTreeMap<_, _>, String>>()?;
+            crate::mesh_resolution::preparation::triangulate_with_paths(
+                &points,
+                &segments,
+                &self.holes,
+                &self.lines,
+                &settings,
+                plan,
+                &named,
+            )?
+        } else if self.holes.is_empty() && self.lines.is_empty() {
             meshing::triangulate(&points, &segments, &settings)?
         } else {
             meshing::triangulate_domain(&points, &segments, &self.holes, &self.lines, &settings)?

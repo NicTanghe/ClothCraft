@@ -198,12 +198,12 @@ That gate can be discontinuous across its plane; no smoothness is claimed there.
 Region and polyline transitions are continuous. Source geometry controls the
 field only; constraints in `domain.lines` must be declared separately.
 
-The code does not automatically discover folding endpoints/curvature or elbow
-compression. Folding source spacings and any parallel fold constraints must
-be authored explicitly. Down-filling pressure is not converted into the paper's
-empirical exponent: its pressure normalization and scale would require a
-separate stated calibration. Actual stitches, fold mechanics, internal pressure,
-unexpected collision adaptation and dynamic remeshing are outside this tool.
+The original research JSON path requires explicitly authored fold sources and
+parallel constraints. The native extension below can derive endpoint sources
+and parallel constraints from named fold paths, and provides an explicitly
+normalized pressure sizing estimate. Curvature extrema, elbow compression,
+actual fold mechanics, internal pressure forces, unexpected collision adaptation
+and dynamic remeshing remain outside this tool.
 
 ## Geometry, sampling and checked bounds
 
@@ -334,3 +334,89 @@ The next useful experiment is matched rest geometry and physical parameters
 on uniform-base, adaptive and uniform-fine meshes, comparing area/mass,
 boundary/seam lengths, static deflection, wrinkle measurements and full-step
 cost. Do not enable material-driven sizing by default before that evidence.
+
+## Native mesh controls and authored feature hints (FC-0064)
+
+The active `cloth-fit --view` CSSimpler garment window now has a **Mesh
+preparation** section in the right property editor. Earlier component-only
+controls were not connected to this runner. This section uses the existing CPU
+static mesher, independently of the selected simulation backend.
+
+The **Coarse–Fine** control has 17 logarithmic click/drag stops: spacing goes
+from 4× at Coarse through 1× at the centre to 0.25× at Fine. Uniform mode uses
+`uniform base spacing × scale`; physics mode uses `estimated warp/weft spacing
+× scale`. The factor changes discretization, not E, bending, density or grain.
+Current vertex/triangle counts appear in the status bar after preparation;
+there is no speculative count or simulation-speed prediction.
+
+Choose all polygon pieces or only the selected polygon piece for base settings.
+Choose a named boundary, hole boundary or internal line on the selected piece
+for feature settings. Enable the desired switches, enter their parameters,
+then click **Prepare physics mesh and reset**. Features on other named paths
+are retained. Disable a path's switches and apply to remove its hints.
+**Use uniform mesh and reset** clears physics sizing (including hints) for the
+chosen scope and applies the displayed effective uniform spacing.
+**Reload settings from selected piece** discards numeric/toggle drafts and
+reads its saved configuration. Changing pieces reloads that piece's settings.
+Changing the slider, typing or selecting paths does not compile/reset a mesh.
+
+Preparation requires a paused, idle worker and no active authoring draft,
+drag or preview. Compilation must succeed before document/history/scene changes.
+Success is one undoable transaction, clears saved state/signature, increments
+worker generation and resets the complete drape to the authored arrangement.
+Invalid values, unresolved paths, impossible rails or resource exhaustion keep
+the existing document. Save/Open persists the sizing settings and path hints.
+Old plans default to scale 1, smooth transitions enabled, and no feature hints.
+
+### Feature definitions and limits
+
+These are original, static mesh-sizing implementations informed by Zhang et al.,
+sections 4.2.2–4.2.5 and Figures 8–11. The paper's “Ours-I/II” labels vary between
+figures, so the controls describe behaviors instead of exposing those labels.
+
+- **Smooth refinement transitions** uses the existing normalized distance law.
+  When disabled, sources use a hard refinement band out to their transition
+  distance and then return to base spacing. The hard-band comparison is an
+  independent design choice, not an exact reproduction of Figure 8.
+- **Refine fold endpoints** places forward-facing sources at the two ends of
+  the named path, pointing inward along the path. Source spacing is base
+  spacing multiplied by `fold angle / 360`; the angle is deviation from flat
+  (1–180 degrees). The transition exponent is 2/3. No automatic curved-fold
+  curvature extrema discovery or physical crease energy is added.
+- **Add parallel fold lines** creates actual temporary constrained mesh paths
+  on both sides of an **internal** fold line, with the specified offset from
+  its centreline (0.1–10 mm; default 0.5 mm). Bounded miter offsets support up
+  to 64 sampled points. Sharp reversals, crossings, holes/outside paths and
+  exhausted budgets fail explicitly. Rails are neither persisted geometry nor
+  new sewing/fold forces. Authored named paths stay unchanged.
+- **Gathering refinement** uses the existing `Fabric::shirring` estimator:
+  `sewn/rest ratio × estimate(B / (E + added E)) × scale`, with independent
+  warp/weft added-modulus estimates in Pa. Ratio 1 means no compression;
+  0.5 means the intended sewn length is half the rest length. These estimates
+  do not change seam rest lengths or apply a shrinkage force.
+- **Down-fill sizing estimate** uses the same ratio-based source spacing,
+  together with **Sizing pressure (Pa)** and **Pressure reference (Pa)**.
+  Let `q = pressure / reference`, restricted to 0–2, and `f = 2^q`. This
+  implementation retains transition exponent `0.5` and shortens transition
+  distance to `L / f`. Increasing pressure therefore never refines the field
+  further: it makes the same seam wrinkles dissipate over a shorter distance. Pressure zero matches the gathering estimator with zero added E.
+  This is an explicitly normalized, unit-consistent analogue of the paper's
+  empirical pressure response, **not its literal dimensional power fit**.
+  Down-filled compartments are designated by their stitched boundary/internal
+  paths; adding multiple paths models multiple compartment edges. No region
+  discovery, enclosed-volume pressure, inflation or physical down model exists.
+
+Overlapping hints combine by the minimum spacing, so they can only refine the
+base field. The existing conservative area bound, angle checks and vertex
+budget remain in force. Hints reference stable path IDs, resolved against the
+current sampled 2D geometry each compile; missing paths are rejected. Unknown
+future collisions are not predicted. This remains static preparation, not the
+2026 r-adaptive method tracked in
+[issue #7](https://github.com/NicTanghe/ClothCraft/issues/7).
+
+Focused verification: `cargo test --locked --no-default-features -j 2 --test
+mesh_features --test mesh_preparation --test pie_resolution --test
+reference_mesh_preparation -- --test-threads=2` and `cargo test --locked
+--features desktop -j 2 --bin cloth-fit native_mesh_ -- --test-threads=2`.
+These checks establish geometry/field/transaction properties on synthetic
+fixtures, not calibrated wrinkle accuracy or garment-scale solver speedups.

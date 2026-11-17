@@ -22,6 +22,9 @@ fn prepared() -> Project {
             boundary_ratio: 0.5,
             transition_m: 0.04,
             seed: 42,
+            spacing_scale: 1.0,
+            smooth_transitions: true,
+            features: vec![],
         }),
         ..Default::default()
     }
