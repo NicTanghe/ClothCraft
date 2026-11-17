@@ -1,4 +1,3 @@
-use glam::{DVec2, DVec3};
 use clothcraft::{
     authoring::{self, Command, History},
     garment::{
@@ -8,6 +7,7 @@ use clothcraft::{
         seam::{BoundaryRef, Side},
     },
 };
+use glam::{DVec2, DVec3};
 
 fn rectangle(width: f64) -> Command {
     // Deliberately clockwise, translated input: drawing direction is arbitrary.

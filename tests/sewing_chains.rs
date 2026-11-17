@@ -1,4 +1,3 @@
-use glam::{DVec2, DVec3};
 use clothcraft::{
     authoring::{self, Command, History, clipboard::PatternClipboard},
     garment::{
@@ -6,6 +5,7 @@ use clothcraft::{
         seam::{BoundaryRef, Side},
     },
 };
+use glam::{DVec2, DVec3};
 
 fn edge(panel: &str, range: [f64; 2], reversed: bool) -> BoundaryRef {
     BoundaryRef {

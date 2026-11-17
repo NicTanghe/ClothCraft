@@ -1,10 +1,10 @@
 //! Optional brush-drag acceptance. Ordinary test runs must not initialize a GPU.
 #![cfg(feature = "desktop")]
-use glam::DVec3;
 use clothcraft::{
     gpu_vbd::GpuVbd,
     vbd::{Grab, VbdSettings, VbdSolver, grab::surface_patch},
 };
+use glam::DVec3;
 mod common;
 
 #[test]

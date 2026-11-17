@@ -2,7 +2,6 @@
 //! Same backward-Euler objective and OGC movement guards; fixed planar patch,
 //! one moving point, no damping, friction, sleep, or velocity correction.
 use clap::Parser;
-use glam::{DMat3, DVec3};
 use clothcraft::{
     math::{Jet, Scalar},
     ogc::{
@@ -12,6 +11,7 @@ use clothcraft::{
         smooth_forest,
     },
 };
+use glam::{DMat3, DVec3};
 use serde_json::json;
 use std::{fs, path::PathBuf};
 #[path = "support/two_sided_fixture.rs"]

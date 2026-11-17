@@ -1,4 +1,3 @@
-use glam::{DQuat, DVec3};
 use clothcraft::{
     contact::Sphere,
     energy::{self, Element},
@@ -6,12 +5,9 @@ use clothcraft::{
     project::{self, Project},
     solver::{ReferenceSolver, SolverSettings},
 };
+use glam::{DQuat, DVec3};
 
-fn fixture() -> (
-    clothcraft::model::Mesh,
-    clothcraft::model::State,
-    Material,
-) {
+fn fixture() -> (clothcraft::model::Mesh, clothcraft::model::State, Material) {
     let m = Material::default();
     let (mesh, state) = Pattern {
         nx: 2,

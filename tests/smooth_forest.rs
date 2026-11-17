@@ -1,8 +1,8 @@
-use glam::{DQuat, DVec3};
 use clothcraft::{
     math::{Jet, Scalar},
     ogc::smooth_forest::{Link, evaluate, wire},
 };
+use glam::{DQuat, DVec3};
 
 // Independent exhaustive rooted-forest oracle; no matrix formulas.
 fn enumerate(nodes: &[f64], links: &[Link<f64>], tau: f64) -> (f64, Vec<f64>) {

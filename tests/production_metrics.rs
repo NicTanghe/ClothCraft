@@ -1,4 +1,3 @@
-use glam::{DVec2, DVec3};
 use clothcraft::garment::{
     GarmentTemplate,
     domain::Hole,
@@ -6,6 +5,7 @@ use clothcraft::garment::{
     production_metrics::report,
     shapes::{self, Primitive},
 };
+use glam::{DVec2, DVec3};
 
 fn close(actual: f64, expected: f64) {
     assert!((actual - expected).abs() < 1e-11, "{actual} != {expected}");

@@ -1,10 +1,10 @@
 //! CPU-only investigation of geometric easing. No production law is changed.
 use clap::Parser;
-use glam::DVec3;
 use clothcraft::{
     garment::{GarmentTemplate, template::Corner},
     vbd::{Grab, VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use serde_json::json;
 use std::{
     fs,

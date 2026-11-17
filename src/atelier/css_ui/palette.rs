@@ -4,9 +4,9 @@
 //! keyboard navigation (`Up`/`Down`/`Enter`/`Escape`), and enforces pending-draft
 //! guards (FC-0008) and simulation worker availability states.
 
+use clothcraft::commands::{self, CapabilityContext, CommandDescriptor, CommandId};
 use cssimpler::core::Node;
 use cssimpler::ui;
-use clothcraft::commands::{self, CapabilityContext, CommandDescriptor, CommandId};
 
 pub const ALL_COMMAND_IDS: [CommandId; 12] = [
     CommandId::ToggleSimulation,

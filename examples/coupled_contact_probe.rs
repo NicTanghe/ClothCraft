@@ -1,7 +1,6 @@
 //! Small sewn-cloth floor experiment, using production material/seam energies.
 //! Hard floor contact + unchanged OGC guards. Dense research solve, no GPU.
 use clap::Parser;
-use glam::DVec3;
 use clothcraft::{
     avatar::SurfaceMesh,
     garment::GarmentTemplate,
@@ -13,6 +12,7 @@ use clothcraft::{
     },
     vbd::VbdSolver,
 };
+use glam::DVec3;
 use serde_json::json;
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 const GAP: f64 = 0.001;

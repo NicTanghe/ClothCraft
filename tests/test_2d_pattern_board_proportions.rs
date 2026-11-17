@@ -135,8 +135,18 @@ fn native_board_cpu_paints_both_themes_and_updates_after_pan_and_zoom() {
         let mut rgba = vec![0; 640 * 640 * 4];
         cssimpler::renderer::render_to_rgba8(&[tree], &mut rgba, 640, 640, Color::BLACK);
         // Both the grid and colored pattern strokes must reach the framebuffer.
-        assert!(rgba.chunks_exact(4).any(|p| p[2] > p[0].saturating_add(30)));
-        assert!(rgba.chunks_exact(4).any(|p| p[0] > p[2].saturating_add(30)));
+        assert!(
+            rgba.as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p[2] > p[0].saturating_add(30))
+        );
+        assert!(
+            rgba.as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p[0] > p[2].saturating_add(30))
+        );
         images.push(rgba);
     }
     assert_ne!(images[0], images[1]);

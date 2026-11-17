@@ -1,6 +1,5 @@
 //! First isolated EXO-REV-002 slice: cut-and-sewn dart identity and transactions.
 //! Measurement resolution is tested independently of the retained dart cases.
-use glam::DVec2;
 use clothcraft::{
     authoring::{self, Command, History},
     garment::{
@@ -10,6 +9,7 @@ use clothcraft::{
         seam::{BoundaryRef, SeamSpec, Side},
     },
 };
+use glam::DVec2;
 
 fn fixture() -> GarmentTemplate {
     authoring::apply(

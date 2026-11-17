@@ -1,5 +1,5 @@
-use glam::{DVec2, DVec3};
 use clothcraft::garment::{GarmentTemplate, embedding::MaterialPath, export};
+use glam::{DVec2, DVec3};
 
 #[test]
 fn reusable_material_index_matches_uncached_and_rejects_stale_panels() {

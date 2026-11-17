@@ -1,13 +1,13 @@
 //! CPU-only settling experiments. No sleep, velocity clamp or collision bypass.
 //! A quiet observation is not a proof of equilibrium; see docs/settling-zoo.md.
 use clap::Parser;
-use glam::DVec3;
 use clothcraft::{
     avatar::SurfaceMesh,
     garment::{GarmentTemplate, template::Corner},
     model::State,
     vbd::{Grab, VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{collections::VecDeque, fs, io::Write, path::Path, sync::Arc};

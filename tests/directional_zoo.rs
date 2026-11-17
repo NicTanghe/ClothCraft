@@ -1,6 +1,6 @@
 //! Deterministic geometry laboratory, CPU-only. No private garment assets.
-use glam::{DQuat, DVec3};
 use clothcraft::ogc::{CpuContactKernel, OgcSettings, OgcWorld, geometry};
+use glam::{DQuat, DVec3};
 
 fn random(seed: &mut u64) -> f64 {
     *seed = seed

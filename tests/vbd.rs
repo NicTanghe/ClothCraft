@@ -1,9 +1,9 @@
-use glam::DVec3;
 use clothcraft::{
     garment::GarmentTemplate,
     picking,
     vbd::{Grab, VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use std::sync::Arc;
 mod common;
 #[test]

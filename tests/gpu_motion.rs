@@ -1,11 +1,11 @@
 //! Explicit hardware regression. Never run as part of ordinary CPU checks.
 #![cfg(feature = "desktop")]
-use glam::DVec3;
 use clothcraft::{
     garment::GarmentTemplate,
     gpu_vbd::GpuVbd,
     vbd::{VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use std::sync::Arc;
 mod common;
 

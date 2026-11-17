@@ -1,10 +1,10 @@
 //! Opt-in precision regression. The fixture contains no user garment data.
 #![cfg(feature = "desktop")]
-use glam::DVec3;
 use clothcraft::{
     gpu_vbd::GpuVbd,
     vbd::{VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 mod common;
 
 #[test]

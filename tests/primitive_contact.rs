@@ -1,4 +1,3 @@
-use glam::{DQuat, DVec3};
 use clothcraft::{
     ogc::{
         OgcSettings, OgcWorld, geometry,
@@ -6,6 +5,7 @@ use clothcraft::{
     },
     vbd::{Grab, VbdSettings, VbdSolver},
 };
+use glam::{DQuat, DVec3};
 mod common;
 
 fn contact(kind: Kind) -> Contact {
@@ -43,8 +43,7 @@ fn finite_distances_agree_with_geometry_and_differentiate_selected_coordinates()
                     ]
                 };
                 let d = if kind == Kind::PointTriangle {
-                    let top =
-                        clothcraft::ogc::topology::Topology::new(4, vec![[1, 2, 3]]).unwrap();
+                    let top = clothcraft::ogc::topology::Topology::new(4, vec![[1, 2, 3]]).unwrap();
                     x[0].distance(geometry::closest_triangle(x[0], 0, &x, &top).0)
                 } else {
                     let (s, t) = geometry::closest_segments(x[0], x[1], x[2], x[3]);

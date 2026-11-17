@@ -1,9 +1,9 @@
-use glam::DVec3;
 use clothcraft::{
     garment::GarmentTemplate,
     solver_lab::{Algorithm, Backend},
     vbd::{Grab, VbdSettings},
 };
+use glam::DVec3;
 use std::sync::Arc;
 mod common;
 

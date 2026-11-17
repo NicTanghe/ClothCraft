@@ -1,4 +1,3 @@
-use glam::{DMat3, DVec3};
 use clothcraft::{
     math::Jet,
     ogc::{
@@ -7,6 +6,7 @@ use clothcraft::{
         topology::Topology,
     },
 };
+use glam::{DMat3, DVec3};
 fn settings(r: f64) -> OgcSettings {
     OgcSettings {
         radius: r,

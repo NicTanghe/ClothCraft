@@ -1,5 +1,5 @@
-use glam::DVec3;
 use clothcraft::gltf_avatar::{Limits, import, load};
+use glam::DVec3;
 use serde_json::{Value, json};
 use std::path::Path;
 

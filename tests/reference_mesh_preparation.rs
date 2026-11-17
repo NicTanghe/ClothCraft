@@ -1,11 +1,11 @@
 //! Static mesh preparation in the default cloth-over-sphere Project v1.
-use glam::DVec3;
 use clothcraft::{
     mesh_resolution::preparation::PhysicsSizing,
     model::{Pattern, Scene},
     project::Project,
     solver::ReferenceSolver,
 };
+use glam::DVec3;
 
 fn prepared() -> Project {
     Project {

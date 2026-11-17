@@ -58,11 +58,29 @@ use native cubic commands. The native renderer remains CPU-based; this is not
 a GPU board implementation or a measured frame-rate claim. UI structure
 invalidation and full view construction remain separate future work.
 
-Validation for this migration:
+Validation:
 
-- `cargo check --locked -j 2 --all-targets` and `cargo build --locked -j 2` passed.
-- `cargo test --locked -j 2 --test test_2d_pattern_board_proportions -- --test-threads=2`: three passed, covering native leaves/control precision, paint/theme/pan/zoom/cache reuse, and alignment with hit testing in split/2D layouts at three window sizes.
-- `cargo test --locked --no-default-features -j 2 -- --test-threads=2`: 658 passed, one ignored.
-- The cloth-fit unit suite has 19 passes and three failures: the CAD toolbar's clipped Round button, a top-bar button outside the window, and a headless theme click. An unchanged archive of main `551aa48`, with its original cssimpler pin, reproduces all three at identical bounds/click assertions (19 passes, three failures). The square-board test is renamed for the native host; its failure is the existing toolbar assertion, after the board bounds assertions pass.
-- Production desktop Clippy (`--lib --bins -D warnings`) passed. Strict all-target Clippy remains blocked by pre-existing range-loop lints in editor tests and `tests/corner_tools.rs`; repository-wide rustfmt reports existing import-order differences. Targeted rustfmt and `git diff --check` passed.
+- Full desktop suite: 771 passed, 27 ignored (opt-in GPU checks remain ignored).
+- CPU-only suite: 658 passed, one ignored.
+- The board regressions cover exact cubic controls/native leaves, CPU paints in both themes with pan/zoom/cache reuse, and alignment with hit testing in split/2D layouts at three window sizes.
+- The full editor tests retain their bounds, click, cancellation, undo/redo and USD-occlusion assertions; the CI cleanup below resolves their prior failures.
+- Strict all-target desktop and CPU Clippy, repository formatting and queue validation pass. The existing manifest-level unused `rfd` warning remains informational.
 - A standalone 600 × 600 CPU raster capture was inspected. No native window, GPU workload or frame-cadence benchmark was run.
+
+## CI cleanup
+
+The follow-up fixes the previously reproduced UI failures without dropping their
+bounds, click or USD-occlusion assertions. The top bar uses a shorter app title
+and action labels, retaining full titles/shortcuts, and hides redundant button
+labels at compact widths. Object-browser tabs use short labels with full titles.
+Template metadata and piece identifiers stack inside the narrow sidebar; fabric
+metadata wraps instead of painting across the native 3D host.
+
+The CAD bar chooses more conservative row breakpoints, with a seven-row layout
+for narrow split panes. Its returned height and CSS height agree so the board's
+coordinate mapping stays aligned with hit testing. The existing tests cover the
+Round action, all CAD controls, window/layout variants and undo/redo.
+
+Repository formatting now follows the installed stable Rust formatter. Strict
+Clippy findings are fixed with iterator-based assertions and typed RGBA chunks;
+no lint suppression, disabled test or reduced CI scope is introduced.

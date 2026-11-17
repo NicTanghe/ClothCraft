@@ -107,8 +107,8 @@ fn studio_v2_css_defines_thin_scrollbars_and_collapsed_accordions() {
 
 #[test]
 fn day_night_switch_keeps_thumb_craters_and_sky_shapes_in_both_modes() {
-    use cssimpler::core::Node;
     use clothcraft::atelier::css_ui::icons::icon_day_night_switch;
+    use cssimpler::core::Node;
 
     let dark_node = icon_day_night_switch(true);
     let light_node = icon_day_night_switch(false);

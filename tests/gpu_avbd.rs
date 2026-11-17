@@ -118,12 +118,12 @@ fn al_resident_vf_reciprocal_vf_self_contact_and_translation() {
 }
 
 fn check_resident_vf_reciprocal_vf_self_contact_and_translation(method: ContactMethod) {
-    use glam::DVec3;
     use clothcraft::{
         garment::GarmentTemplate,
         gpu_avbd::GpuAvbd,
         vbd::{VbdSettings, VbdSolver},
     };
+    use glam::DVec3;
     let (device, queue) = request_device().unwrap();
     let mut gpu = GpuAvbd::new(device, queue);
     gpu.contact_method = method;
@@ -297,12 +297,12 @@ fn barrier_al_small_matched_cost_probe() {
 #[test]
 #[ignore = "requires explicit coordination and a hardware GPU"]
 fn close_contact_does_not_throttle_disconnected_free_fall() {
-    use glam::DVec3;
     use clothcraft::{
         garment::GarmentTemplate,
         gpu_avbd::GpuAvbd,
         vbd::{VbdSettings, VbdSolver},
     };
+    use glam::DVec3;
     let (device, queue) = request_device().unwrap();
     let (_, floor) = common::resting_patch(DVec3::ZERO);
     let mut template = GarmentTemplate::two_panel_demo();

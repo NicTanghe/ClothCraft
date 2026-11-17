@@ -1,12 +1,12 @@
 //! Hardware acceptance gates for sparse directional contacts. Explicit opt-in.
 #![cfg(feature = "desktop")]
-use glam::DVec3;
 use clothcraft::{
     garment::GarmentTemplate,
     gpu_vbd::GpuVbd,
     model::Pattern,
     vbd::{VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use std::sync::Arc;
 mod common;
 

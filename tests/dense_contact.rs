@@ -1,4 +1,3 @@
-use glam::{DMat3, DVec3};
 use clothcraft::{
     energy,
     garment::GarmentTemplate,
@@ -7,6 +6,7 @@ use clothcraft::{
         dense_contact::{self, Row},
     },
 };
+use glam::{DMat3, DVec3};
 
 #[test]
 fn boundary_pivots_resolve_captured_sewn_contact_qp() {

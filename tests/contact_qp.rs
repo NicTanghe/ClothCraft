@@ -1,5 +1,5 @@
-use glam::{DMat3, DVec3};
 use clothcraft::solver_lab::contact_qp::{self, Row, Settings};
+use glam::{DMat3, DVec3};
 
 #[test]
 fn duplicated_scaled_and_reordered_contacts_preserve_primal_and_reaction() {

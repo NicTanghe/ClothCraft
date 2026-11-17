@@ -1325,11 +1325,11 @@ fn render_category_environment(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cssimpler::core::ElementNode;
     use clothcraft::garment::presets::GarmentKind;
     use clothcraft::garment::shapes::MirrorAxis;
     use clothcraft::garment::template::MirrorLink;
     use clothcraft::template_catalog::Selection;
+    use cssimpler::core::ElementNode;
 
     // Helper functions for DOM inspection
     fn find_element_by_id<'a>(node: &'a Node, target_id: &str) -> Option<&'a ElementNode> {

@@ -1,4 +1,3 @@
-use glam::{DQuat, DVec3};
 use clothcraft::{
     ogc::{
         OgcSettings, OgcWorld, geometry,
@@ -6,6 +5,7 @@ use clothcraft::{
     },
     vbd::{Grab, VbdSettings, VbdSolver},
 };
+use glam::{DQuat, DVec3};
 mod common;
 
 // A local star rejects endpoint contact, while its neighboring edge accepts

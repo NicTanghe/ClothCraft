@@ -1,8 +1,8 @@
-use glam::{DQuat, DVec3};
 use clothcraft::{
     math::{Jet, Scalar},
     ogc::local_surface::{self, Sample},
 };
+use glam::{DQuat, DVec3};
 
 #[test]
 fn coplanar_field_reproduces_plane_with_unequal_samples_and_support_changes() {

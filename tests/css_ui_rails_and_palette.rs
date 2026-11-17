@@ -2,7 +2,6 @@
 //! Top menu bar, simulation transport, 3D/2D tool rails, radial menu, and command palette in cssimpler.
 #![cfg(feature = "desktop")]
 
-use cssimpler::core::{ElementNode, Node};
 use clothcraft::commands::CapabilityContext;
 use clothcraft::css_ui::{
     ALL_COMMAND_IDS, CommandPaletteState, CornerMode, PaletteKey, PinMode, RadialMenuAction,
@@ -10,6 +9,7 @@ use clothcraft::css_ui::{
     TopBarAction, TopBarState, render_2d_rail, render_3d_rail, render_command_palette,
     render_radial_menu, render_top_bar,
 };
+use cssimpler::core::{ElementNode, Node};
 
 fn ready_ctx() -> CapabilityContext {
     CapabilityContext {

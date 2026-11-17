@@ -1,8 +1,8 @@
-use glam::DVec2;
 use clothcraft::viewport_controller::{
     BoardNavigation, BoardView, InputOwnership, LogicalViewport, MAX_BOARD_SCALE, MIN_BOARD_SCALE,
     Modifiers, NavigationEvent, NavigationResult, PointerButton,
 };
+use glam::DVec2;
 
 fn viewport() -> LogicalViewport {
     LogicalViewport::new(DVec2::new(100., 50.), DVec2::new(800., 600.)).unwrap()

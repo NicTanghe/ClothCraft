@@ -1111,14 +1111,16 @@ fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
 
 /// Responsive row count and bar height `(rows, height_px)` for `#cad-2d-bar` given `#viewport-2d` width.
 pub fn cad_2d_bar_layout(vp2d_w: f32) -> (usize, f32) {
-    if vp2d_w >= 800.0 {
+    if vp2d_w >= 1300.0 {
         (1, 28.0)
-    } else if vp2d_w >= 430.0 {
+    } else if vp2d_w >= 700.0 {
         (2, 52.0)
-    } else if vp2d_w >= 275.0 {
+    } else if vp2d_w >= 420.0 {
         (3, 75.0)
-    } else {
+    } else if vp2d_w >= 300.0 {
         (4, 98.0)
+    } else {
+        (7, 167.0)
     }
 }
 
@@ -3983,18 +3985,23 @@ fn build_runner_top_bar(state: &CssRunnerState) -> Node {
         ("backend-badge cpu", "CPU (OGC)")
     };
 
+    let top_bar_class = if state.window_size.0 < 1400.0 {
+        "top-bar compact"
+    } else {
+        "top-bar"
+    };
     let theme_label = match state.theme {
         Theme::Dark => "Theme: Dark",
         Theme::Light => "Theme: Light",
     };
 
     ui! {
-        <header id="top-bar" class="top-bar">
+        <header id="top-bar" class={top_bar_class}>
             <div class="top-bar-left">
-                <span class="app-title">"FoldCraft | Simulation Studio V2"</span>
+                <span class="app-title">"ClothCraft"</span>
                 <nav class="top-bar-menus">
-                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_RUN_SAVE)}>"Save Project (Ctrl+S)"</button>
-                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_RUN_EXPORT)}>"Export Artifacts"</button>
+                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_RUN_SAVE)} title="Save Project (Ctrl+S)">"Save"</button>
+                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_RUN_EXPORT)} title="Export Artifacts">"Export"</button>
                 </nav>
             </div>
             <div class="transport-controls">
@@ -4628,7 +4635,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                 </div>
             </div>
         },
-        _ => ui! {
+        4 => ui! {
             <div id="cad-2d-bar" class="cad-2d-bar rows-4">
                 <div class={corner_row_class}>
                     {undo_btn}
@@ -4654,6 +4661,17 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                     {rule_smooth_btn}
                     {rule_sym_btn}
                 </div>
+            </div>
+        },
+        _ => ui! {
+            <div id="cad-2d-bar" class="cad-2d-bar rows-7">
+                <div class="cad-2d-row">{undo_btn}{redo_btn}</div>
+                <div class={corner_row_class}>{mode_radius_btn}{mode_shape_btn}</div>
+                <div class={corner_row_class}>{radius_dec_btn}{radius_val}{radius_inc_btn}</div>
+                <div class={corner_row_class}>{apply_round_btn}</div>
+                <div class={corner_row_class}>{tension_dec_btn}{tension_val}{tension_inc_btn}</div>
+                <div class="cad-2d-row">{curve_on_btn}{curve_off_btn}</div>
+                <div class="cad-2d-row">{rule_sharp_btn}{rule_smooth_btn}{rule_sym_btn}</div>
             </div>
         },
     };
@@ -4736,11 +4754,11 @@ fn build_runner_right_dock(state: &CssRunnerState) -> Node {
             <div id="object-browser">
                 <div class="dock-section-title">"Object Browser"</div>
                 <div class="dock-tabs">
-                    <button class={tp} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_PATTERN)}>"2D Pattern"</button>
-                    <button class={ts} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_SEWING)}>"Sewing"</button>
-                    <button class={tf} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_FORM)}>"3D Form"</button>
-                    <button class={tm} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_MATERIAL)}>"Material"</button>
-                    <button class={te} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_ENV)}>"Environment"</button>
+                    <button class={tp} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_PATTERN)} title="2D Pattern">"2D"</button>
+                    <button class={ts} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_SEWING)} title="Sewing">"Sew"</button>
+                    <button class={tf} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_FORM)} title="3D Form">"3D"</button>
+                    <button class={tm} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_MATERIAL)} title="Material">"Mat."</button>
+                    <button class={te} onclick_shared={queue_action(&state.actions, ACT_RUN_TAB_ENV)} title="Environment">"Env."</button>
                 </div>
                 <div class="object-browser-content-viewport">
                     {content}
@@ -8546,8 +8564,8 @@ mod tests {
                 modifiers: cssimpler::renderer::KeyboardModifiers::default(),
             })
         ));
-        for pidx in 0..2 {
-            let rc = state.project.template.panels[pidx]
+        for (pidx, panel) in state.project.template.panels.iter().enumerate().take(2) {
+            let rc = panel
                 .polygon
                 .as_ref()
                 .unwrap()

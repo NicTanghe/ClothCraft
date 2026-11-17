@@ -1,4 +1,3 @@
-use glam::{DQuat, DVec3, EulerRot};
 use clothcraft::{
     energy,
     garment::{
@@ -8,6 +7,7 @@ use clothcraft::{
     },
     solver::{ReferenceSolver, SolverSettings},
 };
+use glam::{DQuat, DVec3, EulerRot};
 
 fn parallel(a: usize, b: usize) -> GarmentTemplate {
     let mut t = GarmentTemplate::two_panel_demo();

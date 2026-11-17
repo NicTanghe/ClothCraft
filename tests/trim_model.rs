@@ -1,5 +1,5 @@
-use glam::DVec2;
 use clothcraft::garment::trims::{Trim, TrimKind};
+use glam::DVec2;
 
 fn trim(kind: TrimKind) -> Trim {
     Trim {

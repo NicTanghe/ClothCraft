@@ -1,9 +1,9 @@
-use glam::DVec3;
 use clothcraft::{
     avatar::{MeshCollider, SurfaceMesh},
     contact::Collider,
     garment::presets::{self, GarmentKind},
 };
+use glam::DVec3;
 use std::sync::Arc;
 
 fn cube() -> Arc<SurfaceMesh> {

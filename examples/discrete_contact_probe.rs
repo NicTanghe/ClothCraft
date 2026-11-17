@@ -1,8 +1,8 @@
 //! Offline work audit on captured reactions. Does not integrate or predict
 //! a corrected trajectory: multipliers and positions remain those of the input.
 use clap::Parser;
-use glam::DVec3;
 use clothcraft::{ogc::feature_hierarchy::Pair, solver_lab::discrete_contact, vbd::VbdSolver};
+use glam::DVec3;
 use serde::Deserialize;
 use serde_json::json;
 use std::{fs, path::PathBuf, sync::Arc};

@@ -1,4 +1,3 @@
-use glam::DVec2;
 use clothcraft::{
     authoring::{self, Command, History},
     garment::{
@@ -7,6 +6,7 @@ use clothcraft::{
         presets::{self, GarmentKind},
     },
 };
+use glam::DVec2;
 
 fn settings() -> MeshingSettings {
     MeshingSettings {

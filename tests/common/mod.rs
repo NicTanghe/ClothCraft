@@ -1,8 +1,8 @@
-use glam::DVec3;
 use clothcraft::{
     avatar::SurfaceMesh,
     garment::{CompiledGarment, GarmentTemplate},
 };
+use glam::DVec3;
 use std::sync::Arc;
 
 pub fn resting_patch(offset: DVec3) -> (Arc<CompiledGarment>, SurfaceMesh) {

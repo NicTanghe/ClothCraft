@@ -200,11 +200,11 @@ fn unsupported_geometry_and_excessive_counts_fail_explicitly() {
 
 #[test]
 fn polygon_named_edges_and_missing_edges_are_resolved_like_compiler() {
-    use glam::DVec2;
     use clothcraft::garment::{
         meshing::MeshingSettings,
         shapes::{self, Primitive},
     };
+    use glam::DVec2;
     let mut t = GarmentTemplate::two_panel_demo();
     t.version = 2;
     for p in &mut t.panels {
@@ -314,11 +314,11 @@ fn audit_validity_agrees_with_compiler_across_sewing_policies() {
 
 #[test]
 fn curved_boundary_audit_matches_compiler_and_finds_local_mismatch() {
-    use glam::DVec2;
     use clothcraft::garment::{
         meshing::MeshingSettings,
         shapes::{self, Primitive},
     };
+    use glam::DVec2;
     let mut t = GarmentTemplate::two_panel_demo();
     t.version = 2;
     for p in &mut t.panels {

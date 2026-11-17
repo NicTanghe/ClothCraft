@@ -1,4 +1,3 @@
-use glam::{DQuat, DVec3};
 use clothcraft::{
     math::{Jet, Scalar},
     ogc::{
@@ -6,6 +5,7 @@ use clothcraft::{
         potential::{Contact, Kind, activation},
     },
 };
+use glam::{DQuat, DVec3};
 
 fn energy<S: Scalar>(wire: bool, x: [[S; 3]; 5]) -> S {
     if wire {

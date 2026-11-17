@@ -1,5 +1,5 @@
-use glam::DVec3;
 use clothcraft::solver_lab::{contact_newton, dense_contact::Row};
+use glam::DVec3;
 
 #[derive(Clone, Copy)]
 pub enum Method {
@@ -189,9 +189,12 @@ fn unilateral_direction(
             rows: &geometry,
         };
         let (dx, reactions) = if matches!(method, Method::Constrained) {
-            let report = clothcraft::solver_lab::unilateral_newton::constrained_direction_with_search_rows(
-                problem, &selected, search_rows,
-            )?;
+            let report =
+                clothcraft::solver_lab::unilateral_newton::constrained_direction_with_search_rows(
+                    problem,
+                    &selected,
+                    search_rows,
+                )?;
             *capture = Some(
                 serde_json::json!({"reason":"Geometrically constrained residual search",
                 "derivative":derivative,"gradient":gradient,"forces":forces,"history":selected,
@@ -209,9 +212,8 @@ fn unilateral_direction(
                 report.solution[n..].iter().map(|v| v.max(0.)).collect(),
             )
         } else if matches!(method, Method::Bounded) {
-            let report = clothcraft::solver_lab::unilateral_newton::bounded_direction(
-                problem, &selected,
-            )?;
+            let report =
+                clothcraft::solver_lab::unilateral_newton::bounded_direction(problem, &selected)?;
             // Keep the current bounded linearization so a failed nonlinear
             // iteration can be checked independently, not only the first one.
             *capture = Some(

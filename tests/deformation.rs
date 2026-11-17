@@ -1,5 +1,5 @@
-use glam::DVec3;
 use clothcraft::garment::{GarmentTemplate, diagnostics};
+use glam::DVec3;
 
 #[test]
 fn extension_diagnostic_uses_material_rest_and_is_rigid_motion_invariant() {

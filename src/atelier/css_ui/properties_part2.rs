@@ -6,8 +6,6 @@
 //!
 //! SI units throughout: metres, kilograms, seconds, Newtons.
 
-use cssimpler::core::Node;
-use cssimpler::ui;
 use clothcraft::{
     avatar::{SurfaceMesh, diagnostics::Report as AvatarReport},
     fabrics::PRESETS,
@@ -19,6 +17,8 @@ use clothcraft::{
     },
     vbd::{FinalDiagnostics, FinalDiagnosticsBackend, VbdSettings},
 };
+use cssimpler::core::Node;
+use cssimpler::ui;
 
 // ============================================================================
 // 1. Fabric & Appearance (FC-0004)
@@ -989,10 +989,10 @@ pub fn render_simulation_diagnostics_accordion(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cssimpler::core::ElementNode;
-    use glam::DVec2;
     use clothcraft::garment::appearance::AlbedoTexture;
     use clothcraft::garment::trims::{Trim, TrimKind};
+    use cssimpler::core::ElementNode;
+    use glam::DVec2;
 
     fn find_element_by_id<'a>(node: &'a Node, target_id: &str) -> Option<&'a ElementNode> {
         match node {

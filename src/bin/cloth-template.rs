@@ -85,8 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // sewing error. Geometry validation remains inside the audit.
             let json = fs::read_to_string(template)?;
             let template: GarmentTemplate = if project {
-                let project: clothcraft::fitting::FittingProject =
-                    serde_json::from_str(&json)?;
+                let project: clothcraft::fitting::FittingProject = serde_json::from_str(&json)?;
                 if project.version != 1 {
                     return Err("Unsupported fitting project version".into());
                 }

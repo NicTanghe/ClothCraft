@@ -1,5 +1,4 @@
 //! Saved measurements are descriptive rest-space metadata with semantic anchors.
-use glam::{DVec2, DVec3};
 use clothcraft::{
     authoring::{self, Command, History},
     fitting::FittingProject,
@@ -11,6 +10,7 @@ use clothcraft::{
         shapes::{BooleanOp, MirrorAxis, Primitive},
     },
 };
+use glam::{DVec2, DVec3};
 fn fixture() -> GarmentTemplate {
     authoring::apply(
         &presets::basic(GarmentKind::Tshirt, 0),

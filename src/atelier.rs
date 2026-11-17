@@ -6,11 +6,11 @@ use std::path::PathBuf;
 pub mod core_state;
 #[path = "atelier/css_runner.rs"]
 pub mod css_runner;
-#[allow(unused_imports)]
-pub use core_state::*;
 pub use clothcraft::commands;
 #[allow(unused_imports)]
 pub use clothcraft::css_ui;
+#[allow(unused_imports)]
+pub use core_state::*;
 
 // GPU and diagnostic entry points remain available during native adapter migration.
 #[path = "atelier/perf.rs"]

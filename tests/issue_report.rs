@@ -1,9 +1,9 @@
-use glam::DVec3;
 use clothcraft::{
     fitting::FittingProject,
     garment::{GarmentTemplate, presets::GarmentKind},
     issue_report, picking,
 };
+use glam::DVec3;
 use std::{collections::BTreeSet, fs};
 
 #[test]
