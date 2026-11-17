@@ -15,6 +15,14 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
     match event {
         EngineEvent::Key(k) => {
             if k.state == cssimpler::renderer::ButtonState::Pressed {
+                if state.settings_open {
+                    if matches!(&k.logical_key, cssimpler::renderer::KeyIdentity::Named(name) if name == "Escape")
+                    {
+                        state.settings_open = false;
+                        return true;
+                    }
+                    return false;
+                }
                 let ctrl = k.modifiers.control || k.modifiers.super_key;
                 if let cssimpler::renderer::KeyIdentity::Character(ref ch) = k.logical_key {
                     if ch == " " {

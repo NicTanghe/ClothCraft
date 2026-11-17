@@ -9,13 +9,16 @@ use cssimpler::renderer::EngineEvent;
 pub(in super::super) fn handle_scroll(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     match event {
         EngineEvent::Scroll { delta, .. } => {
-            if state.command_palette_open || state.solver_menu_open {
+            if state.settings_open || state.command_palette_open || state.solver_menu_open {
                 return false;
             }
             let dy = match delta {
                 cssimpler::renderer::ScrollDelta::Lines { y, .. } => *y * 0.2,
                 cssimpler::renderer::ScrollDelta::Pixels { y, .. } => *y * 0.005,
             };
+            if !dy.is_finite() || dy == 0.0 {
+                return false;
+            }
             let (px, py) = state.last_pointer_pos;
             let (canvas_2d, svg_2d) = compute_2d_viewport_rects(state);
             let rect_3d = viewport_3d_rect(state);
@@ -37,7 +40,7 @@ pub(in super::super) fn handle_scroll(state: &mut CssRunnerState, event: &Engine
                 let center_y = vby + 0.5 * old_span - state.board_2d_pan.1;
 
                 let old_zoom = state.board_2d_zoom.clamp(0.25, 10.0);
-                let factor = (1.0 + dy as f64 * 0.15).clamp(0.5, 2.0);
+                let factor = (1.0 + dy as f64 * 0.15 * state.board_2d_zoom_speed).clamp(0.5, 2.0);
                 let new_zoom = (old_zoom * factor).clamp(0.25, 10.0);
                 let new_span = old_span * (old_zoom / new_zoom);
                 state.board_2d_zoom = new_zoom;

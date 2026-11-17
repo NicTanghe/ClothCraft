@@ -846,6 +846,19 @@
       "owner": null,
       "vruntime": 4.342039609635428,
       "pr": "https://github.com/NicTanghe/ClothCraft/pull/5"
+    },
+    {
+      "id": "FC-0063",
+      "title": "Settings menu and adjustable 2D zoom speed",
+      "acceptance": "Settings entry sits next to Export; single 2D wheel/trackpad zoom-speed setting applies immediately with a modestly faster default; Escape and outside click close without editing the board; zoom stays bounded and cursor anchored; regression suites and Clippy pass.",
+      "points": 3.0,
+      "spent": 3.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "review",
+      "owner": null,
+      "vruntime": 4.092039609635428,
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/6"
     }
   ]
 }

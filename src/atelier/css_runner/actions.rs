@@ -2,7 +2,9 @@
 
 use super::board::interaction::set_active_2d_tool;
 use super::editing::{round_selected_corner, toggle_selected_curve, undo_redo_2d};
-use super::state::{CssRunnerState, ObjectCategory};
+use super::state::{
+    CssRunnerState, DEFAULT_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED, MIN_2D_ZOOM_SPEED, ObjectCategory,
+};
 use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::ViewLayoutMode;
 use clothcraft::fitting::FittingScene;
@@ -138,6 +140,10 @@ pub const ACT_RUN_TOOL_CORNER_SELECT2D: u64 = 1 << 60;
 
 #[derive(Clone, Debug)]
 pub enum RunnerUiOp {
+    ToggleSettings,
+    CloseSettings,
+    Adjust2dZoomSpeed(f64),
+    Reset2dZoomSpeed,
     SetCornerMode(bool),
     SetCornerRule(CornerRule),
     AdjustCornerRadiusMm(f64),
@@ -228,6 +234,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
 
     if actions & ACT_RUN_SOLVER_MENU != 0 {
         state.solver_menu_open = !state.solver_menu_open;
+        state.settings_open = false;
     }
     if actions & ACT_RUN_SOLVER_GPU != 0 {
         state.select_solver(true);
@@ -259,6 +266,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
     }
     if actions & ACT_RUN_PALETTE_TOGGLE != 0 {
         state.command_palette_open = !state.command_palette_open;
+        state.settings_open = false;
     }
     if actions & ACT_RUN_THEME_TOGGLE != 0 {
         state.theme = state.theme.toggled();
@@ -493,6 +501,22 @@ pub(super) fn queue_ui_op(
 
 pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
     match op {
+        RunnerUiOp::ToggleSettings => {
+            state.settings_open = !state.settings_open;
+            if state.settings_open {
+                state.last_2d_click = None;
+                state.command_palette_open = false;
+                state.solver_menu_open = false;
+            }
+        }
+        RunnerUiOp::CloseSettings => state.settings_open = false,
+        RunnerUiOp::Adjust2dZoomSpeed(delta) => {
+            if delta.is_finite() {
+                state.board_2d_zoom_speed =
+                    (state.board_2d_zoom_speed + delta).clamp(MIN_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED);
+            }
+        }
+        RunnerUiOp::Reset2dZoomSpeed => state.board_2d_zoom_speed = DEFAULT_2D_ZOOM_SPEED,
         RunnerUiOp::SetCornerMode(radius) => {
             state.corner_mode_radius = radius;
             state.corner_preview_active = true;
