@@ -893,13 +893,13 @@
       "title": "Adopt cssimpler typed actions and frame-aligned input in the native runner",
       "acceptance": "Pin the reviewed cssimpler main revision; route all runner commands through one typed ActionQueue with FIFO, duplicate-preserving delivery and no AtomicU64/Mutex action inbox; opt the runner into frame-aligned pointer input and consume FrameAlignedDrag once per displayed frame; CPU and desktop checks pass.",
       "points": 5.0,
-      "spent": 0,
+      "spent": 5.0,
       "priority": "high",
       "depends_on": [],
-      "status": "active",
-      "owner": "deepseek-lead",
-      "vruntime": 3.342039609635428,
-      "pr": null
+      "status": "review",
+      "owner": null,
+      "vruntime": 4.592039609635428,
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/10"
     }
   ]
 }
