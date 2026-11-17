@@ -4,7 +4,7 @@ use super::super::actions::{
     ACT_RUN_CLEAN_VIEW, ACT_RUN_EXPORT, ACT_RUN_PALETTE_TOGGLE, ACT_RUN_PLAY_PAUSE, ACT_RUN_RESET,
     ACT_RUN_SAVE, ACT_RUN_SOLVER_AL, ACT_RUN_SOLVER_CPU, ACT_RUN_SOLVER_GPU, ACT_RUN_SOLVER_MENU,
     ACT_RUN_STEP, ACT_RUN_THEME_TOGGLE, ACT_RUN_VIEW_2D, ACT_RUN_VIEW_3D, ACT_RUN_VIEW_SPLIT,
-    queue_action,
+    RunnerUiOp, queue_action, queue_ui_op,
 };
 use super::super::state::CssRunnerState;
 use clothcraft::css_ui::icons::{
@@ -57,7 +57,8 @@ pub(in super::super) fn build_runner_top_bar(state: &CssRunnerState) -> Node {
                 <span class="app-title">"ClothCraft"</span>
                 <nav class="top-bar-menus">
                     <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_RUN_SAVE)} title="Save Project (Ctrl+S)">"Save"</button>
-                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_RUN_EXPORT)} title="Export Artifacts">"Export"</button>
+                    <button id="runner-export-btn" class="menu-item" onclick_shared={queue_action(&state.actions, ACT_RUN_EXPORT)} title="Export Artifacts">"Export"</button>
+                    <button id="settings-toggle" class="menu-item" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::ToggleSettings)} title="Settings">"Settings"</button>
                 </nav>
             </div>
             <div class="transport-controls">

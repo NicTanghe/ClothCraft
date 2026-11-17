@@ -21,7 +21,7 @@ and `native_board::*`.
 | Board display | `board/rendering.rs`, `board/native.rs` | Native vector scenes and typed drawing primitives |
 | Input | `input/{mod,keyboard,buttons,motion,scroll}.rs` | Event routing and focused handlers |
 | Shell | `ui/shell.rs`, `ui/viewports.rs` | Workspace composition, viewport hosts and responsive CAD toolbar |
-| Chrome | `ui/top_bar.rs`, `ui/tool_rails.rs`, `ui/status_bar.rs`, `ui/command_palette.rs` | Transport, tools, status and commands |
+| Chrome | `ui/top_bar.rs`, `ui/tool_rails.rs`, `ui/status_bar.rs`, `ui/command_palette.rs`, `ui/settings.rs` | Transport, tools, status, commands and session settings |
 | Browsers | `ui/asset_browser.rs`, `ui/inspector/` | Assets/piece cards, category tabs and property accordions |
 | Regression tests | `tests/board.rs`, `tests/shell.rs`, `tests/simulation.rs`, `tests/support.rs` | Existing board/editing, shell/handler and camera regressions with shared fixtures |
 

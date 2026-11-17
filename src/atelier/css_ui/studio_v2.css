@@ -1774,3 +1774,49 @@ button {
     padding: 6px;
 }
 .solver-dropdown .menu-item { padding: 10px; text-align: left; }
+
+/* A settings tree is created only while the panel is open. */
+.settings-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 64px;
+  z-index: 1000;
+}
+.settings-backdrop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.25);
+}
+.settings-panel {
+  position: relative;
+  z-index: 1;
+  width: 320px;
+  max-width: 90%;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-title { font-size: 14px; font-weight: 600; }
+.settings-entry { display: flex; flex-direction: column; gap: 8px; }
+.settings-label { font-size: 12px; }
+.settings-controls { display: flex; align-items: center; gap: 6px; }
+.settings-hint { font-size: 10px; color: var(--text-muted); }

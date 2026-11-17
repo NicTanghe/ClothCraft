@@ -15,6 +15,10 @@ use clothcraft::vbd::{VbdMetrics, VbdSettings};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, mpsc};
 
+pub(super) const DEFAULT_2D_ZOOM_SPEED: f64 = 1.5;
+pub(super) const MIN_2D_ZOOM_SPEED: f64 = 0.25;
+pub(super) const MAX_2D_ZOOM_SPEED: f64 = 4.0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ObjectCategory {
     #[default]
@@ -54,6 +58,7 @@ pub struct CssRunnerState {
     pub active_2d_tool: String,
     pub clean_view: bool,
     pub command_palette_open: bool,
+    pub settings_open: bool,
     pub left_drawer_open: bool,
     pub selected_piece_index: usize,
     pub selected_2d_point: Option<(String, usize)>,
@@ -87,6 +92,7 @@ pub struct CssRunnerState {
     pub accordion_open: [bool; 6],
     pub board_2d_pan: (f64, f64),
     pub board_2d_zoom: f64,
+    pub board_2d_zoom_speed: f64,
 }
 
 impl CssRunnerState {
@@ -133,6 +139,7 @@ impl CssRunnerState {
             active_2d_tool: "Edit".to_string(),
             clean_view: false,
             command_palette_open: false,
+            settings_open: false,
             left_drawer_open: true,
             selected_piece_index: 0,
             selected_2d_point: None,
@@ -166,6 +173,7 @@ impl CssRunnerState {
             accordion_open: [true, false, true, false, false, false],
             board_2d_pan: (0.0, 0.0),
             board_2d_zoom: 1.0,
+            board_2d_zoom_speed: DEFAULT_2D_ZOOM_SPEED,
         }
     }
 

@@ -33,7 +33,7 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             state: btn_state,
             ..
         } => {
-            if state.command_palette_open || state.solver_menu_open {
+            if state.settings_open || state.command_palette_open || state.solver_menu_open {
                 return false;
             }
             let (canvas_2d, _svg_2d) = compute_2d_viewport_rects(state);
@@ -61,7 +61,7 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             state: btn_state,
             modifiers,
         } => {
-            if state.command_palette_open || state.solver_menu_open {
+            if state.settings_open || state.command_palette_open || state.solver_menu_open {
                 return false;
             }
             if modifiers.shift || modifiers.control || modifiers.super_key {
