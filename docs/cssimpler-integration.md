@@ -84,3 +84,7 @@ Round action, all CAD controls, window/layout variants and undo/redo.
 Repository formatting now follows the installed stable Rust formatter. Strict
 Clippy findings are fixed with iterator-based assertions and typed RGBA chunks;
 no lint suppression, disabled test or reduced CI scope is introduced.
+
+The fitting runner's implementation is grouped by state/actions, editing, board,
+input and UI category. See [the module map](css-runner-structure.md) when locating
+code; its public `atelier::css_runner` entry points remain available.

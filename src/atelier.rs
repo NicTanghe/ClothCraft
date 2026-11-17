@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 #[path = "atelier/core_state.rs"]
 pub mod core_state;
-#[path = "atelier/css_runner.rs"]
+#[path = "atelier/css_runner/mod.rs"]
 pub mod css_runner;
 pub use clothcraft::commands;
 #[allow(unused_imports)]
