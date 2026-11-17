@@ -829,10 +829,10 @@
       "spent": 3.0,
       "priority": "high",
       "depends_on": [],
-      "status": "active",
-      "owner": "native-vector-2d",
+      "status": "review",
+      "owner": null,
       "vruntime": 4.092039609635428,
-      "pr": null
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/4"
     }
   ]
 }
