@@ -859,6 +859,20 @@
       "owner": null,
       "vruntime": 4.092039609635428,
       "pr": "https://github.com/NicTanghe/ClothCraft/pull/6"
+    },
+    {
+      "id": "FC-0064",
+      "title": "Static physics mesh preparation with Coarse\u2013Fine slider and feature hints",
+      "acceptance": "Native scope and named-path fold/gathering/down-fill controls persist and compile transactionally; slider, transitions, CPU invariants, history and native input checks pass",
+      "points": 8.0,
+      "spent": 7.0,
+      "priority": "urgent",
+      "depends_on": [],
+      "status": "active",
+      "owner": "mesh-slider",
+      "vruntime": 3.5920396096354286,
+      "pr": null,
+      "notes": "Explicit user assignment in this session. Renumbered from local FC-0062 after fetching concurrent runner/settings work. Research issue #7 is separate."
     }
   ]
 }
