@@ -868,10 +868,10 @@
       "spent": 3.0,
       "priority": "urgent",
       "depends_on": [],
-      "status": "active",
-      "owner": "number-fields",
+      "status": "review",
+      "owner": null,
       "vruntime": 3.7170396096354286,
-      "pr": null
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/9"
     }
   ]
 }
