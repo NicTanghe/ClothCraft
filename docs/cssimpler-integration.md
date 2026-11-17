@@ -1,12 +1,19 @@
 # cssimpler integration
 
-Both native desktop editors use cssimpler revision `31266eb`, which includes
-captured event handlers and the transition update described in cssimpler's
-`docs/reports/`. Each editor instance owns its action bitmask. Click handlers
-capture a shared reference to that instance's mask; the update loop consumes its
-own pending actions. Multiple instances therefore do not consume each other's
-clicks. Repeated identical clicks before an update remain coalesced, as before.
-An action invalidates the UI structure even while simulation is running.
+Both native desktop editors use cssimpler revision `5249a0d`, which includes
+captured event handlers, typed UI actions, frame-aligned pointer scheduling and
+the transition update described in cssimpler's `docs/`. The fitting runner
+delivers commands through one per-instance
+`cssimpler::ActionQueue<RunnerAction>`. The queue is FIFO and
+duplicate-preserving: two Step clicks enqueue two commands, and a command that
+carries a payload shares the same channel as a unit command. This replaces the
+former `AtomicU64` action bitmask and the separate
+`Mutex<Vec<RunnerUiOp>>` payload inbox. Actions enqueued while an update is
+processing a batch wait for the next invocation. Multiple editor instances own
+separate queues and therefore do not consume each other's clicks. A nonempty
+batch still requests a structural invalidation, so the runner keeps explicit
+refresh control instead of adopting the convenience constructor's conservative
+full refresh for every batch.
 
 The day/night switch uses CSS transitions. The pinned cssimpler can retain an
 active transition through unrelated scene changes when it can match the affected
@@ -33,6 +40,23 @@ refresh changes only content and preserves target geometry, style and identity.
 See cssimpler PR #10 and its CPU benchmark; geometry or style changes still use
 the conservative rebase path. Native frame cadence has not been measured here.
 
+## Frame-aligned pointer input
+
+The runner opts into `App::with_frame_aligned_input(true)` and feeds every engine
+event to `FrameAlignedDrag`. Pointer motion and wheel events still update runner
+state immediately (hover, board drags, freehand samples, camera orbit), but the
+event handler returns `false` for those events and marks the runner dirty. The
+next displayed-frame update consumes one `begin_frame` snapshot and performs one
+structural rebuild for all samples that arrived since the previous frame. Press,
+release, click, keyboard, text and focus events keep immediate paints.
+
+Number-field drags use the same boundary. Motion only records the latest pointer
+position; `tick_number_drag` applies the accumulated delta once per displayed
+frame. Release flushes the final delta immediately. Cursor recentering stays local
+to ClothCraft because cssimpler does not expose relative pointer capture; the
+coalescing and scheduling come from cssimpler. Frame-aligned input is opt-in per
+app, so the Studio V2 editor keeps its existing immediate event path.
+
 ## Native vector board (FC-0061)
 
 The fitting editor's 2D board uses `Node::vector` and typed `VectorPath` commands
@@ -50,6 +74,13 @@ links and previews and stays uncached. Grid changes (including theme, pan, zoom
 and resizing) invalidate its raster automatically. The parent is not cached, and
 the application does not clear the global cache. Cache budget/ineligibility can
 fall back to direct drawing. Panel drawing order is preserved.
+
+The runner retains the background paths (canvas, grid, axes) in its state and
+clones them into each view while the theme and computed view box are unchanged.
+This keeps cssimpler's shared `VectorGeometry` identity stable, so the cached
+background layer survives hover, selection and preview rebuilds. Theme, pan,
+zoom, layout or resize changes produce a new key and rebuild the background
+geometry; the drawing leaf remains uncached.
 
 The API has solid paints and round caps/joins. Dashed guides are explicit M/L
 segments with continuous dash phase; a dashed fillet preview still samples its
