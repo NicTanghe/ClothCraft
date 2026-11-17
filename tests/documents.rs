@@ -70,3 +70,36 @@ fn template_accepts_current_format_and_rejects_unknown_format() {
     template.format = "unknown-template".into();
     assert!(template.compile().is_err());
 }
+
+#[test]
+fn load_errors_name_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("missing.json");
+    let garbage = dir.path().join("garbage.json");
+    fs::write(&garbage, "not json").unwrap();
+    type Load = fn(&std::path::Path) -> Result<(), String>;
+    let loaders: [(&str, Load); 4] = [
+        ("template", |p| GarmentTemplate::load(p).map(drop)),
+        ("fitting project", |p| FittingProject::load(p).map(drop)),
+        ("project", |p| {
+            clothcraft::project::Project::load(p).map(drop)
+        }),
+        ("avatar", |p| {
+            clothcraft::avatar::SurfaceMesh::load_obj(p).map(drop)
+        }),
+    ];
+    for (kind, load) in loaders {
+        let err = load(&missing).unwrap_err();
+        assert!(
+            err.starts_with(&format!("Cannot read {kind} {}: ", missing.display())),
+            "{kind}: {err}"
+        );
+        if kind != "avatar" {
+            let err = load(&garbage).unwrap_err();
+            assert!(
+                err.starts_with(&format!("Cannot parse {kind} {}: ", garbage.display())),
+                "{kind}: {err}"
+            );
+        }
+    }
+}
