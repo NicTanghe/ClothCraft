@@ -1,5 +1,4 @@
 //! Simulation-side static preparation, independent of native rendering.
-use glam::{DVec2, DVec3};
 use clothcraft::{
     fitting::FittingProject,
     garment::{
@@ -12,6 +11,7 @@ use clothcraft::{
     mesh_resolution::preparation,
     vbd::{VbdSettings, VbdSolver},
 };
+use glam::{DVec2, DVec3};
 use std::{collections::BTreeMap, sync::Arc};
 fn fixture() -> GarmentTemplate {
     let mut t = presets::basic(GarmentKind::Tshirt, 0);

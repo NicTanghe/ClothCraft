@@ -1,5 +1,4 @@
 //! Interactions between Firefly's point tools and ClothCraft's material domains.
-use glam::{DVec2, DVec3};
 use clothcraft::{
     authoring::{self, Command},
     garment::{
@@ -10,6 +9,7 @@ use clothcraft::{
         shapes::{BooleanOp, MirrorAxis, Primitive},
     },
 };
+use glam::{DVec2, DVec3};
 
 fn rectangle() -> GarmentTemplate {
     authoring::apply(

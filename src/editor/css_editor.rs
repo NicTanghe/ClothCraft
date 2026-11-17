@@ -299,8 +299,7 @@ impl CssEditorState {
             .sphere
             .as_ref()
             .map(clothcraft::usd_scene::viewport_sphere);
-        let camera =
-            clothcraft::usd_scene::default_scene_camera(&state.x, sphere_surface.as_ref());
+        let camera = clothcraft::usd_scene::default_scene_camera(&state.x, sphere_surface.as_ref());
         let (warp, weft, ratio, trans) = if let Some(plan) = &project.physics_sizing {
             (
                 plan.young_pa[0].to_string(),
@@ -451,8 +450,7 @@ impl CssEditorState {
 
     pub fn sync_usd_camera(&mut self) {
         if let Some(scene) = &self.usd_scene
-            && let Err(error) =
-                clothcraft::usd_scene::update_viewport_camera(scene, &self.camera)
+            && let Err(error) = clothcraft::usd_scene::update_viewport_camera(scene, &self.camera)
         {
             self.status_message = format!("USD camera update error: {error}");
         }
@@ -630,10 +628,8 @@ pub fn update_editor(state: &mut CssEditorState, _frame: FrameInfo) -> Invalidat
             .sphere
             .as_ref()
             .map(clothcraft::usd_scene::viewport_sphere);
-        state.camera = clothcraft::usd_scene::default_scene_camera(
-            &state.state.x,
-            sphere_surface.as_ref(),
-        );
+        state.camera =
+            clothcraft::usd_scene::default_scene_camera(&state.state.x, sphere_surface.as_ref());
         state.sync_usd_camera();
     }
     if actions & ACT_SCENE_HANG != 0 {
@@ -691,10 +687,8 @@ pub fn update_editor(state: &mut CssEditorState, _frame: FrameInfo) -> Invalidat
             .sphere
             .as_ref()
             .map(clothcraft::usd_scene::viewport_sphere);
-        state.camera = clothcraft::usd_scene::default_scene_camera(
-            &state.state.x,
-            sphere_surface.as_ref(),
-        );
+        state.camera =
+            clothcraft::usd_scene::default_scene_camera(&state.state.x, sphere_surface.as_ref());
         state.sync_usd_camera();
         state.status_message = "Reset 3D camera".to_string();
     }
@@ -900,13 +894,18 @@ fn build_top_bar(state: &CssEditorState) -> Node {
         ViewLayoutMode::TwoDOnly => ("layout-btn", "layout-btn", "layout-btn active"),
     };
 
+    let top_bar_class = if state.window_size.0 < 1400.0 {
+        "top-bar compact"
+    } else {
+        "top-bar"
+    };
     ui! {
-        <header class="top-bar">
+        <header class={top_bar_class}>
             <div class="top-bar-left">
-                <span class="app-title">"FoldCraft | Reference Editor"</span>
+                <span class="app-title">"ClothCraft"</span>
                 <nav class="menu-bar">
-                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_SAVE)}>"Save (Ctrl+S)"</button>
-                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_EXPORT_OBJ)}>"Export OBJ"</button>
+                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_SAVE)} title="Save (Ctrl+S)">"Save"</button>
+                    <button class="menu-item" onclick_shared={queue_action(&state.actions, ACT_EXPORT_OBJ)} title="Export OBJ">"Export"</button>
                 </nav>
             </div>
             <div class="sim-transport">
@@ -1157,10 +1156,10 @@ fn build_right_dock(state: &CssEditorState) -> Node {
     ui! {
         <aside id="right-dock" class="right-dock">
             <div class="dock-tabs">
-                <button class={tab_p} onclick_shared={queue_action(&state.actions, ACT_TAB_PROPERTIES)}>"Properties"</button>
+                <button class={tab_p} onclick_shared={queue_action(&state.actions, ACT_TAB_PROPERTIES)} title="Properties">"Props"</button>
                 <button class={tab_o} onclick_shared={queue_action(&state.actions, ACT_TAB_OBJECTS)}>"Objects"</button>
                 <button class={tab_f} onclick_shared={queue_action(&state.actions, ACT_TAB_FABRIC)}>"Fabric"</button>
-                <button class={tab_s} onclick_shared={queue_action(&state.actions, ACT_TAB_SIMULATION)}>"Simulation"</button>
+                <button class={tab_s} onclick_shared={queue_action(&state.actions, ACT_TAB_SIMULATION)} title="Simulation">"Sim"</button>
             </div>
             <div class="dock-content">
                 {content}

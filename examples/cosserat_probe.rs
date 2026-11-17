@@ -1,6 +1,6 @@
 //! Small CPU-only cantilever probe; no graphical window or GPU is used.
-use glam::DVec3;
 use clothcraft::cosserat::{RodMaterial, RodModel, RodSettings};
+use glam::DVec3;
 
 fn main() -> Result<(), String> {
     // The topology and material values follow the author's public cantilever

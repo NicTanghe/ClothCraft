@@ -1,11 +1,11 @@
 //! CPU-only, fresh-geometry reproduction of EE/PF feature transitions.
 use clap::Parser;
-use glam::DVec3;
 use clothcraft::{
     fitting::FittingProject,
     ogc::{OgcSettings, OgcWorld, geometry, potential::Kind},
     vbd::VbdSolver,
 };
+use glam::DVec3;
 use serde_json::{Value, json};
 use std::{fs, path::PathBuf};
 

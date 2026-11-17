@@ -1,8 +1,8 @@
-use glam::DVec3;
 use clothcraft::{
     ogc::{feature_hierarchy::Pair, topology::Topology},
     solver_lab::contact_residual::{Problem, merit},
 };
+use glam::DVec3;
 
 #[test]
 fn finite_motion_changes_force_basis_without_changing_endpoint_feasibility() {

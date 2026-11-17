@@ -1,9 +1,9 @@
-use glam::DVec3;
 use clothcraft::ogc::{
     OgcSettings, OgcWorld,
     geometry::closest_segments,
     potential::{Contact, Kind, activation},
 };
+use glam::DVec3;
 
 fn fixture() -> (Vec<DVec3>, Vec<[usize; 3]>) {
     (

@@ -1,7 +1,7 @@
 //! Static planar-slide falsification gate: no friction, constant true gap.
 use clap::Parser;
-use glam::DVec3;
 use clothcraft::ogc::{OgcSettings, OgcWorld};
+use glam::DVec3;
 use serde_json::json;
 use std::{fs, path::PathBuf};
 

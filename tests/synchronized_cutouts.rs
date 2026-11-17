@@ -1,4 +1,3 @@
-use glam::DVec2;
 use clothcraft::{
     authoring::{self, Command, History},
     garment::{
@@ -7,6 +6,7 @@ use clothcraft::{
         seam::{BoundaryRef, Side},
     },
 };
+use glam::DVec2;
 
 fn two_panel_sewn() -> GarmentTemplate {
     let t = authoring::apply(

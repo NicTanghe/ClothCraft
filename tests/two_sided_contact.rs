@@ -1,4 +1,3 @@
-use glam::{DQuat, DVec3};
 use clothcraft::{
     math::Jet,
     ogc::{
@@ -7,6 +6,7 @@ use clothcraft::{
         two_sided_contact::{Feature, MinimumContact, Settings, smooth_minimum},
     },
 };
+use glam::{DQuat, DVec3};
 
 fn settings() -> Settings {
     Settings {

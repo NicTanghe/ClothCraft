@@ -5,7 +5,6 @@
 //! - Editable files reference panel/boundary IDs and material coordinates, never persistent vertex indices.
 //! - Independent property tests and unit tests.
 
-use glam::DVec2;
 use clothcraft::{
     authoring::{self, Command, History},
     garment::{
@@ -18,6 +17,7 @@ use clothcraft::{
         presets::{self, GarmentKind},
     },
 };
+use glam::DVec2;
 
 fn rectangle_template(width: f64, height: f64) -> GarmentTemplate {
     authoring::apply(

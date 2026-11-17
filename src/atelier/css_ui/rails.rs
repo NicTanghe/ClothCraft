@@ -2,10 +2,10 @@
 //! 3D/2D tool rails, and radial context menu.
 
 use super::icons::*;
-use cssimpler::core::Node;
-use cssimpler::ui;
 pub use clothcraft::authoring::CornerRule;
 use clothcraft::commands::CommandId;
+use cssimpler::core::Node;
+use cssimpler::ui;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendBadge {

@@ -1,8 +1,8 @@
-use glam::DVec3;
 use clothcraft::{
     garment::GarmentTemplate,
     vbd::{Grab, VbdSettings, VbdSolver, grab::surface_patch},
 };
+use glam::DVec3;
 use std::sync::Arc;
 mod common;
 

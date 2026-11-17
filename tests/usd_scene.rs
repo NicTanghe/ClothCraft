@@ -1,5 +1,5 @@
-use glam::DVec3;
 use clothcraft::{garment::GarmentTemplate, usd_scene::garment_stage_usda};
+use glam::DVec3;
 
 fn tiny() -> clothcraft::garment::CompiledGarment {
     let mut template = GarmentTemplate::two_panel_demo();

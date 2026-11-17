@@ -1,4 +1,3 @@
-use glam::DVec2;
 use clothcraft::{
     authoring::{self, Command, History, clipboard::PatternClipboard},
     garment::{
@@ -7,6 +6,7 @@ use clothcraft::{
         shapes::{self, MirrorAxis, Primitive},
     },
 };
+use glam::DVec2;
 
 fn fixture() -> GarmentTemplate {
     let t = authoring::apply(

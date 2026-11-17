@@ -1,4 +1,3 @@
-use glam::{DVec2, DVec3};
 use clothcraft::{
     authoring::{self, Command, History, clipboard::PatternClipboard},
     garment::{
@@ -7,6 +6,7 @@ use clothcraft::{
         presets::{self, GarmentKind},
     },
 };
+use glam::{DVec2, DVec3};
 use std::collections::BTreeSet;
 
 #[test]

@@ -1,6 +1,6 @@
 //! CPU-only 3×3 crossing-yarn contact probe; not a garment generator.
-use glam::DVec3;
 use clothcraft::cosserat::{RodContact, RodMaterial, RodModel, RodSettings};
+use glam::DVec3;
 
 fn main() -> Result<(), String> {
     let count: usize = 3;

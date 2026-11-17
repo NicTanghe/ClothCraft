@@ -1,13 +1,13 @@
 //! CPU replay: contact churn/force jumps at motion hotspots and an interleaved
 //! scalar/SIMD detector comparison. No simulation, GPU, or document writes.
 use clap::Parser;
-use glam::DVec3;
 use clothcraft::{
     fitting::FittingProject,
     model::State,
     ogc::{ContactSet, CpuContactKernel},
     vbd::{VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,

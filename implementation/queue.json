@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "clock": 3.3420396096354286,
+  "clock": 3.4201646096354286,
   "tickets": [
     {
       "id": "FC-0001",
@@ -820,6 +820,19 @@
       "owner": null,
       "vruntime": 3.3420396096354286,
       "pr": null
+    },
+    {
+      "id": "FC-0061",
+      "title": "Render the 2D board with native cssimpler vector paths",
+      "acceptance": "Typed native vector board preserves curves, grid, overlays, pan/zoom and editing gestures; pinned tiny-skia dependency; CPU render and interaction checks pass or document existing failures.",
+      "points": 3.0,
+      "spent": 5.0,
+      "priority": "high",
+      "depends_on": [],
+      "status": "review",
+      "owner": null,
+      "vruntime": 4.592039609635428,
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/4"
     }
   ]
 }

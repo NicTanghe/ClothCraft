@@ -1,7 +1,7 @@
 //! Independent numerical and geometry oracles for the opt-in sizing experiment.
-use glam::DVec2;
 use clothcraft::mesh_resolution::{Experiment, Preset, artifacts};
 use clothcraft::mesh_resolution::{mesh, sizing};
+use glam::DVec2;
 use mesh::{Domain, Options, Ring};
 use sizing::{Calibration, Fabric, Feature, SizingMap, Source};
 use std::collections::BTreeMap;

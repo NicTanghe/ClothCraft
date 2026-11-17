@@ -1,5 +1,5 @@
-use glam::DVec2;
 use clothcraft::garment::graphics::{GraphicPlacement, GraphicSide};
+use glam::DVec2;
 
 fn placement() -> GraphicPlacement {
     GraphicPlacement {

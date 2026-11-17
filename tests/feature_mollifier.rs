@@ -1,4 +1,3 @@
-use glam::{DQuat, DVec3};
 use clothcraft::{
     math::{Jet, Scalar},
     ogc::{
@@ -7,6 +6,7 @@ use clothcraft::{
         smooth_forest::{Link, evaluate},
     },
 };
+use glam::{DQuat, DVec3};
 
 #[test]
 fn support_and_parallel_limits_match_feature_hierarchy() {

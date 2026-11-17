@@ -1,5 +1,5 @@
-use glam::DVec3;
 use clothcraft::ogc::bvh::{Bounds, Bvh};
+use glam::DVec3;
 
 #[test]
 fn dual_tree_pairs_match_exhaustive_search_without_duplicates() {

@@ -1,11 +1,11 @@
 //! Opt-in equality against the complete f64 detector, including its movement
 //! bounds (not only the subset of contacts that currently exert a force).
 #![cfg(feature = "desktop")]
-use glam::DVec3;
 use clothcraft::{
     gpu_vbd::contact_filter::GpuContactFilter,
     ogc::{ContactSet, OgcSettings, OgcWorld},
 };
+use glam::DVec3;
 
 fn equal(a: &ContactSet, b: &ContactSet) {
     assert_eq!(a.radii, b.radii);

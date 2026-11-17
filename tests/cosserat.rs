@@ -1,5 +1,5 @@
-use glam::{DQuat, DVec3};
 use clothcraft::cosserat::{OrientationMethod, RodMaterial, RodModel, RodSettings};
+use glam::{DQuat, DVec3};
 
 fn material() -> RodMaterial {
     RodMaterial {

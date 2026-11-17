@@ -1,4 +1,3 @@
-use glam::DVec3;
 use clothcraft::{
     garment::{GarmentTemplate, template::Corner},
     ogc::{
@@ -7,6 +6,7 @@ use clothcraft::{
     },
     vbd::{Grab, VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use std::sync::Arc;
 
 fn same(a: &ContactSet, b: &ContactSet) {
@@ -149,9 +149,8 @@ fn unequal_sewing_pull_hold_release_has_identical_trajectory() {
                 ..Default::default()
             };
             let vertices = g.mesh.triangles.last().unwrap().vertices;
-            let point = |s: &clothcraft::model::State| {
-                vertices.iter().map(|&v| s.x[v] / 3.).sum::<DVec3>()
-            };
+            let point =
+                |s: &clothcraft::model::State| vertices.iter().map(|&v| s.x[v] / 3.).sum::<DVec3>();
             let mut anchor = DVec3::ZERO;
             let mut release = DVec3::ZERO;
             for step in 0..180 {

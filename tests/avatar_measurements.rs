@@ -1,5 +1,5 @@
-use glam::{DMat3, DVec3};
 use clothcraft::avatar_measurements::*;
+use glam::{DMat3, DVec3};
 
 fn body() -> AvatarMeasurements {
     // Original synthetic cuboid: 0.4 m wide, 0.2 m deep, 1.8 m tall.

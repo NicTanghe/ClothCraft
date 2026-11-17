@@ -1,4 +1,3 @@
-use glam::{DVec2, DVec3};
 use clothcraft::{
     authoring::{self, Command},
     fitting::FittingProject,
@@ -9,6 +8,7 @@ use clothcraft::{
         seam::{BoundaryRef, Side},
     },
 };
+use glam::{DVec2, DVec3};
 
 fn drawing() -> clothcraft::garment::GarmentTemplate {
     authoring::apply(
@@ -89,8 +89,7 @@ fn curved_boundaries_keep_ids_lengths_and_mass_under_remeshing() {
         assert!((length(&a) - length(&b)).abs() < 1e-10);
     }
     let serialized = serde_json::to_string(&t).unwrap();
-    let read: clothcraft::garment::GarmentTemplate =
-        serde_json::from_str(&serialized).unwrap();
+    let read: clothcraft::garment::GarmentTemplate = serde_json::from_str(&serialized).unwrap();
     assert_eq!(a.mesh.uv, read.compile().unwrap().mesh.uv);
 }
 #[test]

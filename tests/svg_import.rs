@@ -1,9 +1,9 @@
-use glam::{DVec2, DVec3};
 use clothcraft::garment::{
     GarmentTemplate,
     meshing::MeshingSettings,
     svg_import::{self, Drawing, Outline},
 };
+use glam::{DVec2, DVec3};
 
 fn template() -> GarmentTemplate {
     serde_json::from_str(include_str!("../examples/templates/two-panel.json")).unwrap()

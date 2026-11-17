@@ -1,4 +1,3 @@
-use glam::{DVec2, DVec3};
 use clothcraft::{
     authoring::{self, Command, History},
     garment::{
@@ -9,6 +8,7 @@ use clothcraft::{
         shapes::{self, BooleanOp, MirrorAxis, Primitive},
     },
 };
+use glam::{DVec2, DVec3};
 
 fn settings() -> MeshingSettings {
     MeshingSettings {

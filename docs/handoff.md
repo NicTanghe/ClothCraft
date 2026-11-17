@@ -1,5 +1,21 @@
 # Repository handoff
 
+## Native vector board and CI cleanup — 17 November 2026 (FC-0061)
+
+PR #4 replaces the fitting board's SVG nodes/strings with native cssimpler vector
+paths at dependency revision `31266eb`. The grid requests a bounded raster cache;
+pieces, handles and previews remain in an uncached sibling. Curves retain their
+controls; f64 authoring, hit testing and transactions remain in ClothCraft.
+
+The CI follow-up fixes formatting/Clippy findings and actual toolbar/sidebar
+overflow in both native editors. Compact actions retain full titles; narrow CAD
+panes use additional rows, and sidebar metadata wraps without obscuring the USD
+host. Existing bounds, click and editing assertions remain enabled. The complete
+desktop suite passes 771 tests with 27 opt-in checks ignored. See
+[the integration contract and validation](cssimpler-integration.md). No native
+window/GPU acceptance or frame-cadence measurement is claimed.
+
+
 ## Selection gestures in the native CSSimpler editor
 
 In Edit, double-clicking an edge invokes the existing split transaction at the

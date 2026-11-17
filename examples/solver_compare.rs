@@ -1,11 +1,11 @@
 //! Reproducible CPU backend comparison. Rendering and auditing are outside step timings.
 use clap::Parser;
-use glam::DVec3;
 use clothcraft::{
     fitting::FittingProject,
     solver_lab::{Algorithm, Backend},
     vbd::Grab,
 };
+use glam::DVec3;
 use serde_json::json;
 use std::{fs, io::Write, path::PathBuf, time::Instant};
 #[derive(Parser)]
@@ -99,10 +99,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .vertices;
     let anchor = vertices.iter().map(|i| state.x[*i]).sum::<DVec3>() / 3.;
     fs::create_dir_all(&a.output)?;
-    project.avatar_path = clothcraft::document::portable_avatar(
-        &project.avatar_path,
-        &a.output.join("source.json"),
-    )?;
+    project.avatar_path =
+        clothcraft::document::portable_avatar(&project.avatar_path, &a.output.join("source.json"))?;
     fs::write(
         a.output.join("source.json"),
         serde_json::to_vec_pretty(&project)?,
@@ -142,8 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 settings.contact.radius * 2.,
                 &settings.contact,
             )?;
-            let [p95, max] =
-                clothcraft::garment::diagnostics::extension_percent(&garment, &state);
+            let [p95, max] = clothcraft::garment::diagnostics::extension_percent(&garment, &state);
             last = json!({"step":count,"intersection_check":intersections,"minimum_distance_m":c.minimum_distance,"max_seam_gap_m":garment.max_seam_gap(&state.x),"extension_p95_percent":p95,"extension_max_percent":max});
             writeln!(log, "{}", last)?;
             count += 1;

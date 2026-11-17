@@ -1,10 +1,10 @@
 //! Physical prerequisites for authored holds. These exercise compiled constraints,
 //! not a native pin tool or persistent target schema (both remain separate work).
-use glam::DVec3;
 use clothcraft::{
     garment::{CompiledGarment, GarmentTemplate},
     vbd::{VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use std::sync::Arc;
 
 fn editable() -> GarmentTemplate {
@@ -330,9 +330,7 @@ fn authored_pin_save_release_and_history_preserve_drape() {
 
 #[test]
 fn pin_remesh_and_unsupported_copy_fail_without_dropping_holds() {
-    use clothcraft::authoring::{
-        Command, apply, clipboard::PatternClipboard, prepare_pin_edit,
-    };
+    use clothcraft::authoring::{Command, apply, clipboard::PatternClipboard, prepare_pin_edit};
     let t = editable();
     let g = t.compile().unwrap();
     let p = &g.panels[0];

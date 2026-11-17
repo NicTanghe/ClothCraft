@@ -3,13 +3,13 @@
 //! The sample is not a solver step. These tests check its accepted-state
 //! contacts, free-DOF residual against a finite-difference objective, pinned
 //! normalization, state preservation and the "one accepted step" contract.
-use glam::DVec3;
 use clothcraft::{
     garment::GarmentTemplate,
     model::State,
     ogc::ContactSet,
     vbd::{FinalDiagnosticsBackend, Grab, VbdSettings, VbdSolver},
 };
+use glam::DVec3;
 use std::sync::Arc;
 
 mod common;

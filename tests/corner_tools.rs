@@ -1,4 +1,3 @@
-use glam::DVec2;
 use clothcraft::{
     authoring::{self, Command, History},
     garment::{
@@ -7,6 +6,7 @@ use clothcraft::{
         shapes::{self, MirrorAxis, Primitive},
     },
 };
+use glam::DVec2;
 
 fn fixture() -> GarmentTemplate {
     authoring::apply(
@@ -1276,9 +1276,9 @@ fn mixed_mirror_and_seam_corner_drag_bezier_and_round_propagate_coherently() {
         },
     )
     .unwrap();
-    for pidx in 0..3 {
+    for (pidx, panel) in rounded.template.panels.iter().enumerate().take(3) {
         assert!(
-            rounded.template.panels[pidx]
+            panel
                 .polygon
                 .as_ref()
                 .unwrap()
@@ -1385,8 +1385,8 @@ fn batch_round_corners_shape_propagates_across_sewn_and_mirrored_panels() {
         },
     )
     .unwrap();
-    for pidx in 0..2 {
-        let count = edit.template.panels[pidx]
+    for (pidx, panel) in edit.template.panels.iter().enumerate().take(2) {
+        let count = panel
             .polygon
             .as_ref()
             .unwrap()
