@@ -110,6 +110,7 @@ pub fn run(
     };
 
     let mut state = CssRunnerState::new(project, scene, files, tx, latest);
+    state.native_number_drag = !smoke;
     state.smoke = smoke;
     state.drag_test = drag_test;
     state.perf_test = perf_test;

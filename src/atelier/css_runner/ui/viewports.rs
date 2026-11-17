@@ -11,6 +11,7 @@ use super::super::board::native::board_node;
 use super::super::board::rendering::render_runner_2d_paths;
 use super::super::board::selection::{compute_connected_2d_highlight, effective_selected_points};
 use super::super::state::CssRunnerState;
+use super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
 use cssimpler::core::Node;
 use cssimpler::ui;
@@ -177,18 +178,14 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
     let radius_dec_btn = ui! {
         <button id="cad-radius-dec" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerRadiusMm(-2.0))} title="Decrease corner radius">"-2"</button>
     };
-    let radius_val = ui! {
-        <span id="cad-radius-readout" class="cad-2d-value">{format!("{:.1} mm", state.corner_radius_mm)}</span>
-    };
+    let radius_val = number_field(state, "cad-radius-readout", NumberField::CornerRadius);
     let radius_inc_btn = ui! {
         <button id="cad-radius-inc" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerRadiusMm(2.0))} title="Increase corner radius">"+2"</button>
     };
     let tension_dec_btn = ui! {
         <button id="cad-tension-dec" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerTension(-0.05))} title="Decrease tension">"T-"</button>
     };
-    let tension_val = ui! {
-        <span id="cad-tension-readout" class="cad-2d-value">{format!("{:.2}", state.corner_tension)}</span>
-    };
+    let tension_val = number_field(state, "cad-tension-readout", NumberField::CornerTension);
     let tension_inc_btn = ui! {
         <button id="cad-tension-inc" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerTension(0.05))} title="Increase tension">"T+"</button>
     };

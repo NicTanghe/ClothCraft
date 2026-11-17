@@ -458,6 +458,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wgpu",
+ "x11rb",
 ]
 
 [[package]]

@@ -5,11 +5,18 @@ use super::state::CssRunnerState;
 use cssimpler::renderer::EngineEvent;
 
 pub(super) mod buttons;
+pub(super) mod cursor_wrap;
 pub(super) mod keyboard;
 pub(super) mod motion;
+pub(super) mod number;
 pub(super) mod scroll;
 
 pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
+    use std::sync::atomic::Ordering;
+    let text_editing = state.numeric_input_active.load(Ordering::Relaxed);
+    if number::handle_number_event(state, event) {
+        return true;
+    }
     // Native numeric text inputs own keyboard events until the next pointer press.
     if matches!(
         event,
@@ -30,6 +37,15 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
         return false;
     }
 
+    // Tab enters the native input cycle; preserve keyboard ownership there.
+    if matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into()))
+    {
+        state.numeric_input_active.store(true, Ordering::Relaxed);
+        return false;
+    }
+    if matches!(event, EngineEvent::Key(_)) && text_editing {
+        return false;
+    }
     match event {
         EngineEvent::FocusChanged(false) => {
             state.last_2d_click = None;

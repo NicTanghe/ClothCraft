@@ -9,7 +9,7 @@ default-run = "clothcraft"
 
 [features]
 default = ["desktop"]
-desktop = ["dep:wgpu", "dep:bytemuck", "dep:pollster", "dep:image", "dep:rfd", "dep:cssimpler", "cssimpler?/gpu-viewport"]
+desktop = ["dep:wgpu", "dep:bytemuck", "dep:pollster", "dep:image", "dep:rfd", "dep:cssimpler", "cssimpler?/gpu-viewport", "dep:x11rb"]
 
 [dependencies]
 glam = { version = "0.34.1", features = ["serde"] }
@@ -30,6 +30,9 @@ bytemuck = { version = "1", optional = true }
 pollster = { version = "1.0.1", optional = true }
 image = { version = "0.25.10", optional = true, default-features = false, features = ["png"] }
 cssimpler = { git = "https://github.com/NicTanghe/cssimpler.git", rev = "31266eb3d219407f68d410cb303f8bc5ccacecbf", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.13.2", optional = true }
 
 [dev-dependencies]
 naga = { version = "30.0.1", features = ["wgsl-in"] }

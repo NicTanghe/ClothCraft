@@ -141,6 +141,7 @@ pub const ACT_RUN_TOOL_CORNER_SELECT2D: u64 = 1 << 60;
 
 #[derive(Clone, Debug)]
 pub enum RunnerUiOp {
+    SetNumber(super::ui::number::NumberField, f64),
     MeshLevel(u8),
     MeshToggle(usize),
     MeshChoosePath(String),
@@ -168,6 +169,7 @@ pub enum RunnerUiOp {
 }
 
 pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidation {
+    let number_changed = super::input::number::tick_number_drag(state);
     // 1. Poll simulation worker result
     let done = state
         .worker_latest
@@ -486,7 +488,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         apply_runner_ui_op(state, op);
     }
 
-    if actions != 0 || had_ui_ops || (had_result && !state.playing) {
+    if number_changed || actions != 0 || had_ui_ops || (had_result && !state.playing) {
         Invalidation::Structure
     } else if had_result {
         Invalidation::Paint
@@ -519,6 +521,26 @@ pub(super) fn queue_ui_op(
 
 pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
     match op {
+        RunnerUiOp::SetNumber(field, value) => {
+            if !value.is_finite() {
+                return;
+            }
+            use super::ui::number::NumberField;
+            match field {
+                NumberField::ZoomSpeed => {
+                    state.board_2d_zoom_speed = value.clamp(MIN_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED)
+                }
+                NumberField::CornerRadius => {
+                    state.corner_radius_mm = value.clamp(1.0, 250.0);
+                    state.corner_preview_active = true;
+                }
+                NumberField::CornerTension => {
+                    state.corner_tension = value.clamp(0.05, 1.5);
+                    state.corner_mode_radius = false;
+                    state.corner_preview_active = true;
+                }
+            }
+        }
         RunnerUiOp::MeshToggleOpen => {
             state.mesh_draft.open = !state.mesh_draft.open;
         }
