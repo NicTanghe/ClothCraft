@@ -22,10 +22,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
 use cssimpler::app::{App, Invalidation, RenderMode};
-use cssimpler::core::Node;
+use cssimpler::core::{Color, Node, PathCommand::*, VectorViewBox};
+#[path = "native_board.rs"]
+pub mod native_board;
 use cssimpler::renderer::{EngineEvent, FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
 use cssimpler::ui;
+use native_board::{BoardPath, circle, dashed_commands, point, polyline, rectangle};
 
 use clothcraft::authoring::{
     self, Command, CornerRule, History,
@@ -1144,7 +1147,7 @@ pub fn viewport_2d_span_x(state: &CssRunnerState) -> (f32, f32) {
     }
 }
 
-/// Exact CSS layout rects for `#viewport-2d`'s `.canvas-area` and square `#svg-2d-board`.
+/// Exact CSS layout rects for `#viewport-2d`'s `.canvas-area` and square `#board-2d`.
 pub fn compute_2d_viewport_rects(state: &CssRunnerState) -> (Rect2d, Rect2d) {
     let win_h = state.window_size.1.max(100.0);
     let body_y = 40.0_f32;
@@ -1352,43 +1355,6 @@ fn panel_edge_length_m(panel: &Panel, edge_name: &str) -> Option<f64> {
     let idx = poly.edges.iter().position(|e| e == edge_name)?;
     let pts = poly.edge_points(idx).ok()?;
     Some(pts.windows(2).map(|pair| pair[0].distance(pair[1])).sum())
-}
-
-fn dashed_path_d(pts: &[(f64, f64)], dash: f64, gap: f64) -> String {
-    if pts.len() < 2 || dash <= 1e-6 {
-        return String::new();
-    }
-    let period = dash + gap.max(0.0);
-    let mut d = String::new();
-    let mut draw = true;
-    let mut rem = dash;
-    for pair in pts.windows(2) {
-        let mut p0 = DVec2::new(pair[0].0, pair[0].1);
-        let p1 = DVec2::new(pair[1].0, pair[1].1);
-        let mut left = p0.distance(p1);
-        if left <= 1e-9 {
-            continue;
-        }
-        let dir = (p1 - p0) / left;
-        while left > 1e-9 {
-            let step = rem.min(left);
-            let next = p0 + dir * step;
-            if draw {
-                d.push_str(&format!(
-                    "M {:.2},{:.2} L {:.2},{:.2} ",
-                    p0.x, p0.y, next.x, next.y
-                ));
-            }
-            p0 = next;
-            left -= step;
-            rem -= step;
-            if rem <= 1e-9 {
-                draw = !draw;
-                rem = if draw { dash } else { gap.max(period * 0.1) };
-            }
-        }
-    }
-    d
 }
 
 struct Connected2dHighlight {
@@ -4409,10 +4375,9 @@ fn build_runner_3d_viewport(_state: &CssRunnerState) -> Node {
 }
 
 pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
-    let (svg_nodes, view_box) = render_runner_2d_svg(state);
+    let (paths, view_box) = render_runner_2d_paths(state);
     let (_canvas_rect, svg_rect) = compute_2d_viewport_rects(state);
-    let svg_w = format!("{:.1}px", svg_rect.w);
-    let svg_h = format!("{:.1}px", svg_rect.h);
+    let board = native_board::board_node(paths, view_box, svg_rect.w, svg_rect.h);
     let connected = compute_connected_2d_highlight(state);
 
     let panels = &state.project.template.panels;
@@ -4709,9 +4674,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
             </div>
             {cad_bar}
             <div class="canvas-area">
-                <svg id="svg-2d-board" viewBox={view_box} preserveAspectRatio="xMidYMid meet" width={svg_w} height={svg_h} class="svg-2d-board">
-                    {svg_nodes}
-                </svg>
+                {board}
             </div>
         </div>
     }
@@ -5598,10 +5561,10 @@ fn build_runner_command_palette(state: &CssRunnerState) -> Node {
 }
 
 // ============================================================================
-// 2D Pattern Board SVG
+// 2D Pattern Board Native Vector Paths
 // ============================================================================
 
-pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
+pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, VectorViewBox) {
     let mut nodes = Vec::new();
     let template = state.active_template();
     let panels = &template.panels;
@@ -5718,60 +5681,92 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
         });
     }
 
-    // Millimetre SVG user space gives cssimpler flatten_cubic ~0.25 mm accuracy and crisp geometry
+    // Display commands use millimetres; authored geometry remains f64 metres.
     let (vb_min_x_m, vb_min_y_m, view_span_m) = compute_2d_view_box_m(state);
     let vb_min_x = vb_min_x_m * 1000.0;
     let vb_min_y = vb_min_y_m * 1000.0;
     let vb_w = view_span_m * 1000.0;
     let vb_h = vb_w;
-    let view_box = format!("{vb_min_x:.3} {vb_min_y:.3} {vb_w:.3} {vb_h:.3}");
+    let view_box = VectorViewBox::new(vb_min_x as f32, vb_min_y as f32, vb_w as f32, vb_h as f32);
 
     let (_canvas_rect, svg_rect) = compute_2d_viewport_rects(state);
     let px = (vb_w / (svg_rect.w.max(1.0) as f64)).max(0.25);
 
-    // Theme colors (use rgba directly since cssimpler ignores stroke-opacity)
+    // Explicit native paints include their alpha channel.
     let is_dark = state.theme == Theme::Dark;
-    let bg_color = if is_dark { "#0d0f17" } else { "#f8fafc" };
-    let grid_minor = if is_dark { "#161c28" } else { "#e2e8f0" };
-    let grid_major = if is_dark { "#232e42" } else { "#cbd5e1" };
+    let bg_color = if is_dark {
+        Some(Color::rgb(13, 15, 23))
+    } else {
+        Some(Color::rgb(248, 250, 252))
+    };
+    let grid_minor = if is_dark {
+        Some(Color::rgb(22, 28, 40))
+    } else {
+        Some(Color::rgb(226, 232, 240))
+    };
+    let grid_major = if is_dark {
+        Some(Color::rgb(35, 46, 66))
+    } else {
+        Some(Color::rgb(203, 213, 225))
+    };
     let origin_color = if is_dark {
-        "rgba(56, 189, 248, 0.28)"
+        Some(Color::rgba(56, 189, 248, 71))
     } else {
-        "rgba(37, 99, 235, 0.24)"
+        Some(Color::rgba(37, 99, 235, 61))
     };
-    let unsel_stroke = if is_dark { "#38bdf8" } else { "#2563eb" };
+    let unsel_stroke = if is_dark {
+        Some(Color::rgb(56, 189, 248))
+    } else {
+        Some(Color::rgb(37, 99, 235))
+    };
     let unsel_fill = if is_dark {
-        "rgba(56, 189, 248, 0.08)"
+        Some(Color::rgba(56, 189, 248, 20))
     } else {
-        "rgba(37, 99, 235, 0.06)"
+        Some(Color::rgba(37, 99, 235, 15))
     };
-    let sel_stroke = if is_dark { "#f59e0b" } else { "#d97706" };
+    let sel_stroke = if is_dark {
+        Some(Color::rgb(245, 158, 11))
+    } else {
+        Some(Color::rgb(217, 119, 6))
+    };
     let sel_fill = if is_dark {
-        "rgba(245, 158, 11, 0.14)"
+        Some(Color::rgba(245, 158, 11, 36))
     } else {
-        "rgba(217, 119, 6, 0.11)"
+        Some(Color::rgba(217, 119, 6, 28))
     };
-    let conn_fill = "rgba(16, 185, 129, 0.10)";
-    let handle_color = if is_dark { "#38bdf8" } else { "#0284c7" };
+    let conn_fill = Some(Color::rgba(16, 185, 129, 26));
+    let handle_color = if is_dark {
+        Some(Color::rgb(56, 189, 248))
+    } else {
+        Some(Color::rgb(2, 132, 199))
+    };
     let handle_soft = if is_dark {
-        "rgba(56, 189, 248, 0.45)"
+        Some(Color::rgba(56, 189, 248, 115))
     } else {
-        "rgba(2, 132, 199, 0.40)"
+        Some(Color::rgba(2, 132, 199, 102))
     };
-    let vertex_fill = if is_dark { "#0f172a" } else { "#ffffff" };
+    let vertex_fill = if is_dark {
+        Some(Color::rgb(15, 23, 42))
+    } else {
+        Some(Color::rgb(255, 255, 255))
+    };
     let grain_color = if is_dark {
-        "rgba(96, 165, 250, 0.72)"
+        Some(Color::rgba(96, 165, 250, 184))
     } else {
-        "rgba(59, 130, 246, 0.70)"
+        Some(Color::rgba(59, 130, 246, 178))
     };
-    let accent_gold = "#facc15";
-    let accent_emerald = "#10b981";
-    let hover_cyan = "#7dd3fc";
+    let accent_gold = Some(Color::rgb(250, 204, 21));
+    let accent_emerald = Some(Color::rgb(16, 185, 129));
+    let hover_cyan = Some(Color::rgb(125, 211, 252));
 
     // Background rect
-    nodes.push(ui! {
-        <rect x={format!("{vb_min_x:.2}")} y={format!("{vb_min_y:.2}")} width={format!("{vb_w:.2}")} height={format!("{vb_h:.2}")} fill={bg_color} />
-    });
+    nodes.push(BoardPath::new(
+        rectangle(vb_min_x, vb_min_y, vb_w, vb_h),
+        bg_color,
+        None,
+        0.0,
+        "",
+    ));
 
     // Drafting grid (minor 100 mm, major 500 mm)
     let grid_step = 100.0_f64;
@@ -5781,10 +5776,8 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
         let is_major = ((gx / 500.0) - (gx / 500.0).round()).abs() < 1e-4;
         let stroke = if is_major { grid_major } else { grid_minor };
         let sw = if is_major { 1.1 * px } else { 0.7 * px };
-        let pts = format!("{gx:.1},{:.1} {gx:.1},{:.1}", vb_min_y, vb_min_y + vb_h);
-        nodes.push(ui! {
-            <polyline points={pts} fill="none" stroke={stroke} stroke-width={format!("{sw:.2}")} />
-        });
+        let pts = polyline(&[(gx, vb_min_y), (gx, vb_min_y + vb_h)], false);
+        nodes.push(BoardPath::new(pts, None, stroke, sw, ""));
         gx += grid_step;
     }
     let start_gy = (vb_min_y / grid_step).floor() * grid_step;
@@ -5793,23 +5786,33 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
         let is_major = ((gy / 500.0) - (gy / 500.0).round()).abs() < 1e-4;
         let stroke = if is_major { grid_major } else { grid_minor };
         let sw = if is_major { 1.1 * px } else { 0.7 * px };
-        let pts = format!("{:.1},{gy:.1} {:.1},{gy:.1}", vb_min_x, vb_min_x + vb_w);
-        nodes.push(ui! {
-            <polyline points={pts} fill="none" stroke={stroke} stroke-width={format!("{sw:.2}")} />
-        });
+        let pts = polyline(&[(vb_min_x, gy), (vb_min_x + vb_w, gy)], false);
+        nodes.push(BoardPath::new(pts, None, stroke, sw, ""));
         gy += grid_step;
     }
 
     // Origin axes reference
     if vb_min_x <= 0.0 && vb_min_x + vb_w >= 0.0 {
-        nodes.push(ui! {
-            <polyline points={format!("0.0,{:.1} 0.0,{:.1}", vb_min_y, vb_min_y + vb_h)} fill="none" stroke={origin_color} stroke-width={format!("{:.2}", 1.2 * px)} />
-        });
+        nodes.push(BoardPath::new(
+            polyline(&[(0.0, vb_min_y), (0.0, vb_min_y + vb_h)], false),
+            None,
+            origin_color,
+            1.2 * px,
+            "",
+        ));
     }
     if vb_min_y <= 0.0 && vb_min_y + vb_h >= 0.0 {
-        nodes.push(ui! {
-            <polyline points={format!("{:.1},0.0 {:.1},0.0", vb_min_x, vb_min_x + vb_w)} fill="none" stroke={origin_color} stroke-width={format!("{:.2}", 1.2 * px)} />
-        });
+        nodes.push(BoardPath::new(
+            polyline(&[(vb_min_x, 0.0), (vb_min_x + vb_w, 0.0)], false),
+            None,
+            origin_color,
+            1.2 * px,
+            "",
+        ));
+    }
+
+    for path in &mut nodes {
+        path.background = true;
     }
 
     let fillet_previews = active_fillet_previews(state);
@@ -5854,24 +5857,29 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
         // Outer boundary path (with cubic Bézier curves)
         let n_pts = p.points.len();
         if n_pts > 0 {
-            let mut path_d = format!("M {:.2},{:.2}", p.points[0].0, p.points[0].1);
+            let mut path_d = vec![MoveTo(point(p.points[0]))];
             for i in 0..n_pts {
                 let next_idx = (i + 1) % n_pts;
                 let (next_x, next_y) = p.points[next_idx];
                 if let Some(c) = p.curves.iter().find(|c| c.edge_idx == i) {
-                    path_d.push_str(&format!(
-                        " C {:.2},{:.2} {:.2},{:.2} {next_x:.2},{next_y:.2}",
-                        c.c1.0, c.c1.1, c.c2.0, c.c2.1
-                    ));
+                    path_d.push(CubicTo {
+                        control1: point(c.c1),
+                        control2: point(c.c2),
+                        end: point((next_x, next_y)),
+                    });
                 } else {
-                    path_d.push_str(&format!(" L {next_x:.2},{next_y:.2}"));
+                    path_d.push(LineTo(point((next_x, next_y))));
                 }
             }
-            path_d.push_str(" Z");
+            path_d.push(Close);
 
-            nodes.push(ui! {
-                <path d={path_d} fill={fill_color} stroke={stroke_color} stroke-width={format!("{stroke_w:.2}")} class={piece_class} />
-            });
+            nodes.push(BoardPath::new(
+                path_d,
+                fill_color,
+                stroke_color,
+                stroke_w,
+                piece_class,
+            ));
         }
 
         // Hovered, selected, or connected partner edge overlay
@@ -5891,12 +5899,16 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                 let (a_x, a_y) = p.points[edge_idx];
                 let (b_x, b_y) = p.points[(edge_idx + 1) % n_pts];
                 let seg_d = if let Some(c) = p.curves.iter().find(|c| c.edge_idx == edge_idx) {
-                    format!(
-                        "M {a_x:.2},{a_y:.2} C {:.2},{:.2} {:.2},{:.2} {b_x:.2},{b_y:.2}",
-                        c.c1.0, c.c1.1, c.c2.0, c.c2.1
-                    )
+                    vec![
+                        MoveTo(point((a_x, a_y))),
+                        CubicTo {
+                            control1: point(c.c1),
+                            control2: point(c.c2),
+                            end: point((b_x, b_y)),
+                        },
+                    ]
                 } else {
-                    format!("M {a_x:.2},{a_y:.2} L {b_x:.2},{b_y:.2}")
+                    polyline(&[(a_x, a_y), (b_x, b_y)], false)
                 };
                 let e_col = if is_primary_sel_edge {
                     accent_gold
@@ -5912,33 +5924,33 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                 } else {
                     2.4 * px
                 };
-                nodes.push(ui! {
-                    <path d={seg_d} fill="none" stroke={e_col} stroke-width={format!("{e_w:.2}")} />
-                });
+                nodes.push(BoardPath::new(seg_d, None, e_col, e_w, ""));
             }
         }
 
         // Internal lines (dashed M..L path)
-        let il_col = if is_dark { "#64748b" } else { "#94a3b8" };
+        let il_col = if is_dark {
+            Some(Color::rgb(100, 116, 139))
+        } else {
+            Some(Color::rgb(148, 163, 184))
+        };
         for line_pts in &p.internal_lines {
-            let d = dashed_path_d(line_pts, 5.0 * px, 4.0 * px);
+            let d = dashed_commands(line_pts, 5.0 * px, 4.0 * px);
             if !d.is_empty() {
-                nodes.push(ui! {
-                    <path d={d} fill="none" stroke={il_col} stroke-width={format!("{:.2}", 1.1 * px)} />
-                });
+                nodes.push(BoardPath::new(d, None, il_col, 1.1 * px, ""));
             }
         }
 
         // Holes
         for hole_pts in &p.holes {
-            let h_pts_str: String = hole_pts
-                .iter()
-                .map(|(x, y)| format!("{x:.2},{y:.2}"))
-                .collect::<Vec<_>>()
-                .join(" ");
-            nodes.push(ui! {
-                <polygon points={h_pts_str} fill={bg_color} stroke={stroke_color} stroke-width={format!("{:.2}", 1.1 * px)} />
-            });
+            let h_pts_str = polyline(hole_pts, true);
+            nodes.push(BoardPath::new(
+                h_pts_str,
+                bg_color,
+                stroke_color,
+                1.1 * px,
+                "",
+            ));
         }
 
         // Bézier Indicators, Tangent Stalks & Handles
@@ -5956,14 +5968,10 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
             } else {
                 handle_soft
             };
-            let d1 = dashed_path_d(&[(p0_x, p0_y), c.c1], 3.5 * px, 2.5 * px);
-            let d2 = dashed_path_d(&[(p3_x, p3_y), c.c2], 3.5 * px, 2.5 * px);
-            nodes.push(ui! {
-                <path d={d1} fill="none" stroke={stalk_col} stroke-width={format!("{:.2}", 1.0 * px)} />
-            });
-            nodes.push(ui! {
-                <path d={d2} fill="none" stroke={stalk_col} stroke-width={format!("{:.2}", 1.0 * px)} />
-            });
+            let d1 = dashed_commands(&[(p0_x, p0_y), c.c1], 3.5 * px, 2.5 * px);
+            let d2 = dashed_commands(&[(p3_x, p3_y), c.c2], 3.5 * px, 2.5 * px);
+            nodes.push(BoardPath::new(d1, None, stalk_col, 1.0 * px, ""));
+            nodes.push(BoardPath::new(d2, None, stalk_col, 1.0 * px, ""));
 
             let h0_active = matches!(
                 state.hovered_2d,
@@ -5989,15 +5997,31 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
             } else {
                 2.5 * px
             };
-            let h0_stroke = if h0_active { accent_gold } else { "#ffffff" };
-            let h1_stroke = if h1_active { accent_gold } else { "#ffffff" };
+            let h0_stroke = if h0_active {
+                accent_gold
+            } else {
+                Some(Color::rgb(255, 255, 255))
+            };
+            let h1_stroke = if h1_active {
+                accent_gold
+            } else {
+                Some(Color::rgb(255, 255, 255))
+            };
 
-            nodes.push(ui! {
-                <circle cx={format!("{:.2}", c.c1.0)} cy={format!("{:.2}", c.c1.1)} r={format!("{hr0:.2}")} fill={stalk_col} stroke={h0_stroke} stroke-width={format!("{:.2}", 1.1 * px)} class="bezier-handle" />
-            });
-            nodes.push(ui! {
-                <circle cx={format!("{:.2}", c.c2.0)} cy={format!("{:.2}", c.c2.1)} r={format!("{hr1:.2}")} fill={stalk_col} stroke={h1_stroke} stroke-width={format!("{:.2}", 1.1 * px)} class="bezier-handle" />
-            });
+            nodes.push(BoardPath::new(
+                circle(c.c1.0, c.c1.1, hr0),
+                stalk_col,
+                h0_stroke,
+                1.1 * px,
+                "bezier-handle",
+            ));
+            nodes.push(BoardPath::new(
+                circle(c.c2.0, c.c2.1, hr1),
+                stalk_col,
+                h1_stroke,
+                1.1 * px,
+                "bezier-handle",
+            ));
         }
 
         // Sleek Corner & Curve Anchor Indicators (with connected weld highlights)
@@ -6046,23 +6070,39 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                 )
                 .is_ok()
             {
-                nodes.push(ui! {
-                    <circle cx={format!("{pt_x:.2}")} cy={format!("{pt_y:.2}")} r={format!("{:.2}", 5.0 * px)} fill="none" stroke={accent_emerald} stroke-width={format!("{:.2}", 1.2 * px)} />
-                });
+                nodes.push(BoardPath::new(
+                    circle(pt_x, pt_y, 5.0 * px),
+                    None,
+                    accent_emerald,
+                    1.2 * px,
+                    "",
+                ));
             }
 
             if is_primary_sel_pt {
-                nodes.push(ui! {
-                    <circle cx={format!("{pt_x:.2}")} cy={format!("{pt_y:.2}")} r={format!("{:.2}", 6.4 * px)} fill="none" stroke={accent_gold} stroke-width={format!("{:.2}", 1.6 * px)} />
-                });
+                nodes.push(BoardPath::new(
+                    circle(pt_x, pt_y, 6.4 * px),
+                    None,
+                    accent_gold,
+                    1.6 * px,
+                    "",
+                ));
             } else if is_conn_sel_pt {
-                nodes.push(ui! {
-                    <circle cx={format!("{pt_x:.2}")} cy={format!("{pt_y:.2}")} r={format!("{:.2}", 6.0 * px)} fill="none" stroke={accent_emerald} stroke-width={format!("{:.2}", 1.5 * px)} />
-                });
+                nodes.push(BoardPath::new(
+                    circle(pt_x, pt_y, 6.0 * px),
+                    None,
+                    accent_emerald,
+                    1.5 * px,
+                    "",
+                ));
             } else if is_hov_pt {
-                nodes.push(ui! {
-                    <circle cx={format!("{pt_x:.2}")} cy={format!("{pt_y:.2}")} r={format!("{:.2}", 5.5 * px)} fill="none" stroke={hover_cyan} stroke-width={format!("{:.2}", 1.3 * px)} />
-                });
+                nodes.push(BoardPath::new(
+                    circle(pt_x, pt_y, 5.5 * px),
+                    None,
+                    hover_cyan,
+                    1.3 * px,
+                    "",
+                ));
             }
 
             let v_fill = if is_primary_sel_pt {
@@ -6089,9 +6129,13 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                 } else {
                     1.9 * px
                 };
-                nodes.push(ui! {
-                    <circle cx={format!("{pt_x:.2}")} cy={format!("{pt_y:.2}")} r={format!("{r:.2}")} fill={v_fill} stroke={v_stroke} stroke-width={format!("{v_sw:.2}")} class="cad-vertex" />
-                });
+                nodes.push(BoardPath::new(
+                    circle(pt_x, pt_y, r),
+                    v_fill,
+                    v_stroke,
+                    v_sw,
+                    "cad-vertex",
+                ));
             } else {
                 // Sharp G0 CAD corner indicator (crisp small square)
                 let half = if is_primary_sel_pt || is_conn_sel_pt || is_hov_pt {
@@ -6101,9 +6145,13 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                 } else {
                     1.8 * px
                 };
-                nodes.push(ui! {
-                    <rect x={format!("{:.2}", pt_x - half)} y={format!("{:.2}", pt_y - half)} width={format!("{:.2}", half * 2.0)} height={format!("{:.2}", half * 2.0)} fill={v_fill} stroke={v_stroke} stroke-width={format!("{v_sw:.2}")} class="cad-vertex" />
-                });
+                nodes.push(BoardPath::new(
+                    rectangle(pt_x - half, pt_y - half, half * 2.0, half * 2.0),
+                    v_fill,
+                    v_stroke,
+                    v_sw,
+                    "cad-vertex",
+                ));
             }
         }
 
@@ -6115,33 +6163,29 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
         let gy0 = cy - grain_len * rad.cos();
         let gx1 = cx + grain_len * rad.sin();
         let gy1 = cy + grain_len * rad.cos();
-        let g_pts = format!("{gx0:.2},{gy0:.2} {gx1:.2},{gy1:.2}");
-        nodes.push(ui! {
-            <polyline points={g_pts} fill="none" stroke={grain_color} stroke-width={format!("{:.2}", 1.2 * px)} />
-        });
+        let g_pts = polyline(&[(gx0, gy0), (gx1, gy1)], false);
+        nodes.push(BoardPath::new(g_pts, None, grain_color, 1.2 * px, ""));
         let wing = 5.0 * px;
         let w_cos = rad.cos() * wing;
         let w_sin = rad.sin() * wing;
-        let ah1 = format!(
-            "{:.2},{:.2} {gx1:.2},{gy1:.2} {:.2},{:.2}",
-            gx1 - w_sin - w_cos,
-            gy1 - w_cos + w_sin,
-            gx1 - w_sin + w_cos,
-            gy1 - w_cos - w_sin
+        let ah1 = polyline(
+            &[
+                (gx1 - w_sin - w_cos, gy1 - w_cos + w_sin),
+                (gx1, gy1),
+                (gx1 - w_sin + w_cos, gy1 - w_cos - w_sin),
+            ],
+            false,
         );
-        let ah0 = format!(
-            "{:.2},{:.2} {gx0:.2},{gy0:.2} {:.2},{:.2}",
-            gx0 + w_sin - w_cos,
-            gy0 + w_cos + w_sin,
-            gx0 + w_sin + w_cos,
-            gy0 + w_cos - w_sin
+        let ah0 = polyline(
+            &[
+                (gx0 + w_sin - w_cos, gy0 + w_cos + w_sin),
+                (gx0, gy0),
+                (gx0 + w_sin + w_cos, gy0 + w_cos - w_sin),
+            ],
+            false,
         );
-        nodes.push(ui! {
-            <polyline points={ah1} fill="none" stroke={grain_color} stroke-width={format!("{:.2}", 1.2 * px)} />
-        });
-        nodes.push(ui! {
-            <polyline points={ah0} fill="none" stroke={grain_color} stroke-width={format!("{:.2}", 1.2 * px)} />
-        });
+        nodes.push(BoardPath::new(ah1, None, grain_color, 1.2 * px, ""));
+        nodes.push(BoardPath::new(ah0, None, grain_color, 1.2 * px, ""));
 
         // Clean center crosshair
         let ch_len = 5.5 * px;
@@ -6152,12 +6196,20 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
         } else {
             grid_major
         };
-        nodes.push(ui! {
-            <polyline points={format!("{:.2},{cy:.2} {:.2},{cy:.2}", cx - ch_len, cx + ch_len)} fill="none" stroke={ch_stroke} stroke-width={format!("{:.2}", 1.0 * px)} />
-        });
-        nodes.push(ui! {
-            <polyline points={format!("{cx:.2},{:.2} {cx:.2},{:.2}", cy - ch_len, cy + ch_len)} fill="none" stroke={ch_stroke} stroke-width={format!("{:.2}", 1.0 * px)} />
-        });
+        nodes.push(BoardPath::new(
+            polyline(&[(cx - ch_len, cy), (cx + ch_len, cy)], false),
+            None,
+            ch_stroke,
+            1.0 * px,
+            "",
+        ));
+        nodes.push(BoardPath::new(
+            polyline(&[(cx, cy - ch_len), (cx, cy + ch_len)], false),
+            None,
+            ch_stroke,
+            1.0 * px,
+            "",
+        ));
     }
 
     // Welded / sewn corner link lines across connected pieces
@@ -6167,11 +6219,15 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
             panel_geos.iter().find(|g| &g.id == pid_b),
         ) && let (Some(&pa), Some(&pb)) = (ga.points.get(*pt_a), gb.points.get(*pt_b))
         {
-            let wd = dashed_path_d(&[pa, pb], 4.0 * px, 3.0 * px);
+            let wd = dashed_commands(&[pa, pb], 4.0 * px, 3.0 * px);
             if !wd.is_empty() {
-                nodes.push(ui! {
-                    <path d={wd} fill="none" stroke="rgba(250, 204, 21, 0.72)" stroke-width={format!("{:.2}", 1.4 * px)} class="weld-link" />
-                });
+                nodes.push(BoardPath::new(
+                    wd,
+                    None,
+                    Some(Color::rgba(250, 204, 21, 184)),
+                    1.4 * px,
+                    "weld-link",
+                ));
             }
         }
     }
@@ -6191,11 +6247,9 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                 .into_iter()
                 .map(|pt| to_mm(panel_to_board_pt(template, panel_idx, pt)))
                 .collect();
-            let arc_d = dashed_path_d(&arc_mm, 4.5 * px, 2.5 * px);
+            let arc_d = dashed_commands(&arc_mm, 4.5 * px, 2.5 * px);
             if !arc_d.is_empty() {
-                nodes.push(ui! {
-                    <path d={arc_d} fill="none" stroke={accent_emerald} stroke-width={format!("{:.2}", 2.4 * px)} />
-                });
+                nodes.push(BoardPath::new(arc_d, None, accent_emerald, 2.4 * px, ""));
             }
         }
         let s_mm = to_mm(panel_to_board_pt(template, panel_idx, preview.start));
@@ -6206,25 +6260,49 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
             panel_idx,
             fillet_drag_handle_local(&preview),
         ));
-        let guide_d = dashed_path_d(&[c_mm, k_mm], 3.0 * px, 2.5 * px);
+        let guide_d = dashed_commands(&[c_mm, k_mm], 3.0 * px, 2.5 * px);
         if !guide_d.is_empty() {
-            nodes.push(ui! {
-                <path d={guide_d} fill="none" stroke="rgba(16, 185, 129, 0.55)" stroke-width={format!("{:.2}", 1.0 * px)} />
-            });
+            nodes.push(BoardPath::new(
+                guide_d,
+                None,
+                Some(Color::rgba(16, 185, 129, 140)),
+                1.0 * px,
+                "",
+            ));
         }
-        nodes.push(ui! {
-            <circle cx={format!("{:.2}", s_mm.0)} cy={format!("{:.2}", s_mm.1)} r={format!("{:.2}", 2.8 * px)} fill={accent_emerald} stroke="#ffffff" stroke-width={format!("{:.2}", 0.9 * px)} />
-        });
-        nodes.push(ui! {
-            <circle cx={format!("{:.2}", e_mm.0)} cy={format!("{:.2}", e_mm.1)} r={format!("{:.2}", 2.8 * px)} fill={accent_emerald} stroke="#ffffff" stroke-width={format!("{:.2}", 0.9 * px)} />
-        });
+        nodes.push(BoardPath::new(
+            circle(s_mm.0, s_mm.1, 2.8 * px),
+            accent_emerald,
+            Some(Color::rgb(255, 255, 255)),
+            0.9 * px,
+            "",
+        ));
+        nodes.push(BoardPath::new(
+            circle(e_mm.0, e_mm.1, 2.8 * px),
+            accent_emerald,
+            Some(Color::rgb(255, 255, 255)),
+            0.9 * px,
+            "",
+        ));
         let knob_active = matches!(
             state.hovered_2d,
             Some(Hover2dTarget::CornerPreviewHandle { panel_idx: hi, .. }) if hi == panel_idx
         ) || matches!(state.drag_2d, Some(Drag2d::CornerRadius { .. }));
-        nodes.push(ui! {
-            <circle cx={format!("{:.2}", k_mm.0)} cy={format!("{:.2}", k_mm.1)} r={format!("{:.2}", if knob_active { 5.4 * px } else { 4.4 * px })} fill={accent_emerald} stroke={if knob_active { accent_gold } else { "#ffffff" }} stroke-width={format!("{:.2}", 1.4 * px)} class="bezier-handle" />
-        });
+        nodes.push(BoardPath::new(
+            circle(
+                k_mm.0,
+                k_mm.1,
+                if knob_active { 5.4 * px } else { 4.4 * px },
+            ),
+            accent_emerald,
+            if knob_active {
+                accent_gold
+            } else {
+                Some(Color::rgb(255, 255, 255))
+            },
+            1.4 * px,
+            "bezier-handle",
+        ));
     }
 
     // Seam links between actual sewn boundary midpoints
@@ -6257,11 +6335,15 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
         if let (Some(a), Some(b)) = (p_a, p_b) {
             let pt_a = edge_anchor_mm(&a.id, seam.a.edge.as_deref(), a.center);
             let pt_b = edge_anchor_mm(&b.id, seam.b.edge.as_deref(), b.center);
-            let d = dashed_path_d(&[pt_a, pt_b], 5.5 * px, 4.5 * px);
+            let d = dashed_commands(&[pt_a, pt_b], 5.5 * px, 4.5 * px);
             if !d.is_empty() {
-                nodes.push(ui! {
-                    <path d={d} fill="none" stroke="rgba(16, 185, 129, 0.55)" stroke-width={format!("{:.2}", 1.1 * px)} />
-                });
+                nodes.push(BoardPath::new(
+                    d,
+                    None,
+                    Some(Color::rgba(16, 185, 129, 140)),
+                    1.1 * px,
+                    "",
+                ));
             }
         }
     }
@@ -6286,14 +6368,16 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                     (rx, ry + rh),
                     (rx, ry),
                 ];
-                let d = dashed_path_d(&outline, 5.0 * px, 3.0 * px);
-                nodes.push(ui! {
-                    <rect x={format!("{rx:.2}")} y={format!("{ry:.2}")} width={format!("{rw:.2}")} height={format!("{rh:.2}")} fill="rgba(59, 130, 246, 0.14)" stroke="none" class="tool-draft-rect" />
-                });
+                let d = dashed_commands(&outline, 5.0 * px, 3.0 * px);
+                nodes.push(BoardPath::new(
+                    rectangle(rx, ry, rw, rh),
+                    Some(Color::rgba(59, 130, 246, 36)),
+                    None,
+                    0.0,
+                    "tool-draft-rect",
+                ));
                 if !d.is_empty() {
-                    nodes.push(ui! {
-                        <path d={d} fill="none" stroke={hover_cyan} stroke-width={format!("{:.2}", 1.8 * px)} />
-                    });
+                    nodes.push(BoardPath::new(d, None, hover_cyan, 1.8 * px, ""));
                 }
             }
             ToolDraft2d::Pen {
@@ -6306,37 +6390,39 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                     pts_mm.push(to_mm(*h));
                 }
                 if pts_mm.len() >= 2 {
-                    let pts_str: String = pts_mm
-                        .iter()
-                        .map(|(x, y)| format!("{x:.2},{y:.2}"))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    nodes.push(ui! {
-                        <polyline points={pts_str} fill="none" stroke={hover_cyan} stroke-width={format!("{:.2}", 1.8 * px)} class="tool-draft-pen" />
-                    });
+                    let pts_str = polyline(&pts_mm, false);
+                    nodes.push(BoardPath::new(
+                        pts_str,
+                        None,
+                        hover_cyan,
+                        1.8 * px,
+                        "tool-draft-pen",
+                    ));
                 }
                 for (idx, pt) in points_board_m.iter().enumerate() {
                     let (px_mm, py_mm) = to_mm(*pt);
                     let r = if idx == 0 { 4.2 * px } else { 3.0 * px };
                     let fill = if idx == 0 { accent_emerald } else { hover_cyan };
-                    nodes.push(ui! {
-                        <circle cx={format!("{px_mm:.2}")} cy={format!("{py_mm:.2}")} r={format!("{r:.2}")} fill={fill} stroke="#ffffff" stroke-width={format!("{:.2}", 1.0 * px)} />
-                    });
+                    nodes.push(BoardPath::new(
+                        circle(px_mm, py_mm, r),
+                        fill,
+                        Some(Color::rgb(255, 255, 255)),
+                        1.0 * px,
+                        "",
+                    ));
                 }
             }
             ToolDraft2d::Freehand { samples_board_m } => {
                 if samples_board_m.len() >= 2 {
-                    let pts_str: String = samples_board_m
-                        .iter()
-                        .map(|&pt| {
-                            let m = to_mm(pt);
-                            format!("{:.2},{:.2}", m.0, m.1)
-                        })
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    nodes.push(ui! {
-                        <polyline points={pts_str} fill="none" stroke={accent_gold} stroke-width={format!("{:.2}", 1.8 * px)} class="tool-draft-freehand" />
-                    });
+                    let pts_mm: Vec<_> = samples_board_m.iter().map(|&pt| to_mm(pt)).collect();
+                    let pts_str = polyline(&pts_mm, false);
+                    nodes.push(BoardPath::new(
+                        pts_str,
+                        None,
+                        accent_gold,
+                        1.8 * px,
+                        "tool-draft-freehand",
+                    ));
                 }
             }
             ToolDraft2d::Sew {
@@ -6348,16 +6434,24 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                     let (ax, ay) = pg.points[eidx];
                     let (bx, by) = pg.points[(eidx + 1) % pg.points.len()];
                     let seg_d = if let Some(c) = pg.curves.iter().find(|c| c.edge_idx == eidx) {
-                        format!(
-                            "M {ax:.2},{ay:.2} C {:.2},{:.2} {:.2},{:.2} {bx:.2},{by:.2}",
-                            c.c1.0, c.c1.1, c.c2.0, c.c2.1
-                        )
+                        vec![
+                            MoveTo(point((ax, ay))),
+                            CubicTo {
+                                control1: point(c.c1),
+                                control2: point(c.c2),
+                                end: point((bx, by)),
+                            },
+                        ]
                     } else {
-                        format!("M {ax:.2},{ay:.2} L {bx:.2},{by:.2}")
+                        polyline(&[(ax, ay), (bx, by)], false)
                     };
-                    nodes.push(ui! {
-                        <path d={seg_d} fill="none" stroke={accent_gold} stroke-width={format!("{:.2}", 3.2 * px)} class="tool-draft-sew" />
-                    });
+                    nodes.push(BoardPath::new(
+                        seg_d,
+                        None,
+                        accent_gold,
+                        3.2 * px,
+                        "tool-draft-sew",
+                    ));
                 }
             }
             ToolDraft2d::Sew { first_edge: None } => {}
@@ -6374,16 +6468,24 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                     if let Some(h) = hover_local_m {
                         pts_mm.push(to_mm(panel_to_board_pt(template, pidx, *h)));
                     }
-                    let d = dashed_path_d(&pts_mm, 4.0 * px, 3.0 * px);
+                    let d = dashed_commands(&pts_mm, 4.0 * px, 3.0 * px);
                     if !d.is_empty() {
-                        nodes.push(ui! {
-                            <path d={d} fill="none" stroke={accent_gold} stroke-width={format!("{:.2}", 1.8 * px)} class="tool-draft-internal" />
-                        });
+                        nodes.push(BoardPath::new(
+                            d,
+                            None,
+                            accent_gold,
+                            1.8 * px,
+                            "tool-draft-internal",
+                        ));
                     }
                     for &(mx, my) in &pts_mm {
-                        nodes.push(ui! {
-                            <circle cx={format!("{mx:.2}")} cy={format!("{my:.2}")} r={format!("{:.2}", 2.8 * px)} fill={accent_gold} stroke="#ffffff" stroke-width={format!("{:.2}", 0.9 * px)} />
-                        });
+                        nodes.push(BoardPath::new(
+                            circle(mx, my, 2.8 * px),
+                            accent_gold,
+                            Some(Color::rgb(255, 255, 255)),
+                            0.9 * px,
+                            "",
+                        ));
                     }
                 }
             }
@@ -6397,19 +6499,31 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
                     let am = to_mm(*a);
                     if let Some(b) = second_board_m.or(*hover_board_m) {
                         let bm = to_mm(b);
-                        let d = dashed_path_d(&[am, bm], 4.0 * px, 3.0 * px);
+                        let d = dashed_commands(&[am, bm], 4.0 * px, 3.0 * px);
                         if !d.is_empty() {
-                            nodes.push(ui! {
-                                <path d={d} fill="none" stroke={hover_cyan} stroke-width={format!("{:.2}", 2.0 * px)} class="tool-draft-measure" />
-                            });
+                            nodes.push(BoardPath::new(
+                                d,
+                                None,
+                                hover_cyan,
+                                2.0 * px,
+                                "tool-draft-measure",
+                            ));
                         }
-                        nodes.push(ui! {
-                            <circle cx={format!("{:.2}", bm.0)} cy={format!("{:.2}", bm.1)} r={format!("{:.2}", 3.5 * px)} fill={hover_cyan} stroke="#ffffff" stroke-width={format!("{:.2}", 1.0 * px)} />
-                        });
+                        nodes.push(BoardPath::new(
+                            circle(bm.0, bm.1, 3.5 * px),
+                            hover_cyan,
+                            Some(Color::rgb(255, 255, 255)),
+                            1.0 * px,
+                            "",
+                        ));
                     }
-                    nodes.push(ui! {
-                        <circle cx={format!("{:.2}", am.0)} cy={format!("{:.2}", am.1)} r={format!("{:.2}", 3.8 * px)} fill={accent_gold} stroke="#ffffff" stroke-width={format!("{:.2}", 1.1 * px)} />
-                    });
+                    nodes.push(BoardPath::new(
+                        circle(am.0, am.1, 3.8 * px),
+                        accent_gold,
+                        Some(Color::rgb(255, 255, 255)),
+                        1.1 * px,
+                        "",
+                    ));
                 }
             }
         }
@@ -6424,12 +6538,13 @@ pub fn render_runner_2d_svg(state: &CssRunnerState) -> (Vec<Node>, String) {
     {
         let lo = start_board_m.min(*current_board_m) * 1000.0;
         let size = (*current_board_m - *start_board_m).abs() * 1000.0;
-        nodes.push(ui! {
-            <rect x={format!("{:.2}", lo.x)} y={format!("{:.2}", lo.y)}
-                width={format!("{:.2}", size.x)} height={format!("{:.2}", size.y)}
-                fill="#42b9e822" stroke={hover_cyan} stroke-width={format!("{:.2}", px)}
-                class="selection-marquee" />
-        });
+        nodes.push(BoardPath::new(
+            rectangle(lo.x, lo.y, size.x, size.y),
+            Some(Color::rgba(66, 185, 232, 34)),
+            hover_cyan,
+            px,
+            "selection-marquee",
+        ));
     }
     (nodes, view_box)
 }
@@ -7058,7 +7173,7 @@ mod tests {
     }
 
     #[test]
-    fn test_2d_svg_square_bounds_and_cad_bar() {
+    fn test_2d_native_square_bounds_and_cad_bar() {
         let _guard = worker::WORKER_TEST_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -7172,12 +7287,12 @@ mod tests {
                 .find_element_bounds_by_id("#viewport-2d")
                 .expect("#viewport-2d bounds");
             let svg_bounds = app
-                .find_element_bounds_by_id("#svg-2d-board")
-                .expect("#svg-2d-board bounds");
+                .find_element_bounds_by_id("#board-2d")
+                .expect("#board-2d bounds");
             let (_canvas_rect, expected_svg) = compute_2d_viewport_rects(app.state());
             assert!(
                 (svg_bounds.width - svg_bounds.height).abs() < 1.5,
-                "rendered #svg-2d-board must be square at {w}x{h} ({mode:?}, clean={clean_view}, drawer={drawer_open}): {svg_bounds:?}"
+                "rendered #board-2d must be square at {w}x{h} ({mode:?}, clean={clean_view}, drawer={drawer_open}): {svg_bounds:?}"
             );
             assert!(
                 (svg_bounds.x - expected_svg.x).abs() < 3.0
@@ -7268,17 +7383,11 @@ mod tests {
         let mut state = CssRunnerState::new(project, scene, files, tx, latest);
         assert_eq!(state.selected_piece_index, 0);
 
-        fn count_class(nodes: &[Node], target: &str) -> usize {
+        fn count_class(nodes: &[BoardPath], target: &str) -> usize {
             nodes
                 .iter()
-                .map(|n| match n {
-                    Node::Element(el) => {
-                        usize::from(el.classes.iter().any(|c| c == target))
-                            + count_class(&el.children, target)
-                    }
-                    _ => 0,
-                })
-                .sum()
+                .filter(|p| p.class.split_whitespace().any(|c| c == target))
+                .count()
         }
 
         // 1. Click interior of panel 1 ("back") -> switches selection to panel 1
@@ -7329,7 +7438,7 @@ mod tests {
         let initial_c1 = rounded_poly.curves[&curve_name][0];
 
         // 5. Render SVG and verify Bézier curve and handle elements appear
-        let (svg_nodes, _) = render_runner_2d_svg(&state);
+        let (svg_nodes, _) = render_runner_2d_paths(&state);
         assert!(count_class(&svg_nodes, "bezier-handle") >= 2);
         assert!(count_class(&svg_nodes, "cad-vertex") >= 10);
 
@@ -7399,7 +7508,7 @@ mod tests {
         let conn = compute_connected_2d_highlight(&state);
         assert!(conn.connected_panels.contains("back"));
         assert!(conn.selected_corners.contains(&("back".into(), 3)));
-        let (sewn_svg, _) = render_runner_2d_svg(&state);
+        let (sewn_svg, _) = render_runner_2d_paths(&state);
         assert!(count_class(&sewn_svg, "connected") >= 1);
         assert!(count_class(&sewn_svg, "weld-link") >= 1);
 
@@ -7727,17 +7836,11 @@ mod tests {
         let mut state = CssRunnerState::new(project, scene, files, tx, latest);
         let initial_panels = state.project.template.panels.len();
 
-        fn count_class(nodes: &[Node], target: &str) -> usize {
+        fn count_class(nodes: &[BoardPath], target: &str) -> usize {
             nodes
                 .iter()
-                .map(|n| match n {
-                    Node::Element(el) => {
-                        usize::from(el.classes.iter().any(|c| c == target))
-                            + count_class(&el.children, target)
-                    }
-                    _ => 0,
-                })
-                .sum()
+                .filter(|p| p.class.split_whitespace().any(|c| c == target))
+                .count()
         }
 
         // 1. Rect tool: drag empty board space to create a rectangle panel
@@ -7747,7 +7850,7 @@ mod tests {
         handle_runner_event(&mut state, &pointer_move_ev(rx0, ry0));
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
         handle_runner_event(&mut state, &pointer_move_ev(rx1, ry1));
-        let (svg, _) = render_runner_2d_svg(&state);
+        let (svg, _) = render_runner_2d_paths(&state);
         assert!(count_class(&svg, "tool-draft-rect") >= 1);
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
         assert_eq!(state.project.template.panels.len(), initial_panels + 1);
@@ -7765,7 +7868,7 @@ mod tests {
             assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
             assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
         }
-        let (svg_pen, _) = render_runner_2d_svg(&state);
+        let (svg_pen, _) = render_runner_2d_paths(&state);
         assert!(count_class(&svg_pen, "tool-draft-pen") >= 1);
         assert!(handle_runner_event(
             &mut state,
@@ -7795,7 +7898,7 @@ mod tests {
             let (fx, fy) = board_to_screen_px(&state, *pt);
             handle_runner_event(&mut state, &pointer_move_ev(fx, fy));
         }
-        let (svg_free, _) = render_runner_2d_svg(&state);
+        let (svg_free, _) = render_runner_2d_paths(&state);
         assert!(count_class(&svg_free, "tool-draft-freehand") >= 1);
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
         assert_eq!(state.project.template.panels.len(), initial_panels + 3);
@@ -7809,7 +7912,7 @@ mod tests {
             assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
             assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
         }
-        let (svg_int, _) = render_runner_2d_svg(&state);
+        let (svg_int, _) = render_runner_2d_paths(&state);
         assert!(count_class(&svg_int, "tool-draft-internal") >= 1);
         assert!(handle_runner_event(
             &mut state,
@@ -7852,7 +7955,7 @@ mod tests {
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
         handle_runner_event(&mut state, &pointer_move_ev(m1x, m1y));
-        let (svg_msr, _) = render_runner_2d_svg(&state);
+        let (svg_msr, _) = render_runner_2d_paths(&state);
         assert!(count_class(&svg_msr, "tool-draft-measure") >= 1);
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
@@ -7873,7 +7976,7 @@ mod tests {
         handle_runner_event(&mut state, &pointer_move_ev(srx, sry));
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
         assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
-        let (svg_sew, _) = render_runner_2d_svg(&state);
+        let (svg_sew, _) = render_runner_2d_paths(&state);
         assert!(count_class(&svg_sew, "tool-draft-sew") >= 1);
 
         let p_pen = state.project.template.panels[initial_panels + 1]
@@ -8175,17 +8278,11 @@ mod tests {
         }
     }
 
-    fn count_class(nodes: &[Node], target: &str) -> usize {
+    fn count_class(nodes: &[BoardPath], target: &str) -> usize {
         nodes
             .iter()
-            .map(|n| match n {
-                Node::Element(el) => {
-                    usize::from(el.classes.iter().any(|c| c == target))
-                        + count_class(&el.children, target)
-                }
-                _ => 0,
-            })
-            .sum()
+            .filter(|p| p.class.split_whitespace().any(|c| c == target))
+            .count()
     }
 
     fn selection_test_state(dir: &std::path::Path) -> CssRunnerState {
@@ -8300,7 +8397,7 @@ mod tests {
         handle_runner_event(&mut state, &pointer_move_ev(end.0, end.1));
         assert!(state.selected_2d_points.is_empty());
         assert_eq!(
-            count_class(&render_runner_2d_svg(&state).0, "selection-marquee"),
+            count_class(&render_runner_2d_paths(&state).0, "selection-marquee"),
             1
         );
         // Releasing Shift before the button still completes the captured gesture.
@@ -8330,7 +8427,7 @@ mod tests {
         assert_eq!(state.selected_2d_points, selected);
         assert!(state.drag_2d.is_none());
         assert_eq!(
-            count_class(&render_runner_2d_svg(&state).0, "selection-marquee"),
+            count_class(&render_runner_2d_paths(&state).0, "selection-marquee"),
             0
         );
         state.clear_2d_subselection();
@@ -8737,7 +8834,7 @@ mod tests {
         assert!(active_fillet_previews(app.state()).is_empty());
 
         // 3. Adjust corner rounding settings while Corner Select is still active -> live fillet preview appears & updates
-        let (svg_before, _) = render_runner_2d_svg(app.state());
+        let (svg_before, _) = render_runner_2d_paths(app.state());
         apply_runner_ui_op(app.state_mut(), RunnerUiOp::AdjustCornerRadiusMm(4.0));
         assert!(app.state().corner_preview_active);
         let p_after_r = active_fillet_previews(app.state());
@@ -8747,7 +8844,7 @@ mod tests {
             "must preview both corners + sewn partners"
         );
         let c1_r14 = p_after_r[0].2.control_1;
-        let (svg_preview_r14, _) = render_runner_2d_svg(app.state());
+        let (svg_preview_r14, _) = render_runner_2d_paths(app.state());
         assert_ne!(format!("{svg_before:?}"), format!("{svg_preview_r14:?}"));
 
         apply_runner_ui_op(app.state_mut(), RunnerUiOp::AdjustCornerRadiusMm(-6.0));
