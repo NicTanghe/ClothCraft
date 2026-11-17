@@ -87,7 +87,7 @@ The long-term goal is interchangeable physics behind a stable document and autho
 | 2D patterns | Selected closed outlines from generic planar ASCII DXF and physically scaled SVG subsets | Annotated SVG preview and millimetre-scale sewing outlines with stored seam allowances and sewing-line notches when present, and a 100 mm ruler; notches are not duplicated onto cutting lines; no tiling or cutting certification |
 | Research data | — | Metrics, fiber frames and geometric grain guides |
 
-DXF-AAMA/ASTM, MTL round trips, glTF/GLB export, animated avatars, Alembic, USD, FBX, PDF printing and grading rules remain planned. Native project files from other draping software, including CLO, are not supported. Save preserves the editable document; Export writes separate interchange artifacts. See the [input/output contracts](docs/interoperability.md).
+DXF-AAMA/ASTM, MTL round trips, glTF/GLB export, animated avatars, Alembic, USD, FBX, PDF printing and grading rules remain planned. Native project files from other draping software are not supported. Save preserves the editable document; Export writes separate interchange artifacts. See the [input/output contracts](docs/interoperability.md).
 
 ## Help build it
 
@@ -136,6 +136,6 @@ This repository began as a snapshot, so its Git history does not show the origin
 
 Some authoring and camera tools were adapted from FireflyTheReal / julienfoss's fork; the [integration notes](docs/firefly-integration.md) record provenance and fixes.
 
-ClothCraft is independent of other draping software vendors, including CLO and ArtCraft. Public manuals inform workflow research; proprietary code, icons and garment examples are not included. The [manual study](docs/manual-study.md) records the references consulted.
+ClothCraft is independent of other draping software vendors and ArtCraft. Public manuals inform workflow research; proprietary code, icons and garment examples are not included. The [manual study](docs/manual-study.md) records the references consulted.
 
 The [resident WGSL performance follow-up](docs/wgsl-performance.md) records GPU-only caching/filtering changes, the unchanged CPU control, passing default-garment quality gates, and 2.1–3.3x complete-step gains. The hybrid control remains faster on the measured M1 Pro.
