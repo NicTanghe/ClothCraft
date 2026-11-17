@@ -10,6 +10,26 @@ pub(super) mod motion;
 pub(super) mod scroll;
 
 pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
+    // Native numeric text inputs own keyboard events until the next pointer press.
+    if matches!(
+        event,
+        EngineEvent::PointerButton {
+            state: cssimpler::renderer::ButtonState::Pressed,
+            ..
+        }
+    ) {
+        state.mesh_input_focus = false;
+    }
+    if let EngineEvent::Key(k) = event
+        && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into())
+        && state.mesh_draft.open
+    {
+        state.mesh_input_focus = true;
+    }
+    if state.mesh_input_focus && matches!(event, EngineEvent::Key(_)) {
+        return false;
+    }
+
     match event {
         EngineEvent::FocusChanged(false) => {
             state.last_2d_click = None;

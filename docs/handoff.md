@@ -1,5 +1,35 @@
 # Repository handoff
 
+## Native mesh preparation controls — 17 November 2026 (FC-0064)
+
+The active garment runner now exposes a collapsed Mesh preparation accordion:
+17-stop Coarse–Fine spacing, exact uniform base size, material E estimates,
+all/selected-piece scope, smooth/hard transitions, and named-path fold,
+gathering and down-fill sizing switches. Backend hints persist by path ID;
+fold rails become real temporary triangulation constraints. See
+[usage, formulas and limits](pie-resolution.md#native-mesh-controls-and-authored-feature-hints-fc-0064).
+The runner integration follows the latest modular refactor and preserves the
+Settings/zoom work. The local ticket was renumbered after fetching upstream's
+concurrent FC-0062/0063 changes.
+
+Preparation is a compile-before-install history transaction with generation/cache
+invalidation and a flat-arrangement reset. Idle worker configuration messages no
+longer masquerade as pending physics steps. Invalid numbers, missing paths,
+impossible rails and vertex budgets fail without replacing the document.
+
+Observed validation: 666 CPU tests passed, one ignored; 28 garment-runner tests
+passed, including native text editing, production-panel CPU layout, scope,
+transaction guards, undo/redo and save/load. Strict CPU all-target Clippy and
+desktop/test Clippy passed. A CPU-rendered panel preview was inspected. The final
+36 focused meshing tests and all-binary desktop compilation also passed.
+No GPU simulation or native-window acceptance, calibrated wrinkle-convergence
+benchmark or simulation-speedup claim is made. Pressure and compression values
+are mesh-sizing hints, not physical inflation/shrinkage forces. The pressure
+response is explicitly normalized and independent; it is not a literal paper
+reproduction. The 2026 r-adaptive solver is tracked separately in
+[issue #7](https://github.com/NicTanghe/ClothCraft/issues/7).
+
+
 ## Native vector board and CI cleanup — 17 November 2026 (FC-0061)
 
 PR #4 replaces the fitting board's SVG nodes/strings with native cssimpler vector

@@ -11,6 +11,7 @@ mod board;
 mod documents;
 mod editing;
 mod input;
+mod mesh_preparation;
 mod state;
 mod ui;
 

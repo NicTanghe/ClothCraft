@@ -222,6 +222,7 @@ pub struct SizingMap {
     base: [f64; 2],
     axis: f64,
     sources: Vec<Source>,
+    smooth_transitions: bool,
 }
 impl SizingMap {
     pub fn new(base: [f64; 2], axis_degrees: f64, sources: Vec<Source>) -> Result<Self, String> {
@@ -290,7 +291,18 @@ impl SizingMap {
             base,
             axis: axis_degrees.to_radians(),
             sources,
+            smooth_transitions: true,
         })
+    }
+    pub fn with_smooth_transitions(mut self, smooth: bool) -> Self {
+        self.smooth_transitions = smooth;
+        self
+    }
+    pub fn with_additional_sources(self, extra: Vec<Source>) -> Result<Self, String> {
+        let mut sources = self.sources;
+        sources.extend(extra);
+        Ok(Self::new(self.base, self.axis.to_degrees(), sources)?
+            .with_smooth_transitions(self.smooth_transitions))
     }
     pub fn base(&self) -> [f64; 2] {
         self.base
@@ -311,7 +323,14 @@ impl SizingMap {
         let mut r = self.base;
         for s in &self.sources {
             if let Some(d) = s.distance(center, radius_m) {
-                let factor = 1. + (d / s.doubling_distance_m).powf(s.exponent);
+                if !self.smooth_transitions && d > s.doubling_distance_m {
+                    continue;
+                }
+                let factor = if self.smooth_transitions {
+                    1. + (d / s.doubling_distance_m).powf(s.exponent)
+                } else {
+                    1.0
+                };
                 for (i, r) in r.iter_mut().enumerate() {
                     *r = r.min(s.spacing_m[i] * factor);
                 }

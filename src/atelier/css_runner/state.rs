@@ -4,6 +4,7 @@ use super::super::worker::{self, Latest, Work};
 use super::super::{DocumentFiles, perf};
 use super::actions::RunnerUiOp;
 use super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
+use super::mesh_preparation;
 use clothcraft::authoring::corner_tool::CIRCLE_TENSION;
 use clothcraft::authoring::{CornerRule, History};
 use clothcraft::css_ui::{Theme, ViewLayoutMode};
@@ -38,6 +39,8 @@ pub struct CssRunnerState {
     pub project: FittingProject,
     pub preview_template: Option<GarmentTemplate>,
     pub history: History,
+    pub mesh_draft: mesh_preparation::MeshDraft,
+    pub mesh_input_focus: bool,
     pub scene: FittingScene,
     pub initial_scene: FittingScene,
     pub files: DocumentFiles,
@@ -105,6 +108,7 @@ impl CssRunnerState {
     ) -> Self {
         let settings = project.simulation.clone().unwrap_or_default();
         let initial_scene = scene.clone();
+        let mesh_draft = mesh_preparation::MeshDraft::from_panel(project.template.panels.first());
         let camera = clothcraft::usd_scene::default_scene_camera(
             &scene.state.x,
             Some(&scene.collider.surface),
@@ -119,6 +123,8 @@ impl CssRunnerState {
             project,
             preview_template: None,
             history: History::default(),
+            mesh_draft,
+            mesh_input_focus: false,
             scene,
             initial_scene,
             files,
@@ -232,7 +238,7 @@ impl CssRunnerState {
             playing: self.playing,
             once,
         };
-        if self.worker_tx.send(work).is_ok() {
+        if self.worker_tx.send(work).is_ok() && (self.playing || once) {
             self.worker_pending = true;
         }
     }

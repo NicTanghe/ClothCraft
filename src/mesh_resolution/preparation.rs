@@ -23,10 +23,30 @@ pub struct PhysicsSizing {
     pub boundary_ratio: f64,
     pub transition_m: f64,
     pub seed: u64,
+    /// Multiplies estimated spacing without altering physical material properties.
+    #[serde(default = "unit_spacing_scale")]
+    pub spacing_scale: f64,
+    #[serde(default = "default_smooth_transitions")]
+    pub smooth_transitions: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<super::features::MeshFeature>,
 }
+fn default_smooth_transitions() -> bool {
+    true
+}
+fn unit_spacing_scale() -> f64 {
+    1.0
+}
+
 impl PhysicsSizing {
     pub fn validate(&self) -> Result<(), String> {
         self.base()?;
+        if self.features.len() > 32 {
+            return Err("At most 32 mesh features per panel".into());
+        }
+        for feature in &self.features {
+            feature.validate()?;
+        }
         if !self.boundary_ratio.is_finite()
             || !(0.1..=1.).contains(&self.boundary_ratio)
             || !self.transition_m.is_finite()
@@ -40,12 +60,16 @@ impl PhysicsSizing {
         Ok(())
     }
     pub fn base(&self) -> Result<[f64; 2], String> {
+        if !self.spacing_scale.is_finite() || !(0.25..=4.0).contains(&self.spacing_scale) {
+            return Err("Mesh spacing scale must be 0.25..4".into());
+        }
         Fabric {
             young_pa: self.young_pa,
             bending_nm: self.bending_nm,
             axis_degrees: self.axis_degrees,
         }
         .resolution(&Calibration::default())
+        .map(|spacing| spacing.map(|h| h * self.spacing_scale))
     }
     pub fn map(&self, paths: &[Vec<DVec2>]) -> Result<SizingMap, String> {
         self.validate()?;
@@ -65,7 +89,8 @@ impl PhysicsSizing {
         } else {
             vec![]
         };
-        SizingMap::new(base, self.axis_degrees, sources)
+        Ok(SizingMap::new(base, self.axis_degrees, sources)?
+            .with_smooth_transitions(self.smooth_transitions))
     }
 }
 
@@ -108,6 +133,9 @@ pub fn configure(
                 boundary_ratio,
                 transition_m,
                 seed: 42,
+                spacing_scale: 1.0,
+                smooth_transitions: true,
+                features: vec![],
             };
             plan.validate()?;
             Some(plan)
@@ -127,6 +155,30 @@ pub fn triangulate(
     settings: &MeshingSettings,
     plan: &PhysicsSizing,
 ) -> Result<TriangulatedContour, String> {
+    let mut named = BTreeMap::new();
+    for (i, name) in names.iter().enumerate() {
+        if i < points.len() {
+            named.insert(
+                name.clone(),
+                vec![points[i], points[(i + 1) % points.len()]],
+            );
+        }
+    }
+    triangulate_with_paths(points, names, holes, lines, settings, plan, &named)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn triangulate_with_paths(
+    points: &[DVec2],
+    names: &[String],
+    holes: &[Hole],
+    lines: &[InternalLine],
+    settings: &MeshingSettings,
+    plan: &PhysicsSizing,
+    named_paths: &BTreeMap<String, Vec<DVec2>>,
+) -> Result<TriangulatedContour, String> {
+    settings.validate()?;
+    plan.validate()?;
     if points.len() != names.len() {
         return Err("Mismatched prepared boundary names".into());
     }
@@ -151,7 +203,7 @@ pub fn triangulate(
         .iter()
         .map(|l| Ok((l.id.clone(), l.samples()?)))
         .collect::<Result<_, String>>()?;
-    let domain = Domain {
+    let mut domain = Domain {
         outer: Ring {
             points: points.to_vec(),
             edges: safe.clone(),
@@ -165,6 +217,7 @@ pub fn triangulate(
             .collect(),
         lines: line_paths,
     };
+    domain.validate()?;
     let closed = |p: &[DVec2]| {
         let mut p = p.to_vec();
         p.push(p[0]);
@@ -173,7 +226,18 @@ pub fn triangulate(
     let mut paths = vec![closed(points)];
     paths.extend(holes.iter().map(|h| closed(&h.points)));
     paths.extend(domain.lines.values().cloned());
-    let map = plan.map(&paths)?;
+    let mut named = named_paths.clone();
+    named.extend(domain.lines.clone());
+    for hole in holes {
+        for (i, name) in hole.edges.iter().enumerate() {
+            named.insert(
+                name.clone(),
+                vec![hole.points[i], hole.points[(i + 1) % hole.points.len()]],
+            );
+        }
+    }
+    let extra = super::features::resolve(plan, &named, &mut domain)?;
+    let map = plan.map(&paths)?.with_additional_sources(extra)?;
     let options = Options {
         seed: plan.seed,
         max_vertices: settings.max_vertices,
