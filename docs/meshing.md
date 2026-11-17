@@ -66,3 +66,9 @@ Project v1 accepts an optional `physics_sizing` plan, omitted when absent.
 Its rectangle compiles through `PolygonPattern::build`, then receives the
 original scene placement and hanging corner pins. Clearing the plan restores
 the historical structured grid. The solver never changes topology while stepping.
+
+## Static feature-aware preparation
+
+The native garment window exposes Coarse–Fine spacing, transitions and authored
+fold/gathering/down-fill sizing hints. See [controls, formulas and limits](pie-resolution.md#native-mesh-controls-and-authored-feature-hints-fc-0064).
+Hints change mesh preparation, not material geometry or simulation forces.

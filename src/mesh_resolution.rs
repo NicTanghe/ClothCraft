@@ -1,5 +1,6 @@
 //! Independent, opt-in static sizing research. No solver or document mutation.
 pub mod artifacts;
+pub mod features;
 pub mod mesh;
 pub mod preparation;
 pub mod sizing;

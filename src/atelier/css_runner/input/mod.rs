@@ -17,6 +17,26 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
     if number::handle_number_event(state, event) {
         return true;
     }
+    // Native numeric text inputs own keyboard events until the next pointer press.
+    if matches!(
+        event,
+        EngineEvent::PointerButton {
+            state: cssimpler::renderer::ButtonState::Pressed,
+            ..
+        }
+    ) {
+        state.mesh_input_focus = false;
+    }
+    if let EngineEvent::Key(k) = event
+        && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into())
+        && state.mesh_draft.open
+    {
+        state.mesh_input_focus = true;
+    }
+    if state.mesh_input_focus && matches!(event, EngineEvent::Key(_)) {
+        return false;
+    }
+
     // Tab enters the native input cycle; preserve keyboard ownership there.
     if matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into()))
     {

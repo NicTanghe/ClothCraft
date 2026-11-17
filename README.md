@@ -139,3 +139,7 @@ Some authoring and camera tools were adapted from FireflyTheReal / julienfoss's 
 ClothCraft is independent of other draping software vendors and ArtCraft. Public manuals inform workflow research; proprietary code, icons and garment examples are not included. The [manual study](docs/manual-study.md) records the references consulted.
 
 The [resident WGSL performance follow-up](docs/wgsl-performance.md) records GPU-only caching/filtering changes, the unchanged CPU control, passing default-garment quality gates, and 2.1–3.3x complete-step gains. The hybrid control remains faster on the measured M1 Pro.
+
+The garment window also exposes **Mesh preparation** with a Coarse–Fine slider,
+smooth transitions and named-path fold, gathering and down-fill sizing controls.
+See [usage and limits](docs/pie-resolution.md#native-mesh-controls-and-authored-feature-hints-fc-0064). Applying prepares a static rest mesh and resets the drape.
