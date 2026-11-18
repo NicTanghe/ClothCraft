@@ -53,7 +53,7 @@ pub(in super::super) fn build_runner_3d_rail(state: &CssRunnerState) -> Node {
                 {icon_grab()}
                 <span class="tool-label">"Grab"</span>
             </button>
-            <button class={sew3d_class} onclick_shared={queue_action(&state.actions, RunnerAction::ToolSew3d)} title="3D Segment Sewing (N)">
+            <button id="tool-sew-3d" class={sew3d_class} onclick_shared={queue_action(&state.actions, RunnerAction::ToolSew3d)} title="3D Segment Sewing (N)">
                 {icon_sew_3d()}
                 <span class="tool-label">"3D Sew"</span>
             </button>
@@ -160,7 +160,7 @@ pub(in super::super) fn build_runner_2d_rail(state: &CssRunnerState) -> Node {
                 {icon_freehand_2d()}
                 <span class="tool-label">"Free"</span>
             </button>
-            <button class={sew_class} onclick_shared={queue_action(&state.actions, RunnerAction::ToolSew2d)} title="Sew Seams (B)">
+            <button id="tool-sew-2d" class={sew_class} onclick_shared={queue_action(&state.actions, RunnerAction::ToolSew2d)} title="Sew Seams (B)">
                 {icon_sew_2d()}
                 <span class="tool-label">"Sew"</span>
             </button>

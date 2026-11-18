@@ -190,8 +190,7 @@ pub fn icon_grab() -> Node {
 pub fn icon_sew_3d() -> Node {
     ui! {
         <svg viewBox="0 0 24 24" class="icon tool-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="5" y1="4" x2="5" y2="20" stroke-width="2.5" />
-            <line x1="19" y1="4" x2="19" y2="20" stroke-width="2.5" />
+            <path d="M5 4v16M19 4v16" stroke-width="2.5" />
             <path d="M5 8l14 3M5 12l14 3M5 16l14 3" stroke-width="1.8" />
         </svg>
     }
@@ -298,11 +297,8 @@ pub fn icon_freehand_2d() -> Node {
 pub fn icon_sew_2d() -> Node {
     ui! {
         <svg viewBox="0 0 24 24" class="icon tool-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="5" y1="4" x2="5" y2="20" stroke-width="2.5" />
-            <line x1="19" y1="4" x2="19" y2="20" stroke-width="2.5" />
-            <line x1="5" y1="8" x2="19" y2="8" stroke-width="1.8" stroke-dasharray="3,2" />
-            <line x1="5" y1="12" x2="19" y2="12" stroke-width="1.8" stroke-dasharray="3,2" />
-            <line x1="5" y1="16" x2="19" y2="16" stroke-width="1.8" stroke-dasharray="3,2" />
+            <path d="M5 4v16M19 4v16" stroke-width="2.5" />
+            <path d="M5 8h2m4 0h2m4 0h2M5 12h2m4 0h2m4 0h2M5 16h2m4 0h2m4 0h2" stroke-width="1.8" />
         </svg>
     }
 }

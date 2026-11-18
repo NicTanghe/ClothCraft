@@ -514,6 +514,21 @@ fn test_all_runner_buttons_click_and_layout_bounds() {
         }
         let root = find_node(roots, container_id)
             .unwrap_or_else(|| panic!("missing container #{container_id}"));
+        let sew_button = match container_id {
+            "rail-2d" => Some("tool-sew-2d"),
+            "rail-3d" => Some("tool-sew-3d"),
+            _ => None,
+        };
+        if let Some(id) = sew_button {
+            let button = find_node(&root.children, id).expect("missing Sew button");
+            assert!(
+                button.children.iter().any(|child| {
+                    matches!(&child.kind, cssimpler::core::RenderKind::Svg(scene)
+                        if scene.paths.len() == 2 && scene.bounds.is_some())
+                }),
+                "expected visible edge and stitch paths inside #{id}"
+            );
+        }
         let mut btns = Vec::new();
         collect_clickable(root, &mut btns);
         assert!(
