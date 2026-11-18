@@ -11,6 +11,7 @@ pub mod export;
 pub mod freehand;
 pub mod graphics;
 pub mod markings;
+pub(crate) mod measurement_tracking;
 pub mod meshing;
 pub mod pins;
 pub mod polygon;

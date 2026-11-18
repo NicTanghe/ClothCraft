@@ -22,11 +22,15 @@ an edge remaps its station to the correct child and can incur another rounding
 step. Older fractional stations and curved-edge arclength stations retain
 their original representation.
 
-Interior picks store three named contour corners of that piece and dimensionless
-barycentric weights. The point follows the corners through translation, rotation,
-scaling and shear, independent of board layout and simulation mesh density.
-A local reshape follows the three chosen corners. An edit that destroys the
-reference frame can require removing or redefining the measurement.
+Interior picks store three authored contour corners and dimensionless barycentric
+weights. When a corner moves or disappears, the ruler looks for three surviving
+corners enclosing the mark that kept their relative positions. When available,
+they carry the mark through the edit, including any shift of the panel's local
+origin. Otherwise the mark follows its existing material triangle or a triangle
+of surviving corners. The ruler can then select a new local triangle and compute
+fresh weights at the resulting position. Scaling or shearing the entire piece
+carries the mark with it. An edit that removes the material beneath a mark or
+leaves no usable reference frame can require redefining the measurement.
 
 ![ClothCraft workspace](docs/screenshots/workspace.png)
 

@@ -1383,10 +1383,11 @@ fn remove_point_inner(
         [&incoming, &outgoing].iter().any(|name| {
             polygon.seam_allowances.contains_key(*name)
                 || polygon.notches.contains_key(*name)
-                || polygon
-                    .measurements
-                    .iter()
-                    .any(|m| m.a.uses_edge(name) || m.b.uses_edge(name))
+                || polygon.measurements.iter().any(|m| {
+                    [&m.a, &m.b]
+                        .iter()
+                        .any(|a| a.station().is_some_and(|(e, _)| e == name.as_str()))
+                })
         })
     }) {
         return Err(
@@ -2788,6 +2789,21 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
         }
     }
     linked::synchronize(source, &mut template)?;
+    for panel in &mut template.panels {
+        if mirrored_trim_panel.as_ref() == Some(&panel.id) {
+            continue;
+        }
+        if let Some(new) = &mut panel.polygon
+            && !new.measurements.is_empty()
+            && let Some(old) = source
+                .panels
+                .iter()
+                .find(|p| p.id == panel.id)
+                .and_then(|p| p.polygon.as_ref())
+        {
+            crate::garment::measurement_tracking::rebind(old, new)?;
+        }
+    }
     // Placement coordinates refer to the existing material frame. Until topology
     // remapping exists, reject edits that change that frame rather than shifting
     // artwork silently. Meshing density and length specifications do not change it.

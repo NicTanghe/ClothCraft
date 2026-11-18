@@ -177,6 +177,9 @@ impl PolygonPattern {
         if !point.is_finite() {
             return None;
         }
+        if let Some(anchor) = super::measurement_tracking::containing_anchor(self, point) {
+            return Some(anchor);
+        }
         let mut order: Vec<_> = (0..self.points.len()).collect();
         order.sort_by(|&a, &b| {
             self.points[a]

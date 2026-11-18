@@ -535,3 +535,88 @@ fn collapsing_a_barycentric_reference_triangle_is_rejected() {
     }
     assert!(p.measurement_anchor_position(&anchor).is_err());
 }
+
+fn interior_reference_fixture(point: DVec2) -> GarmentTemplate {
+    use clothcraft::garment::polygon::Corner;
+    let t = fixture();
+    let mut m = record();
+    let u = point.x / 0.4;
+    let v = point.y / 0.3;
+    m.a = MeasurementAnchor::Barycentric {
+        vertices: Box::new(["edge_1", "edge_2", "edge_3"].map(|edge| Corner {
+            edge: edge.into(),
+            end: false,
+        })),
+        weights: [1. - u, u - v, v],
+    };
+    set(&t, m).template
+}
+
+#[test]
+fn moving_or_deleting_a_reference_rebinds_without_moving_the_mark() {
+    let t = interior_reference_fixture(DVec2::new(0.24, 0.13));
+    let expected = positions(&t);
+    let panel = &t.panels[0];
+    let mut changed = panel.polygon.clone().unwrap();
+    changed.points[0].x -= 0.04;
+    for command in [
+        Command::Shape {
+            panel: panel.id.clone(),
+            polygon: changed,
+        },
+        Command::RemovePoint {
+            panel: panel.id.clone(),
+            point: 0,
+        },
+    ] {
+        let edited = authoring::apply(&t, command).unwrap().template;
+        let actual = positions(&edited);
+        assert!(actual[0].distance(expected[0]) < 1e-12);
+        let anchor = &edited.panels[0].polygon.as_ref().unwrap().measurements[0].a;
+        assert!(!anchor.uses_edge("edge_1"));
+        let restored: GarmentTemplate =
+            serde_json::from_slice(&serde_json::to_vec(&edited).unwrap()).unwrap();
+        assert!(positions(&restored)[0].distance(expected[0]) < 1e-12);
+    }
+}
+
+#[test]
+fn losing_the_material_under_a_mark_rejects_the_edit() {
+    let t = interior_reference_fixture(DVec2::new(0.04, 0.02));
+    assert!(
+        authoring::apply(
+            &t,
+            Command::RemovePoint {
+                panel: t.panels[0].id.clone(),
+                point: 0
+            }
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn rebinding_preserves_panel_wide_affine_deformation() {
+    let point = DVec2::new(0.24, 0.13);
+    let t = interior_reference_fixture(point);
+    let panel = &t.panels[0];
+    let mut changed = panel.polygon.clone().unwrap();
+    let transform = |p: DVec2| DVec2::new(1.5 * p.x + 0.4 * p.y, 0.75 * p.y);
+    for p in &mut changed.points {
+        *p = transform(*p);
+    }
+    let edited = authoring::apply(
+        &t,
+        Command::Shape {
+            panel: panel.id.clone(),
+            polygon: changed,
+        },
+    )
+    .unwrap()
+    .template;
+    let poly = edited.panels[0].polygon.as_ref().unwrap();
+    assert!(
+        poly.measurement_points(&poly.measurements[0]).unwrap()[0].distance(transform(point))
+            < 1e-12
+    );
+}
