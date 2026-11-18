@@ -260,11 +260,11 @@ mod measurement_resolution {
         PatternMeasurement {
             id: "width".into(),
             label: "Width".into(),
-            a: MeasurementAnchor {
+            a: MeasurementAnchor::Station {
                 edge: "edge_1".into(),
                 t: 0.25,
             },
-            b: MeasurementAnchor {
+            b: MeasurementAnchor::Station {
                 edge: "edge_3".into(),
                 t: 0.75,
             },
@@ -285,7 +285,7 @@ mod measurement_resolution {
             .unwrap();
         for (t, expected) in [(0., DVec2::ZERO), (1., DVec2::new(0.4, 0.))] {
             let actual = polygon
-                .measurement_anchor_position(&MeasurementAnchor {
+                .measurement_anchor_position(&MeasurementAnchor::Station {
                     edge: "edge_1".into(),
                     t,
                 })
@@ -300,7 +300,7 @@ mod measurement_resolution {
         let polygon = template.panels[0].polygon.as_mut().unwrap();
         let control = [DVec2::new(0.02, -0.18), DVec2::new(0.32, -0.04)];
         polygon.curves.insert("edge_1".into(), control);
-        let station = MeasurementAnchor {
+        let station = MeasurementAnchor::Station {
             edge: "edge_1".into(),
             t: 0.37,
         };
@@ -316,7 +316,7 @@ mod measurement_resolution {
         };
         let points: Vec<_> = (0..=20_000).map(|i| evaluate(i as f64 / 20_000.)).collect();
         let total: f64 = points.windows(2).map(|p| p[0].distance(p[1])).sum();
-        let wanted = station.t * total;
+        let wanted = station.station().unwrap().1 * total;
         let mut walked = 0.;
         let expected = points
             .windows(2)
@@ -334,7 +334,7 @@ mod measurement_resolution {
             actual.distance(expected)
         );
         assert!(
-            actual.distance(evaluate(station.t)) > 0.001,
+            actual.distance(evaluate(station.station().unwrap().1)) > 0.001,
             "fixture must distinguish arclength from cubic parameter"
         );
     }
@@ -345,7 +345,10 @@ mod measurement_resolution {
         let polygon = template.panels[0].polygon.as_ref().unwrap();
         for t in [f64::NAN, f64::INFINITY, -0.01, 1.01] {
             let mut measurement = measurement();
-            measurement.a.t = t;
+            measurement.a = MeasurementAnchor::Station {
+                edge: "edge_1".into(),
+                t,
+            };
             assert!(
                 polygon
                     .validate_measurement_records(&[measurement])
@@ -353,7 +356,10 @@ mod measurement_resolution {
             );
         }
         let mut dangling = measurement();
-        dangling.a.edge = "deleted".into();
+        dangling.a = MeasurementAnchor::Station {
+            edge: "deleted".into(),
+            t: 0.25,
+        };
         assert!(polygon.validate_measurement_records(&[dangling]).is_err());
         assert!(
             polygon

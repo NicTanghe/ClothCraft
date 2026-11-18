@@ -848,6 +848,23 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
         }
     }
 
+    if state.active_2d_tool == "Measure" {
+        for (idx, panel) in template.panels.iter().enumerate() {
+            let Some(poly) = &panel.polygon else { continue };
+            for measurement in &poly.measurements {
+                if let Ok(points) = poly.measurement_points(measurement) {
+                    let ends = points.map(|p| to_mm(panel_to_board_pt(template, idx, p)));
+                    nodes.push(BoardPath::new(
+                        polyline(&ends, false),
+                        None,
+                        hover_cyan,
+                        2. * px,
+                        "",
+                    ));
+                }
+            }
+        }
+    }
     // Active 2D tool draft overlays (Rect, Pen, Freehand, InternalLine, Measure, Sew)
     if let Some(ref draft) = state.draft_2d {
         match draft {
@@ -990,14 +1007,22 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
                 }
             }
             ToolDraft2d::Measure {
-                first_board_m,
-                second_board_m,
+                panel_id,
+                first,
                 hover_board_m,
-                ..
             } => {
-                if let Some(a) = first_board_m {
-                    let am = to_mm(*a);
-                    if let Some(b) = second_board_m.or(*hover_board_m) {
+                if let Some((idx, panel)) = template
+                    .panels
+                    .iter()
+                    .enumerate()
+                    .find(|(_, p)| &p.id == panel_id)
+                    && let Some(a) = panel
+                        .polygon
+                        .as_ref()
+                        .and_then(|p| p.measurement_anchor_position(first).ok())
+                {
+                    let am = to_mm(panel_to_board_pt(template, idx, a));
+                    if let Some(b) = *hover_board_m {
                         let bm = to_mm(b);
                         let d = dashed_commands(&[am, bm], 4.0 * px, 3.0 * px);
                         if !d.is_empty() {

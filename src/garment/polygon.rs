@@ -6,15 +6,59 @@ use glam::{DMat2, DVec2};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// A station on one stable named boundary, measured by sampled material
-/// arclength. Endpoints are included; this is neither a cubic parameter nor a
-/// persistent mesh index. The schema follows Mikyle Couto's proposal in PR #66;
-/// resolution and validation below are independently implemented on current main.
+/// Persistent material attachment. The fractional station format follows
+/// Mikyle Couto's proposal in PR #66. All variants reference authored geometry.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct MeasurementAnchor {
+#[serde(untagged)]
+pub enum MeasurementAnchor {
+    Station {
+        edge: String,
+        t: f64,
+    },
+    Fixed {
+        edge: String,
+        code: u16,
+        bits: u8,
+    },
+    Barycentric {
+        vertices: Box<[Corner; 3]>,
+        weights: [f64; 3],
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Corner {
     pub edge: String,
-    pub t: f64,
+    pub end: bool,
+}
+
+impl MeasurementAnchor {
+    pub fn station(&self) -> Option<(&str, f64)> {
+        match self {
+            Self::Station { edge, t } => Some((edge, *t)),
+            Self::Fixed { edge, code, bits } if matches!(bits, 8 | 10 | 16) => {
+                Some((edge, f64::from(*code) / f64::from((1u32 << bits) - 1)))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn fixed(edge: String, t: f64, bits: u8) -> Result<Self, String> {
+        if !matches!(bits, 8 | 10 | 16) || !(0. ..=1.).contains(&t) {
+            return Err("Invalid measurement station or precision".into());
+        }
+        let code = (t * f64::from((1u32 << bits) - 1)).round() as u16;
+        Ok(Self::Fixed { edge, code, bits })
+    }
+
+    pub fn uses_edge(&self, name: &str) -> bool {
+        match self {
+            Self::Barycentric { vertices, .. } => vertices.iter().any(|v| v.edge == name),
+            _ => self.station().is_some_and(|(edge, _)| edge == name),
+        }
+    }
 }
 
 /// A named straight-line distance between two stations on the same panel in
@@ -118,13 +162,75 @@ fn intersects(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
     }
     cross(a, b, c) * cross(a, b, d) <= eps * eps && cross(c, d, a) * cross(c, d, b) <= eps * eps
 }
+fn valid_frame([a, b, c]: [DVec2; 3]) -> bool {
+    let scale = a
+        .distance_squared(b)
+        .max(b.distance_squared(c))
+        .max(c.distance_squared(a));
+    (b - a).perp_dot(c - a).abs() > 1e-8 * scale
+}
+
 impl PolygonPattern {
+    /// Choose nearby authored corners, skipping nearly collinear frames.
+    pub fn interior_anchor(&self, point: DVec2) -> Option<MeasurementAnchor> {
+        self.validate_outer_structure().ok()?;
+        if !point.is_finite() {
+            return None;
+        }
+        if let Some(anchor) = super::measurement_tracking::containing_anchor(self, point) {
+            return Some(anchor);
+        }
+        let mut order: Vec<_> = (0..self.points.len()).collect();
+        order.sort_by(|&a, &b| {
+            self.points[a]
+                .distance_squared(point)
+                .total_cmp(&self.points[b].distance_squared(point))
+        });
+        let (&i, rest) = order.split_first()?;
+        let (&j, rest) = rest.split_first()?;
+        let a = self.points[i];
+        let b = self.points[j];
+        let &k = rest
+            .iter()
+            .find(|&&k| valid_frame([a, b, self.points[k]]))?;
+        let c = self.points[k];
+        let det = (b - a).perp_dot(c - a);
+        let u = (point - a).perp_dot(c - a) / det;
+        let v = (b - a).perp_dot(point - a) / det;
+        Some(MeasurementAnchor::Barycentric {
+            vertices: Box::new([i, j, k].map(|idx| Corner {
+                edge: self.edges[idx].clone(),
+                end: false,
+            })),
+            weights: [1. - u - v, u, v],
+        })
+    }
+
     /// Resolve a station using the current authored material boundary. Internal
     /// lines are permitted; their direction, unlike a closed contour's, is not
     /// reversed by a mirror. Malformed or ambiguous boundaries fail explicitly.
     pub fn measurement_anchor_position(&self, anchor: &MeasurementAnchor) -> Result<DVec2, String> {
         self.validate_outer_structure()?;
-        if !anchor.t.is_finite() || !(0. ..=1.).contains(&anchor.t) {
+        if let MeasurementAnchor::Barycentric { vertices, weights } = anchor {
+            let mut p = [DVec2::ZERO; 3];
+            for (i, v) in vertices.iter().enumerate() {
+                let j = self
+                    .edges
+                    .iter()
+                    .position(|edge| edge == &v.edge)
+                    .ok_or("Missing measurement corner")?;
+                p[i] = self.points[(j + usize::from(v.end)) % self.points.len()];
+            }
+            if !valid_frame(p)
+                || weights.iter().any(|w| !w.is_finite())
+                || (weights.iter().sum::<f64>() - 1.).abs() > 1e-10
+            {
+                return Err("Invalid barycentric measurement frame".into());
+            }
+            return Ok(p[0] + (p[1] - p[0]) * weights[1] + (p[2] - p[0]) * weights[2]);
+        }
+        let (edge, t) = anchor.station().ok_or("Invalid measurement precision")?;
+        if !t.is_finite() || !(0. ..=1.).contains(&t) {
             return Err("Measurement station must be a finite fraction in [0, 1]".into());
         }
         let occurrences = self
@@ -132,17 +238,17 @@ impl PolygonPattern {
             .iter()
             .chain(self.holes.iter().flat_map(|hole| &hole.edges))
             .chain(self.lines.iter().map(|line| &line.id))
-            .filter(|name| *name == &anchor.edge)
+            .filter(|name| name.as_str() == edge)
             .count();
         if occurrences != 1 {
             return Err(format!(
                 "Measurement references missing or ambiguous boundary {}",
-                anchor.edge
+                edge
             ));
         }
         let points = self
-            .named_boundary(&anchor.edge)
-            .ok_or_else(|| format!("Invalid measurement boundary {}", anchor.edge))?;
+            .named_boundary(edge)
+            .ok_or_else(|| format!("Invalid measurement boundary {}", edge))?;
         if points.len() < 2 || points.iter().any(|point| !point.is_finite()) {
             return Err("Measurement boundary requires finite material points".into());
         }
@@ -153,7 +259,7 @@ impl PolygonPattern {
         if !total.is_finite() || total <= 0. {
             return Err("Measurement boundary has no finite positive length".into());
         }
-        let mut remaining = total * anchor.t;
+        let mut remaining = total * t;
         for pair in points.windows(2) {
             let length = pair[0].distance(pair[1]);
             if length == 0. {
@@ -199,7 +305,7 @@ impl PolygonPattern {
         if !point.is_finite() {
             return Err("Measurement point must be finite".into());
         }
-        self.measurement_anchor_position(&MeasurementAnchor {
+        self.measurement_anchor_position(&MeasurementAnchor::Station {
             edge: edge.into(),
             t: 0.,
         })?;
@@ -226,7 +332,7 @@ impl PolygonPattern {
             return Err("Measurement projection has no finite result".into());
         }
         Ok((
-            MeasurementAnchor {
+            MeasurementAnchor::Station {
                 edge: edge.into(),
                 t: best.1.clamp(0., 1.),
             },

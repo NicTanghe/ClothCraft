@@ -74,6 +74,27 @@ pub(super) fn split_measurement_anchor(
     at_m: f64,
     length: f64,
 ) -> Result<crate::garment::polygon::MeasurementAnchor, String> {
+    let (edge, t) = anchor.station().ok_or("Expected a boundary station")?;
+    if !old.curves.contains_key(edge) {
+        // Partition the original directed interval exactly before quantizing once.
+        let distance = t * length;
+        let (child, fraction) = if distance < at_m {
+            (children[0], distance / at_m)
+        } else {
+            (children[1], (distance - at_m) / (length - at_m))
+        };
+        let fraction = fraction.clamp(0., 1.);
+        use crate::garment::polygon::MeasurementAnchor;
+        return Ok(match anchor {
+            MeasurementAnchor::Fixed { bits, .. } => {
+                MeasurementAnchor::fixed(child.into(), fraction, *bits)?
+            }
+            _ => MeasurementAnchor::Station {
+                edge: child.into(),
+                t: fraction,
+            },
+        });
+    }
     let point = old.measurement_anchor_position(anchor)?;
     let before = landmarks(old)?;
     // SplitBoundary retains all old vertices and controls, with an inserted
@@ -89,7 +110,7 @@ pub(super) fn split_measurement_anchor(
         let error = landmark_error(point, position, before, after)?.max(distance);
         candidates.push((station, error));
     }
-    let slot = usize::from(anchor.t * length >= at_m);
+    let slot = usize::from(anchor.station().ok_or("Expected boundary station")?.1 * length >= at_m);
     let tolerance = 2. * curves::FLATNESS_M + 1e-10;
     if candidates[slot].1 > tolerance {
         return Err(
@@ -102,7 +123,12 @@ pub(super) fn split_measurement_anchor(
     if candidates[1 - slot].1 + tolerance < candidates[slot].1 {
         return Err("Ambiguous measurement child mapping; edit cancelled".into());
     }
-    Ok(candidates.swap_remove(slot).0)
+    let station = candidates.swap_remove(slot).0;
+    if let crate::garment::polygon::MeasurementAnchor::Fixed { bits, .. } = anchor {
+        let (edge, t) = station.station().ok_or("Expected child station")?;
+        return crate::garment::polygon::MeasurementAnchor::fixed(edge.into(), t, *bits);
+    }
+    Ok(station)
 }
 
 pub(super) fn add_polygon(

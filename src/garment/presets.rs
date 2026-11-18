@@ -158,6 +158,7 @@ pub fn basic(kind: GarmentKind, subdivisions: u32) -> GarmentTemplate {
         })
         .collect();
     GarmentTemplate {
+        measurement_bits: Some(8),
         format: "clothcraft-template".into(),
         mirror_links: vec![],
         pin_targets: vec![],

@@ -50,6 +50,25 @@ pub(in super::super) fn handle_motion(state: &mut CssRunnerState, event: &Engine
                     } else {
                         None
                     };
+                let measurement_hover =
+                    if let Some(ToolDraft2d::Measure { panel_id, .. }) = &state.draft_2d {
+                        let (_, _, span, _) = compute_2d_view_box_m(state);
+                        let tolerance =
+                            12. * span / f64::from(compute_2d_viewport_rect(state).w.max(1.));
+                        clamped_b
+                            .and_then(|board| {
+                                super::super::board::hit_testing::measurement_pick(
+                                    &state.project.template,
+                                    board,
+                                    tolerance,
+                                    state.selected_piece_index,
+                                    Some(panel_id),
+                                )
+                            })
+                            .map(|(_, _, board)| board)
+                    } else {
+                        None
+                    };
                 match state.draft_2d.as_mut() {
                     Some(ToolDraft2d::Rect {
                         current_board_m, ..
@@ -77,12 +96,8 @@ pub(in super::super) fn handle_motion(state: &mut CssRunnerState, event: &Engine
                         *hover_local_m = internal_next_local;
                         return true;
                     }
-                    Some(ToolDraft2d::Measure {
-                        second_board_m: None,
-                        hover_board_m,
-                        ..
-                    }) => {
-                        *hover_board_m = clamped_b;
+                    Some(ToolDraft2d::Measure { hover_board_m, .. }) => {
+                        *hover_board_m = measurement_hover;
                         return true;
                     }
                     _ => {}
