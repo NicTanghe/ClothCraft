@@ -80,6 +80,7 @@ pub(super) fn install_authoring_edit(
                 usd,
                 &state.scene.garment,
                 &state.scene.state,
+                state.shading,
             );
         }
         state.send_control_state(false);

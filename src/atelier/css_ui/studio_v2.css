@@ -1057,6 +1057,13 @@ button {
   border-color: var(--accent);
 }
 
+.viewport-tool-btn.active {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
 .viewport-hud {
   position: absolute;
   top: 38px;
