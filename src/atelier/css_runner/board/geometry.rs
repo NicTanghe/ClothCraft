@@ -5,6 +5,7 @@ use super::types::Rect2d;
 use clothcraft::authoring;
 use clothcraft::css_ui::ViewLayoutMode;
 use clothcraft::garment::GarmentTemplate;
+use clothcraft::garment::curves::cubic;
 use clothcraft::garment::polygon::PolygonPattern;
 use clothcraft::garment::template::Panel;
 use glam::DVec2;
@@ -140,47 +141,72 @@ pub(in super::super) fn board_to_panel_pt(
     authoring::rotate_2d(board - origin, -rot)
 }
 
+/// Bounds of the cubic itself, invariant under subdivision of its control polygon.
+fn cubic_bounds(p: [DVec2; 4]) -> (DVec2, DVec2) {
+    let mut min = p[0].min(p[3]);
+    let mut max = p[0].max(p[3]);
+    let [d0, d1, d2] = [p[1] - p[0], p[2] - p[1], p[3] - p[2]];
+    for axis in 0..2 {
+        // The coordinate derivative divided by three is a*t² + b*t + c.
+        let a = (d0 - 2.0 * d1 + d2)[axis];
+        let b = (2.0 * (d1 - d0))[axis];
+        let c = d0[axis];
+        let roots = if a == 0.0 {
+            [-c / b, f64::NAN]
+        } else {
+            let discriminant = b.mul_add(b, -4.0 * a * c).sqrt();
+            // Choose the sign that avoids cancellation, then use the product of roots.
+            let q = -0.5 * (b + discriminant.copysign(b));
+            [q / a, c / q]
+        };
+        for t in roots {
+            if t > 0.0 && t < 1.0 {
+                let point = cubic(p, t);
+                min = min.min(point);
+                max = max.max(point);
+            }
+        }
+    }
+    (min, max)
+}
+
 /// Metric board viewBox `(min_x_m, min_y_m, width_m, height_m)` derived from `template` and pan/zoom.
 pub fn compute_2d_view_box_m(state: &CssRunnerState) -> (f64, f64, f64, f64) {
     let template = &state.project.template;
-    let mut g_min_x = f64::INFINITY;
-    let mut g_max_x = f64::NEG_INFINITY;
-    let mut g_min_y = f64::INFINITY;
-    let mut g_max_y = f64::NEG_INFINITY;
+    let mut min = DVec2::splat(f64::INFINITY);
+    let mut max = DVec2::splat(f64::NEG_INFINITY);
 
     for (idx, panel) in template.panels.iter().enumerate() {
-        for pt in panel_raw_points(panel) {
-            let b = panel_to_board_pt(template, idx, pt);
-            g_min_x = g_min_x.min(b.x);
-            g_max_x = g_max_x.max(b.x);
-            g_min_y = g_min_y.min(b.y);
-            g_max_y = g_max_y.max(b.y);
+        let points = panel_raw_points(panel);
+        let to_board = |p| panel_to_board_pt(template, idx, p);
+        for &point in &points {
+            let point = to_board(point);
+            min = min.min(point);
+            max = max.max(point);
         }
-        if let Some(ref poly) = panel.polygon {
-            for [c1, c2] in poly.curves.values() {
-                for c in [c1, c2] {
-                    let b = panel_to_board_pt(template, idx, *c);
-                    g_min_x = g_min_x.min(b.x);
-                    g_max_x = g_max_x.max(b.x);
-                    g_min_y = g_min_y.min(b.y);
-                    g_max_y = g_max_y.max(b.y);
+        if let Some(poly) = &panel.polygon {
+            for (edge_idx, edge) in poly.edges.iter().enumerate() {
+                if let Some(&[c1, c2]) = poly.curves.get(edge) {
+                    let end = (edge_idx + 1) % points.len();
+                    let (lo, hi) =
+                        cubic_bounds([points[edge_idx], c1, c2, points[end]].map(to_board));
+                    min = min.min(lo);
+                    max = max.max(hi);
                 }
             }
         }
     }
 
-    if !g_min_x.is_finite() {
-        g_min_x = 0.0;
-        g_max_x = 0.6;
-        g_min_y = 0.0;
-        g_max_y = 0.6;
+    if !min.is_finite() {
+        min = DVec2::ZERO;
+        max = DVec2::splat(0.6);
     }
 
-    let span_x = (g_max_x - g_min_x).max(0.2);
-    let span_y = (g_max_y - g_min_y).max(0.2);
+    let span_x = (max.x - min.x).max(0.2);
+    let span_y = (max.y - min.y).max(0.2);
     let max_span = span_x.max(span_y).max(0.4);
-    let center_x = (g_min_x + g_max_x) * 0.5;
-    let center_y = (g_min_y + g_max_y) * 0.5;
+    let center_x = (min.x + max.x) * 0.5;
+    let center_y = (min.y + max.y) * 0.5;
     let margin = (max_span * 0.12).max(0.06);
     let half_span = max_span * 0.5 + margin;
 

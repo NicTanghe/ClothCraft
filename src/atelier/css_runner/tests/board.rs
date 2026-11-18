@@ -862,16 +862,20 @@ fn test_selection_double_click_splits_curved_edge_and_undoes() {
     let dir = tempfile::tempdir().unwrap();
     let mut state = selection_test_state(dir.path());
     let before = state.project.template.clone();
-    let poly = before.panels[0].polygon.as_ref().unwrap();
-    let edge_idx = 0;
+    // The rightmost panel's second edge defines the right edge of the view.
+    let panel_idx = 1;
+    let edge_idx = 1;
+    let poly = before.panels[panel_idx].polygon.as_ref().unwrap();
     let sampled = poly.edge_points(edge_idx).unwrap();
     let local = sampled[sampled.len() / 2];
-    let pos = board_to_screen_px(&state, panel_to_board_pt(&before, 0, local));
+    let anchor = panel_to_board_pt(&before, panel_idx, poly.points[0]);
+    let anchor_px = board_to_screen_px(&state, anchor);
+    let pos = board_to_screen_px(&state, panel_to_board_pt(&before, panel_idx, local));
     handle_runner_event(&mut state, &pointer_move_ev(pos.0, pos.1));
     assert_eq!(
         state.hovered_2d,
         Some(Hover2dTarget::Edge {
-            panel_idx: 0,
+            panel_idx,
             edge_idx
         })
     );
@@ -883,24 +887,34 @@ fn test_selection_double_click_splits_curved_edge_and_undoes() {
     );
     handle_runner_event(&mut state, &pointer_btn_ev(true));
     handle_runner_event(&mut state, &pointer_btn_ev(false));
-    let split = state.project.template.panels[0].polygon.as_ref().unwrap();
+    let split = state.project.template.panels[panel_idx]
+        .polygon
+        .as_ref()
+        .unwrap();
     assert_eq!(split.points.len(), poly.points.len() + 1);
     assert!(
-        panel_to_board_pt(&state.project.template, 0, split.points[1])
-            .distance(panel_to_board_pt(&before, 0, local))
+        panel_to_board_pt(
+            &state.project.template,
+            panel_idx,
+            split.points[edge_idx + 1]
+        )
+        .distance(panel_to_board_pt(&before, panel_idx, local))
             < 0.001
     );
+    assert_eq!(board_to_screen_px(&state, anchor), anchor_px);
     assert!(undo_redo_2d(&mut state, false));
+    assert_eq!(board_to_screen_px(&state, anchor), anchor_px);
     assert_eq!(
         serde_json::to_value(&state.project.template).unwrap(),
         serde_json::to_value(&before).unwrap()
     );
     assert!(undo_redo_2d(&mut state, true));
+    assert_eq!(board_to_screen_px(&state, anchor), anchor_px);
     let roundtrip: GarmentTemplate =
         serde_json::from_value(serde_json::to_value(&state.project.template).unwrap()).unwrap();
     assert!(roundtrip.compile().is_ok());
     assert_eq!(
-        state.project.template.panels[0]
+        state.project.template.panels[panel_idx]
             .polygon
             .as_ref()
             .unwrap()
