@@ -1,6 +1,6 @@
 # cssimpler integration
 
-Both native desktop editors use cssimpler revision `0c614b6`, which includes
+Both native desktop editors use cssimpler revision `cb805c0`, which includes
 captured event handlers, typed UI actions, frame-aligned pointer scheduling and
 the transition update described in cssimpler's `docs/`. The fitting runner
 delivers commands through one per-instance
@@ -108,6 +108,18 @@ Validation:
 - The full editor tests retain their bounds, click, cancellation, undo/redo and USD-occlusion assertions; the CI cleanup below resolves their prior failures.
 - Strict all-target desktop and CPU Clippy, repository formatting and queue validation pass. The existing manifest-level unused `rfd` warning remains informational.
 - A standalone 600 × 600 CPU raster capture was inspected. No native window, GPU workload or frame-cadence benchmark was run.
+
+### Opaque fills and scene picking
+
+CSSimpler PR #34 accelerates fully covered opaque solid spans in the renderer.
+The 2D board can use this for eligible paints, including its background.
+Antialiased edges and translucent paints still use the general compositor.
+The upstream benchmark measures static scenes with layer caching disabled.
+
+CSSimpler PR #35 adds picking by painted path and paint order. ClothCraft's CAD
+tools use material-space geometry and prioritize corner handles, anchors, and
+selected-panel edges. Display paths also include the grid, seam guides, and
+previews. The CAD picker retains its existing semantic targets and priority.
 
 ## CI cleanup
 
