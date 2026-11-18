@@ -497,6 +497,54 @@ pub fn update_viewport_surface_shading(
     )
 }
 
+/// Replace the collision display mesh topology, positions and shading normals.
+///
+/// Used after a static avatar import. Physics uses the same `SurfaceMesh`; this
+/// only updates the transient USD display stage. The caller owns the avatar
+/// candidate lifetime.
+#[cfg(feature = "desktop")]
+pub fn update_viewport_surface(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    surface: &crate::avatar::SurfaceMesh,
+    mode: ShadingMode,
+) -> Result<(), String> {
+    if surface
+        .vertices
+        .iter()
+        .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+    {
+        return Err("USD collider positions must be finite f32 values".into());
+    }
+    if surface.triangles.is_empty() {
+        return Err("USD collider requires at least one triangle".into());
+    }
+    let counts = vec![3_i32; surface.triangles.len()];
+    let indices: Vec<i32> = surface
+        .triangles
+        .iter()
+        .flat_map(|t| t.map(|i| i as i32))
+        .collect();
+    let stage = scene.stage();
+    update_viewport_points(scene, "/Collider", &surface.vertices)?;
+    stage
+        .attribute("/Collider.faceVertexCounts")
+        .map_err(|e| e.to_string())?
+        .set(counts)
+        .map_err(|e| e.to_string())?;
+    stage
+        .attribute("/Collider.faceVertexIndices")
+        .map_err(|e| e.to_string())?
+        .set(indices)
+        .map_err(|e| e.to_string())?;
+    set_viewport_normals(
+        scene,
+        "/Collider",
+        &surface.vertices,
+        &surface.triangles,
+        mode,
+    )
+}
+
 /// Publish one panel's transient positions and shading normals.
 #[cfg(feature = "desktop")]
 fn set_panel_positions_and_normals(

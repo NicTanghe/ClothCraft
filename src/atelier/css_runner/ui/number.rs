@@ -11,6 +11,9 @@ pub enum NumberField {
     ZoomSpeed,
     CornerRadius,
     CornerTension,
+    ImportTolerance,
+    ImportMesh,
+    ImportScale,
 }
 
 pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: NumberField) -> Node {
@@ -18,6 +21,9 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
         NumberField::ZoomSpeed => state.board_2d_zoom_speed,
         NumberField::CornerRadius => state.corner_radius_mm,
         NumberField::CornerTension => state.corner_tension,
+        NumberField::ImportTolerance => state.import_tolerance_mm,
+        NumberField::ImportMesh => state.import_mesh_mm,
+        NumberField::ImportScale => state.import_scale_mm_per_unit,
     };
     let (_, _, _, title) = field.spec();
     let drag = state.number_drag.clone();
@@ -80,6 +86,14 @@ impl NumberField {
             Self::ZoomSpeed => (0.25, 4.0, 0.25, "2D zoom speed (×)"),
             Self::CornerRadius => (1.0, 250.0, 1.0, "Corner radius (mm)"),
             Self::CornerTension => (0.05, 1.5, 0.05, "Corner tension"),
+            Self::ImportTolerance => (0.01, 5.0, 0.01, "Import curve chord error (mm)"),
+            Self::ImportMesh => (3.0, 500.0, 1.0, "Imported panel mesh spacing (mm)"),
+            Self::ImportScale => (
+                0.0,
+                1000.0,
+                1.0,
+                "DXF millimetres per unit (0 = file units)",
+            ),
         }
     }
 }
