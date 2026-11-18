@@ -13,6 +13,7 @@ use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::icons::{
     icon_shading_flat, icon_shading_smooth, icon_wireframe_off, icon_wireframe_on,
 };
+use clothcraft::render::PresetView;
 use clothcraft::usd_scene::ShadingMode;
 use cssimpler::core::Node;
 use cssimpler::ui;
@@ -66,6 +67,44 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
             </div>
             <div class="canvas-area">
                 <div id="runner-viewport-3d-scene" class="viewport"></div>
+            </div>
+            {view_cube(state)}
+        </div>
+    }
+}
+
+/// Basic interactive view-cube net. Six face buttons are arranged around the
+/// centre; each applies the matching canonical camera direction. The cube is
+/// drawn in DOM rather than projected with the camera, so it stays readable at
+/// any orientation; a projected/rotating cube is a follow-up.
+fn view_cube(state: &CssRunnerState) -> Node {
+    let face = |id: &'static str, label: &'static str, view: PresetView| -> Node {
+        ui! {
+            <button id={id} class="view-cube-face"
+                onclick_shared={queue_action(&state.actions, RunnerAction::CubePreset(view))}
+                title={format!("View {}", view.label())}>{label}</button>
+        }
+    };
+    ui! {
+        <div id="view-cube" class="view-cube" title="Click a face to look from that direction">
+            <span class="view-cube-title">"VIEW"</span>
+            <div class="view-cube-row">
+                <span class="view-cube-gap"></span>
+                {face("view-cube-top", "Top", PresetView::Top)}
+                <span class="view-cube-gap"></span>
+                <span class="view-cube-gap"></span>
+            </div>
+            <div class="view-cube-row">
+                {face("view-cube-left", "Left", PresetView::Left)}
+                {face("view-cube-front", "Front", PresetView::Front)}
+                {face("view-cube-right", "Right", PresetView::Right)}
+                {face("view-cube-back", "Back", PresetView::Back)}
+            </div>
+            <div class="view-cube-row">
+                <span class="view-cube-gap"></span>
+                {face("view-cube-bottom", "Bottom", PresetView::Bottom)}
+                {face("view-cube-iso", "Iso", PresetView::Isometric)}
+                <span class="view-cube-gap"></span>
             </div>
         </div>
     }

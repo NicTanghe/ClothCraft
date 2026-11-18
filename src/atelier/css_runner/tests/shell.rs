@@ -421,6 +421,10 @@ fn test_css_runner_headless_frame_and_rendering() {
             let viewport = app
                 .find_element_bounds_by_id("#runner-viewport-3d-scene")
                 .unwrap();
+            // The view cube is an intentional in-viewport control; its labels
+            // are expected to sit over the native host. Everything else must
+            // stay outside it so the CPU text paint cannot hide the USD host.
+            let view_cube = app.find_element_bounds_by_id("#view-cube");
             let paint = cssimpler::core::ExtractedScene::from_render_roots(&roots);
             for item in paint
                 .items
@@ -428,6 +432,14 @@ fn test_css_runner_headless_frame_and_rendering() {
                 .filter(|item| item.kind == cssimpler::core::ExtractedPaintKind::TextRun)
             {
                 let text = item.layout;
+                if view_cube.is_some_and(|cube| {
+                    text.x >= cube.x - 1.0
+                        && text.x + text.width <= cube.x + cube.width + 1.0
+                        && text.y >= cube.y - 1.0
+                        && text.y + text.height <= cube.y + cube.height + 1.0
+                }) {
+                    continue;
+                }
                 let overlaps = text.x < viewport.x + viewport.width
                     && viewport.x < text.x + text.width
                     && text.y < viewport.y + viewport.height
