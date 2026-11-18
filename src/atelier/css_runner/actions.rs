@@ -101,6 +101,7 @@ pub enum RunnerUiOp {
     Reset2dZoomSpeed,
     SetCornerMode(bool),
     SetCornerRule(CornerRule),
+    SetShadingMode(clothcraft::usd_scene::ShadingMode),
     AdjustCornerRadiusMm(f64),
     AdjustCornerTension(f64),
     ApplyCornerRoundSelected,
@@ -490,6 +491,13 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             state.corner_preview_active = true;
             state.status_message = format!("Continuity rule: {:?}", rule);
         }
+        RunnerUiOp::SetShadingMode(mode) => {
+            if state.shading != mode {
+                state.shading = mode;
+                state.sync_usd_shading();
+                state.status_message = format!("Viewport shading: {}", mode.label());
+            }
+        }
         RunnerUiOp::AdjustCornerRadiusMm(delta) => {
             state.corner_radius_mm = (state.corner_radius_mm + delta).clamp(1.0, 250.0);
             state.corner_preview_active = true;
@@ -574,6 +582,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                             usd,
                             &state.scene.garment,
                             &state.scene.state,
+                            state.shading,
                         );
                     }
                     state.sync_usd_camera();
