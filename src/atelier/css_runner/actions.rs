@@ -112,6 +112,8 @@ pub enum RunnerUiOp {
     SetCornerMode(bool),
     SetCornerRule(CornerRule),
     SetShadingMode(clothcraft::usd_scene::ShadingMode),
+    ToggleShading,
+    ToggleWireframe,
     AdjustCornerRadiusMm(f64),
     AdjustCornerTension(f64),
     ApplyCornerRoundSelected,
@@ -551,6 +553,26 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                 state.status_message = format!("Viewport shading: {}", mode.label());
             }
         }
+        RunnerUiOp::ToggleShading => {
+            state.shading = match state.shading {
+                clothcraft::usd_scene::ShadingMode::Smooth => {
+                    clothcraft::usd_scene::ShadingMode::Flat
+                }
+                clothcraft::usd_scene::ShadingMode::Flat => {
+                    clothcraft::usd_scene::ShadingMode::Smooth
+                }
+            };
+            state.sync_usd_shading();
+            state.status_message = format!("Viewport shading: {}", state.shading.label());
+        }
+        RunnerUiOp::ToggleWireframe => {
+            state.wireframe = !state.wireframe;
+            state.sync_usd_wireframe();
+            state.status_message = format!(
+                "Cloth wireframe: {}",
+                if state.wireframe { "on" } else { "off" }
+            );
+        }
         RunnerUiOp::AdjustCornerRadiusMm(delta) => {
             state.corner_radius_mm = (state.corner_radius_mm + delta).clamp(1.0, 250.0);
             state.corner_preview_active = true;
@@ -650,6 +672,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                         );
                     }
                     state.sync_usd_camera();
+                    state.sync_usd_wireframe();
                     state.send_control_state(false);
                     state.status_message = format!("Loaded {} preset", kind.name());
                 }

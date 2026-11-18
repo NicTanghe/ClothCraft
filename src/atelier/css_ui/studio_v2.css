@@ -1064,6 +1064,20 @@ button {
   font-weight: 600;
 }
 
+.viewport-tool-btn.icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 4px;
+}
+
+.viewport-tool-btn .icon {
+  width: 16px;
+  height: 16px;
+}
+
 .viewport-hud {
   position: absolute;
   top: 38px;

@@ -10,6 +10,9 @@ use super::super::board::selection::{compute_connected_2d_highlight, effective_s
 use super::super::state::CssRunnerState;
 use super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
+use clothcraft::css_ui::icons::{
+    icon_shading_flat, icon_shading_smooth, icon_wireframe_off, icon_wireframe_on,
+};
 use clothcraft::render::PresetView;
 use clothcraft::usd_scene::ShadingMode;
 use cssimpler::core::Node;
@@ -27,15 +30,28 @@ pub(in super::super) fn build_runner_stage(state: &CssRunnerState) -> Node {
 }
 
 pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node {
-    let smooth_class = if state.shading == ShadingMode::Smooth {
-        "viewport-tool-btn active"
-    } else {
-        "viewport-tool-btn"
+    let (shading_icon, shading_title) = match state.shading {
+        ShadingMode::Smooth => (
+            icon_shading_smooth(),
+            "Smooth shading — click for flat shading",
+        ),
+        ShadingMode::Flat => (
+            icon_shading_flat(),
+            "Flat shading — click for smooth shading",
+        ),
     };
-    let flat_class = if state.shading == ShadingMode::Flat {
-        "viewport-tool-btn active"
+    let (wire_icon, wire_title, wire_class) = if state.wireframe {
+        (
+            icon_wireframe_on(),
+            "Hide cloth wireframe",
+            "viewport-tool-btn icon-only active",
+        )
     } else {
-        "viewport-tool-btn"
+        (
+            icon_wireframe_off(),
+            "Show cloth wireframe",
+            "viewport-tool-btn icon-only",
+        )
     };
     let camera_class = if state.camera_menu_open {
         "viewport-tool-btn active"
@@ -96,8 +112,8 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
                     <button id="camera-menu-trigger" class={camera_class}
                         onclick_shared={queue_action(&state.actions, RunnerAction::CameraMenu)}
                         title="View presets, projection and camera reset">"View ▾"</button>
-                    <button id="shading-smooth" class={smooth_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetShadingMode(ShadingMode::Smooth))} title="Smooth per-vertex shading">"Smooth"</button>
-                    <button id="shading-flat" class={flat_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetShadingMode(ShadingMode::Flat))} title="Flat per-face shading">"Flat"</button>
+                    <button id="wireframe-toggle" class={wire_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleWireframe)} title={wire_title}>{wire_icon}</button>
+                    <button id="shading-toggle" class="viewport-tool-btn icon-only" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleShading)} title={shading_title}>{shading_icon}</button>
                 </div>
             </div>
             {camera_backdrop}

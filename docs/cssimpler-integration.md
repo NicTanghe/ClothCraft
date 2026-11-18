@@ -68,6 +68,15 @@ ruler. The asset browser also offers a separate OBJ save dialog for the current
 3D garment.
 
 
+## 3D display toggles
+
+The runner's 3D header uses two icon buttons: one toggles smooth/flat shading and
+one shows or hides a cloth-only wireframe. Shading still rewrites the authored
+normals on the garment and collision display mesh. The wireframe is a separate
+`/ClothWire` USD mesh made of thin lifted quads over garment edges; it excludes
+avatars, colliders and other loaded display geometry. Both are view-only state
+and are not saved in the document.
+
 ## Native vector board (FC-0061)
 
 The fitting editor's 2D board uses `Node::vector` and typed `VectorPath` commands
