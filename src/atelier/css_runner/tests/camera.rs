@@ -122,7 +122,8 @@ fn projection_toggle_writes_the_usd_camera() {
     assert!(!app.state().camera_menu_open);
     let (projection, aperture) = read(app.state());
     assert_eq!(projection, geom::Projection::Orthographic);
-    let expected = app.state().camera.distance * (45.0_f32.to_radians() * 0.5).tan() * 20.0;
+    let fov = 2.0 * (24.0_f32 / (2.0 * 35.0)).atan();
+    let expected = app.state().camera.distance * (fov * 0.5).tan() * 20.0;
     assert!((aperture - expected).abs() < 1e-3, "{aperture} {expected}");
 
     // Toggling back restores the perspective aperture.
