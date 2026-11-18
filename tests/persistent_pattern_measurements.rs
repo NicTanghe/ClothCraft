@@ -164,10 +164,20 @@ fn straight_curved_and_exact_station_splits_preserve_attachment() {
     for curved in [false, true] {
         let mut t = fixture();
         if curved {
-            t.panels[0].polygon.as_mut().unwrap().curves.insert(
+            let mut polygon = t.panels[0].polygon.clone().unwrap();
+            polygon.curves.insert(
                 "edge_1".into(),
                 [DVec2::new(0.05, -0.08), DVec2::new(0.3, -0.03)],
             );
+            t = authoring::apply(
+                &t,
+                Command::Shape {
+                    panel: t.panels[0].id.clone(),
+                    polygon,
+                },
+            )
+            .unwrap()
+            .template;
         }
         let mut m = record();
         m.b = MeasurementAnchor {
