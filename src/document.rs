@@ -6,15 +6,22 @@ use std::{
 };
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    atomic_write_with(path, |writer| {
+        writer.write_all(bytes).map_err(|e| e.to_string())
+    })
+}
+
+pub(crate) fn atomic_write_with(
+    path: &Path,
+    write: impl FnOnce(&mut fs::File) -> Result<(), String>,
+) -> Result<(), String> {
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
-    temporary
-        .write_all(bytes)
-        .and_then(|_| temporary.as_file().sync_all())
-        .map_err(|e| e.to_string())?;
+    write(temporary.as_file_mut())?;
+    temporary.as_file().sync_all().map_err(|e| e.to_string())?;
     temporary.persist(path).map_err(|e| e.to_string())?;
     // Directory sync is supported on Unix; Windows replacement is handled by tempfile.
     #[cfg(unix)]

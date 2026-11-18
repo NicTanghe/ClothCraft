@@ -98,8 +98,8 @@ pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Nod
                     <div class="quick-action-group">
                         <span class="group-label">"Export"</span>
                         <div class="quick-actions-row">
-                            <button class="btn-action" onclick_shared={queue_action(&state.actions, RunnerAction::Export)}>"Export OBJ"</button>
-                            <button class="btn-action btn-action-accent" onclick_shared={queue_action(&state.actions, RunnerAction::Export)}>"True-Scale SVG"</button>
+                            <button class="btn-action" onclick_shared={queue_action(&state.actions, RunnerAction::ExportObj)}>"Export OBJ"</button>
+                            <button class="btn-action btn-action-accent" onclick_shared={queue_action(&state.actions, RunnerAction::ExportSvg)}>"True-Scale SVG"</button>
                         </div>
                         <div class="export-accuracy-note-box">
                             <p class="export-note-text">

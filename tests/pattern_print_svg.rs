@@ -88,6 +88,28 @@ fn polygon_curves_holes_and_internal_lines_are_exported_in_material_mm() {
         svg.matches(" L ").count() > 8,
         "curve must be sampled rather than a 4-edge box"
     );
+    #[cfg(feature = "desktop")]
+    {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("custom name.svg");
+        export::save_print_pattern_svg(&template, &path).unwrap();
+        let svg = std::fs::read_to_string(&path).unwrap();
+        assert!(svg.contains("width=\"440.000mm\" height=\"511.000mm\""));
+        assert!(svg.contains("viewBox=\"0 0 440.000 511.000\""));
+        assert!(svg.contains("width=\"402\" height=\"402\" viewBox=\"-1 -1 402 402\""));
+        assert!(svg.contains("M 0 0 L 400 0"));
+        assert!(svg.contains("M 100 100 L 100 150"));
+        assert!(svg.contains("data-role=\"internal-line\""));
+        assert!(svg.contains("h 100.000"));
+
+        export::save_print_pattern_svg(&curved, &path).unwrap();
+        let svg = std::fs::read_to_string(&path).unwrap();
+        assert!(svg.contains("M 300 100 C"), "{svg}");
+
+        curved.panels[0].pattern.width = f64::NAN;
+        assert!(export::save_print_pattern_svg(&curved, &path).is_err());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), svg);
+    }
 }
 
 #[test]
