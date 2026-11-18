@@ -393,6 +393,42 @@ fn split_preserves_area_and_perimeter() {
 }
 
 #[test]
+fn splitting_keeps_the_material_frame_and_implicit_board_layout() {
+    let mut before = GarmentTemplate::load(std::path::Path::new(
+        "examples/templates/curved-panels.json",
+    ))
+    .unwrap();
+    before.seams.clear();
+    for panel in &mut before.panels {
+        panel.layout_2d = None;
+    }
+    before.panels[0].layout_rotation_degrees = 25.;
+    let original = &before.panels[0];
+    let edge = "edge_2";
+    let after = authoring::apply(
+        &before,
+        Command::SplitBoundary {
+            panel: original.id.clone(),
+            edge: edge.into(),
+            at_m: measured(&before, edge) * 0.5,
+        },
+    )
+    .unwrap()
+    .template;
+    let split = &after.panels[0];
+    assert_eq!(split.pattern.width, original.pattern.width);
+    assert_eq!(split.pattern.height, original.pattern.height);
+    assert_eq!(split.placement.translation, original.placement.translation);
+    assert_eq!(split.layout_2d, original.layout_2d);
+    for index in 0..before.panels.len() {
+        assert_eq!(
+            authoring::layout(&after, index),
+            authoring::layout(&before, index)
+        );
+    }
+}
+
+#[test]
 fn splitting_a_curved_boundary_keeps_the_outline() {
     // One edge of a rectangle becomes a real cubic, then it is split.
     let start = rectangle(0.4, 0.6);

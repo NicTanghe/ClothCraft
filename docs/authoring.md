@@ -250,7 +250,7 @@ Implementation: `authoring/clipboard.rs` and `Command::{Paste,LayoutGroup}` own 
 ### Existing numeric tools
 
 Adapted from FireflyTheReal / julienfoss; see [provenance and integration fixes](firefly-integration.md).
-In Edit, Shift-click contour points to select several. Drag a selected point or use arrow keys (1 mm; Shift: 10 mm). Numeric coordinates and rectangle dimensions are in the inspector. The nearby + badge splits an unsewn boundary at sampled material arclength; Delete removes a straight, unsewn, untargeted point. Clear an affected seam or target before changing its boundary identity. Internal sewing paths remain separate from outer-contour point selection.
+In Edit, Shift-click contour points to select several. Drag a selected point or use arrow keys (1 mm; Shift: 10 mm). Numeric coordinates and rectangle dimensions are in the inspector. The nearby + badge splits an unsewn boundary at sampled material arclength; Delete removes a straight, unsewn, untargeted point. Splitting keeps the piece in place on the board and in its flat 3D arrangement, without shifting the board view. Clear an affected seam or target before changing its boundary identity. Internal sewing paths remain separate from outer-contour point selection.
 
 The inspector and board share the selected boundary's target length. Applying it changes rest geometry; clearing it removes only metadata. Dimensions scale the rectangle's holes and internal paths as well. All commands remain transactional and undoable.
 

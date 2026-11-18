@@ -2198,7 +2198,8 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                 }
                 index + 1
             };
-            normalize(p);
+            // Splitting keeps the same outline, so keep its material frame
+            // and dimensions even though the control polygon has changed.
             selected = Some(panel);
             new_point = Some(index);
         }
