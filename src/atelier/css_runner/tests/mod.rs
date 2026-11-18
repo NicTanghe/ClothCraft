@@ -7,3 +7,4 @@ pub(super) mod simulation;
 pub(super) mod support;
 
 pub(super) mod numbers;
+pub(super) mod piece_delete;
