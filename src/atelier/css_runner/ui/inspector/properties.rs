@@ -6,12 +6,42 @@ use super::super::super::board::geometry::panel_edge_length_m;
 use super::super::super::board::selection::{
     compute_connected_2d_highlight, effective_selected_points,
 };
+use super::super::super::board::types::ToolDraft2d;
+use super::super::super::editing::sew_lengths_equal;
 use super::super::super::state::CssRunnerState;
 use super::super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::icons::{icon_chevron_down, icon_chevron_right};
+use clothcraft::garment::GarmentTemplate;
 use cssimpler::core::Node;
 use cssimpler::ui;
+
+/// Label/value rows for the Fabric Mechanics accordion, read from the
+/// selected panel's fabric in the document (SI values, with g/m² and mm shown
+/// for readability). Returns a single explanatory row instead of defaults when
+/// no panel is selected or the panel names a fabric the template lacks.
+pub(in super::super::super) fn fabric_mechanics_rows(
+    template: &GarmentTemplate,
+    selected_panel: usize,
+) -> Vec<(&'static str, String)> {
+    let Some(panel) = template.panels.get(selected_panel) else {
+        return vec![("Fabric", "No panel selected".to_string())];
+    };
+    let Some(fabric) = template.fabrics.iter().find(|f| f.id == panel.fabric) else {
+        return vec![("Fabric", format!("Unknown fabric id '{}'", panel.fabric))];
+    };
+    let p = &fabric.properties;
+    vec![
+        ("Fabric", format!("{} ({})", fabric.name, fabric.id)),
+        ("Areal Density", format!("{:.0} g/m²", p.density * 1e3)),
+        ("Thickness", format!("{:.2} mm", p.thickness * 1e3)),
+        ("Warp Membrane", format!("{:.0} N/m", p.warp)),
+        ("Weft Membrane", format!("{:.0} N/m", p.weft)),
+        ("Shear", format!("{:.0} N/m", p.shear)),
+        ("Bending Warp", format!("{:.2e} N·m", p.bend_warp)),
+        ("Bending Weft", format!("{:.2e} N·m", p.bend_weft)),
+    ]
+}
 
 pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunnerState) -> Node {
     let panels = &state.project.template.panels;
@@ -272,6 +302,45 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
         "cad-prop-btn"
     };
 
+    let sew_confirm_card = match &state.draft_2d {
+        Some(ToolDraft2d::SewConfirm {
+            a,
+            b,
+            a_len_m,
+            b_len_m,
+            ..
+        }) => {
+            let equal = sew_lengths_equal(*a_len_m, *b_len_m);
+            let difference = format!("{:.1} mm", (a_len_m - b_len_m).abs() * 1e3);
+            let (confirm_label, confirm_ease) = if equal {
+                ("Sew", false)
+            } else {
+                ("Sew with easing", true)
+            };
+            ui! {
+                <div id="sew-confirm-card" class="card sew-confirm-card">
+                    <div class="prop-row">
+                        <span class="prop-label">{format!("{}.{}", a.0, a.1)}</span>
+                        <span class="prop-value">{format!("{:.1} mm", a_len_m * 1e3)}</span>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">{format!("{}.{}", b.0, b.1)}</span>
+                        <span class="prop-value">{format!("{:.1} mm", b_len_m * 1e3)}</span>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">"Length difference"</span>
+                        <span class="prop-value">{if equal { "None".to_string() } else { difference }}</span>
+                    </div>
+                    <div class="quick-actions-row">
+                        <button id="btn-sew-confirm" class="btn-action btn-action-accent" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ConfirmSew { ease: confirm_ease })}>{confirm_label}</button>
+                        <button id="btn-sew-cancel" class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CancelSew)}>"Cancel"</button>
+                    </div>
+                </div>
+            }
+        }
+        _ => ui! { <span class="hidden" /> },
+    };
+
     let acc_line = ui! {
         <div class={if open_1 { "accordion open" } else { "accordion collapsed" }}>
             <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(1))}>
@@ -281,6 +350,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             {if open_1 {
                 ui! {
                     <div class="accordion-content">
+                        {sew_confirm_card}
                         <div class="prop-row">
                             <span class="prop-label">"2D Selection"</span>
                             <span class="prop-value">{sel_info.0}</span>
@@ -416,26 +486,15 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             {if open_4 {
                 ui! {
                     <div class="accordion-content">
-                        <div class="prop-row">
-                            <span class="prop-label">"Preset"</span>
-                            <span class="prop-value">{selected_panel.map_or("Cotton", |p| p.fabric.as_str())}</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Areal Density"</span>
-                            <span class="prop-value">"180 g/m²"</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Warp Stretch"</span>
-                            <span class="prop-value">"150 N/m"</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Weft Stretch"</span>
-                            <span class="prop-value">"120 N/m"</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Bending Stiffness"</span>
-                            <span class="prop-value">"0.002 N·m"</span>
-                        </div>
+                        {fabric_mechanics_rows(&state.project.template, state.selected_piece_index)
+                            .into_iter()
+                            .map(|(label, value)| ui! {
+                                <div class="prop-row">
+                                    <span class="prop-label">{label}</span>
+                                    <span class="prop-value">{value}</span>
+                                </div>
+                            })
+                            .collect::<Vec<_>>()}
                     </div>
                 }
             } else {

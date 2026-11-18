@@ -11,7 +11,7 @@ use super::super::board::selection::{batch_corners_for_points, effective_selecte
 use super::super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::super::editing::{
     commit_authoring_command, default_fabric_id, finish_internal_line_draft, finish_pen_draft,
-    round_corners_batch,
+    round_corners_batch, sew_boundary_length, sew_confirm_prompt,
 };
 use super::super::state::CssRunnerState;
 use clothcraft::authoring::corner_tool::{
@@ -20,7 +20,6 @@ use clothcraft::authoring::corner_tool::{
 use clothcraft::authoring::{self, Command};
 use clothcraft::garment::meshing::MeshingSettings;
 use clothcraft::garment::polygon::PatternMeasurement;
-use clothcraft::garment::seam::{BoundaryRef, Side};
 use clothcraft::garment::shapes::Primitive;
 use cssimpler::renderer::EngineEvent;
 
@@ -240,31 +239,27 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                                     .into();
                                             return true;
                                         }
-                                        state.draft_2d = None;
-                                        commit_authoring_command(
-                                            state,
-                                            Command::Sew {
-                                                a: BoundaryRef {
-                                                    reversed: false,
-                                                    panel: first_pid.clone(),
-                                                    side: Side::Right,
-                                                    edge: Some(first_edge.clone()),
-                                                    range: [0.0, 1.0],
-                                                },
-                                                b: BoundaryRef {
-                                                    reversed: false,
-                                                    panel: pid.clone(),
-                                                    side: Side::Left,
-                                                    edge: Some(edge_name.clone()),
-                                                    range: [0.0, 1.0],
-                                                },
-                                                reverse,
-                                                ease: true,
-                                            },
-                                            format!(
-                                                "Sewed {first_pid}.{first_edge} ↔ {pid}.{edge_name}"
-                                            ),
-                                        );
+                                        let (Some(a_len_m), Some(b_len_m)) = (
+                                            sew_boundary_length(state, &first_pid, &first_edge),
+                                            sew_boundary_length(state, &pid, &edge_name),
+                                        ) else {
+                                            state.draft_2d = None;
+                                            state.status_message =
+                                                "Sew: could not measure a boundary; nothing was sewn"
+                                                    .into();
+                                            return true;
+                                        };
+                                        let a = (first_pid, first_edge);
+                                        let b = (pid, edge_name);
+                                        state.status_message =
+                                            sew_confirm_prompt(&a, &b, a_len_m, b_len_m);
+                                        state.draft_2d = Some(ToolDraft2d::SewConfirm {
+                                            a,
+                                            b,
+                                            reverse,
+                                            a_len_m,
+                                            b_len_m,
+                                        });
                                         return true;
                                     } else {
                                         state.draft_2d = Some(ToolDraft2d::Sew {

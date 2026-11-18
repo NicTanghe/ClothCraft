@@ -98,16 +98,18 @@ impl Project {
         Ok((mesh, State { x, v, time: 0. }))
     }
     pub fn load(path: &Path) -> Result<Self, String> {
-        let data = fs::read_to_string(path).map_err(|e| e.to_string())?;
-        let project: Self = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+        let data = fs::read_to_string(path)
+            .map_err(|e| format!("Cannot read project {}: {e}", path.display()))?;
+        let project: Self = serde_json::from_str(&data)
+            .map_err(|e| format!("Cannot parse project {}: {e}", path.display()))?;
         project.build()?;
         Ok(project)
     }
     /// Stores the editable rest model and settings, not a transient simulation cache.
     pub fn save(&self, path: &Path) -> Result<(), String> {
         self.build()?;
-        let data = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write(path, data).map_err(|e| e.to_string())
+        let data = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+        crate::document::atomic_write(path, &data)
     }
 }
 

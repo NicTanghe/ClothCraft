@@ -232,19 +232,17 @@ impl GarmentTemplate {
         self.measurement_bits.unwrap_or(8)
     }
     pub fn load(path: &Path) -> Result<Self, String> {
-        let template: Self =
-            serde_json::from_str(&fs::read_to_string(path).map_err(|e| e.to_string())?)
-                .map_err(|e| e.to_string())?;
+        let data = fs::read_to_string(path)
+            .map_err(|e| format!("Cannot read template {}: {e}", path.display()))?;
+        let template: Self = serde_json::from_str(&data)
+            .map_err(|e| format!("Cannot parse template {}: {e}", path.display()))?;
         template.compile()?;
         Ok(template)
     }
     pub fn save(&self, path: &Path) -> Result<(), String> {
         self.compile()?;
-        fs::write(
-            path,
-            serde_json::to_string_pretty(self).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())
+        let data = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+        crate::document::atomic_write(path, &data)
     }
     pub fn compile(&self) -> Result<CompiledGarment, String> {
         if !matches!(self.measurement_precision(), 8 | 10 | 16) {
@@ -570,6 +568,38 @@ impl GarmentTemplate {
             out.initial_state.x[i] = target;
         }
         Ok(out)
+    }
+
+    /// This template with every non-physical field cleared: mirror links,
+    /// measurement precision, fabric appearance, graphics, trims, 2D layout and
+    /// rotation, and the polygon draft data (target lengths, seam allowances,
+    /// notches and measurements). Two templates with equal projections drape
+    /// identically.
+    ///
+    /// `authoring::same_physics` (may an edit keep the drape?) and the fitting
+    /// cache signature (is a saved drape still valid?) both use this, so the
+    /// two cannot disagree. A new draft-only field belongs here.
+    pub fn physical_projection(&self) -> Self {
+        let mut t = self.clone();
+        t.mirror_links.clear();
+        // Display precision is document metadata, not rest geometry.
+        t.measurement_bits = None;
+        t.fabric_appearance.clear();
+        t.graphics.clear();
+        t.trims.clear();
+        for p in &mut t.panels {
+            p.layout_2d = None;
+            p.layout_rotation_degrees = 0.;
+            if let Some(polygon) = p.polygon.as_mut() {
+                // A required boundary length is a 2D specification, not rest
+                // geometry, and markings never enter the mesh or the solver.
+                polygon.target_lengths.clear();
+                polygon.seam_allowances.clear();
+                polygon.notches.clear();
+                polygon.measurements.clear();
+            }
+        }
+        t
     }
 
     /// Deterministic small fixture: 3x4 and 4x7 cells, independent 3D placements.
