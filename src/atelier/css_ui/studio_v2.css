@@ -2080,10 +2080,9 @@ button {
 
 /* Basic DOM view cube in the native 3D viewport. */
 .view-cube {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 30;
+  align-self: center;
+  flex-shrink: 0;
+  margin: 4px auto;
   display: flex;
   flex-direction: column;
   gap: 2px;

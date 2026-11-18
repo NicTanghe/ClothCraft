@@ -38,11 +38,16 @@ fn view_cube_has_every_face_and_clicking_applies_presets() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = app(selection_test_state(dir.path()));
     let cube = app.find_element_bounds_by_id("#view-cube").unwrap();
-    let viewport = app
+    let viewport = app.find_element_bounds_by_id("#viewport-3d").unwrap();
+    let host = app
         .find_element_bounds_by_id("#runner-viewport-3d-scene")
         .unwrap();
     assert!(cube.width >= 100.0 && cube.height >= 70.0);
     assert!(cube.y >= viewport.y && cube.y + cube.height <= viewport.y + viewport.height + 1.0);
+    assert!(
+        cube.y >= host.y + host.height - 1.0,
+        "the cube dock must not overlap the native USD host"
+    );
     for id in [
         "view-cube-top",
         "view-cube-bottom",
