@@ -896,7 +896,7 @@
       "spent": 5.0,
       "priority": "high",
       "depends_on": [],
-      "status": "review",
+      "status": "done",
       "owner": null,
       "vruntime": 4.592039609635428,
       "pr": "https://github.com/NicTanghe/ClothCraft/pull/10"
