@@ -168,6 +168,8 @@ For numeric primitives, mirrors, booleans/holes and internal sewing curves with 
 - Drag the interior of a piece to rearrange it on the board. This changes only its 2D layout, never its physical rest shape or 3D placement. Middle/right drag pans the board; the wheel zooms around the pointer; the **Frame all** icon frames all pieces.
 - In **Edit**, drag the selected piece's gold circular handle to rotate it on the board. **Shift** snaps to 15° increments; Escape cancels the preview and Ctrl+Z undoes the edit. Rotation keeps the piece's center fixed and preserves material coordinates, grain, seams and the complete simulated state. Anchors and Bézier handles remain editable after rotation.
 
+The board camera holds its position and zoom while you edit points, including during undo and redo. Use **Frame all** or **0** to fit the current outlines.
+
 Curves are cubic Béziers with two controls per named edge. They are stored as curves, then subdivided to a 0.25 mm chord-error bound for the constrained Delaunay mesher. Sewing uses that sampled boundary's rest arclength, not the straight chord between its anchors. Boolean cutouts create holes, and internal sewing lines retain material on both sides. Internal cuts and automatic smooth-handle coupling for outer contours remain planned. Legacy v1 rectangular templates remain readable/simulatable; contour editing targets v2 polygons, including newly drawn rectangles.
 
 ## Sew in either view

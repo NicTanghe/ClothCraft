@@ -170,9 +170,8 @@ fn cubic_bounds(p: [DVec2; 4]) -> (DVec2, DVec2) {
     (min, max)
 }
 
-/// Metric board viewBox `(min_x_m, min_y_m, width_m, height_m)` derived from `template` and pan/zoom.
-pub fn compute_2d_view_box_m(state: &CssRunnerState) -> (f64, f64, f64, f64) {
-    let template = &state.project.template;
+/// Centre and span of a fitted view, captured independently of subsequent edits.
+pub(in super::super) fn fit_2d_board(template: &GarmentTemplate) -> (DVec2, f64) {
     let mut min = DVec2::splat(f64::INFINITY);
     let mut max = DVec2::splat(f64::NEG_INFINITY);
 
@@ -205,20 +204,23 @@ pub fn compute_2d_view_box_m(state: &CssRunnerState) -> (f64, f64, f64, f64) {
     let span_x = (max.x - min.x).max(0.2);
     let span_y = (max.y - min.y).max(0.2);
     let max_span = span_x.max(span_y).max(0.4);
-    let center_x = (min.x + max.x) * 0.5;
-    let center_y = (min.y + max.y) * 0.5;
     let margin = (max_span * 0.12).max(0.06);
-    let half_span = max_span * 0.5 + margin;
+    ((min + max) * 0.5, max_span + 2.0 * margin)
+}
+
+/// Metric board viewBox `(min_x_m, min_y_m, width_m, height_m)` for the current camera.
+pub fn compute_2d_view_box_m(state: &CssRunnerState) -> (f64, f64, f64, f64) {
+    let (center, span) = state.board_2d_fit;
 
     let zoom = state.board_2d_zoom.clamp(0.25, 10.0);
     let rect = compute_2d_viewport_rect(state);
     let width = f64::from(rect.w.max(1.0));
     let height = f64::from(rect.h.max(1.0));
-    let metres_per_pixel = (half_span * 2.0) / (zoom * width.min(height));
+    let metres_per_pixel = span / (zoom * width.min(height));
     let width = width * metres_per_pixel;
     let height = height * metres_per_pixel;
-    let vb_min_x = center_x + state.board_2d_pan.0 - width * 0.5;
-    let vb_min_y = center_y + state.board_2d_pan.1 - height * 0.5;
+    let vb_min_x = center.x + state.board_2d_pan.0 - width * 0.5;
+    let vb_min_y = center.y + state.board_2d_pan.1 - height * 0.5;
     (vb_min_x, vb_min_y, width, height)
 }
 

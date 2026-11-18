@@ -767,6 +767,15 @@ pub fn layout(template: &GarmentTemplate, index: usize) -> DVec2 {
         )
     })
 }
+/// Preserve board locations before normalization can change panel widths or origins.
+fn freeze_implicit_layouts(source: &GarmentTemplate, template: &mut GarmentTemplate) {
+    for (index, panel) in template.panels.iter_mut().enumerate() {
+        if panel.layout_2d.is_none() {
+            panel.layout_2d = Some(layout(source, index));
+        }
+    }
+}
+
 pub fn same_physics(a: &GarmentTemplate, b: &GarmentTemplate) -> bool {
     let without_layout = |t: &GarmentTemplate| {
         let mut t = t.clone();
@@ -1996,6 +2005,7 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                     position - current,
                 )?;
             } else {
+                freeze_implicit_layouts(source, &mut template);
                 let p = template
                     .panels
                     .iter_mut()
@@ -2025,13 +2035,7 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             if !board_delta.is_finite() || groups.is_empty() {
                 return Err("Select points and use a finite move delta".into());
             }
-            // Freeze derived board origins before any panel changes its extent.
-            let origins: Vec<_> = (0..source.panels.len())
-                .map(|i| layout(source, i))
-                .collect();
-            for (p, origin) in template.panels.iter_mut().zip(origins) {
-                p.layout_2d = Some(origin);
-            }
+            freeze_implicit_layouts(source, &mut template);
             let mut seen = std::collections::BTreeSet::new();
             for (id, points) in groups {
                 if !seen.insert(id.clone()) {
@@ -2042,9 +2046,7 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                     .iter()
                     .position(|p| p.id == id)
                     .ok_or("Panel not found")?;
-                let origin = layout(&template, index);
                 let p = &mut template.panels[index];
-                p.layout_2d = Some(origin);
                 let delta = rotate_2d(board_delta, -p.layout_rotation_degrees);
                 remap_anchors(p, &points, |point| point + delta)?;
                 normalize(p);

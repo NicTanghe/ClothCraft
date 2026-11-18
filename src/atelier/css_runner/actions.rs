@@ -349,10 +349,7 @@ pub(super) fn apply_runner_action(
         RunnerAction::Zoom2dOut => {
             state.board_2d_zoom = (state.board_2d_zoom / 1.25).clamp(0.25, 10.0);
         }
-        RunnerAction::Zoom2dFit => {
-            state.board_2d_pan = (0.0, 0.0);
-            state.board_2d_zoom = 1.0;
-        }
+        RunnerAction::Zoom2dFit => state.frame_all_2d(),
         RunnerAction::NextPiece2d => {
             let count = state.project.template.panels.len().max(1);
             state.selected_piece_index = (state.selected_piece_index + 1) % count;
@@ -530,12 +527,11 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                     state.hovered_2d = None;
                     state.selected_piece_index = 0;
                     state.clear_2d_subselection();
-                    state.board_2d_pan = (0.0, 0.0);
-                    state.board_2d_zoom = 1.0;
 
                     let next_garment = Arc::new(compiled);
                     let next_state = next_garment.initial_state.clone();
                     state.project.template = next_template;
+                    state.frame_all_2d();
                     state.project.state = None;
                     state.project.mesh_signature = None;
                     state.generation = state.generation.wrapping_add(1);
