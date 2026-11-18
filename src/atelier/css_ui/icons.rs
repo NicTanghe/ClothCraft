@@ -511,3 +511,52 @@ pub fn icon_dress_form() -> Node {
         </svg>
     }
 }
+
+// ---------------------------------------------------------------------------
+// 3D viewport shading and cloth wireframe toggles
+// ---------------------------------------------------------------------------
+
+/// Smooth per-vertex shading, drawn as a softly banded sphere.
+pub fn icon_shading_smooth() -> Node {
+    ui! {
+        <svg viewBox="0 0 24 24" class="icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M4.2 9c4.8-2.7 10.8-2.7 15.6 0" opacity="0.55" />
+            <path d="M4.2 15c4.8 2.7 10.8 2.7 15.6 0" opacity="0.55" />
+            <circle cx="9" cy="9" r="1.5" fill="currentColor" stroke="none" opacity="0.65" />
+        </svg>
+    }
+}
+
+/// Flat per-face shading, drawn as a faceted low-poly shell.
+pub fn icon_shading_flat() -> Node {
+    ui! {
+        <svg viewBox="0 0 24 24" class="icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l8 5v8l-8 5-8-5V8z" />
+            <path d="M12 13l8-5v8l-8 5z" fill="currentColor" fill-opacity="0.16" stroke="none" />
+            <path d="M12 3v18M4 8l8 5 8-5M4 16l8-5 8 5" opacity="0.6" />
+        </svg>
+    }
+}
+
+/// Cloth wireframe visible.
+pub fn icon_wireframe_on() -> Node {
+    ui! {
+        <svg viewBox="0 0 24 24" class="icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7l8-4 8 4v10l-8 4-8-4z" />
+            <path d="M4 7l8 4 8-4M12 11v10M4 7v10M20 7v10" opacity="0.7" />
+            <path d="M7 17l3-4M17 17l-3-4" opacity="0.55" />
+        </svg>
+    }
+}
+
+/// Cloth wireframe hidden, drawn as the disabled shell with a slash.
+pub fn icon_wireframe_off() -> Node {
+    ui! {
+        <svg viewBox="0 0 24 24" class="icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7l8-4 8 4v10l-8 4-8-4z" opacity="0.35" />
+            <path d="M4 7l8 4 8-4M12 11v10" opacity="0.35" />
+            <path d="M3 3l18 18" stroke-width="2" />
+        </svg>
+    }
+}

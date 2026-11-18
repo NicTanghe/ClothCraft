@@ -59,13 +59,14 @@ writes a file; a subsequent I/O error is not an atomic file-replacement guarante
 |---|---|
 | Root metadata | Explicit `metersPerUnit = 1`, `upAxis = "Y"`, `defaultPrim = "World"` |
 | `/World/Garment` | Scope containing one `Mesh` per compiled panel; custom integer `clothcraft:snapshotVersion = 1` |
+| `/ClothWire` | Root-level display-only `Mesh` with thin lifted quads along each unique garment edge; its visibility is toggled by the 3D header. It never includes avatar, collider or other loaded geometry |
 | `clothcraft:timeSeconds` | Custom double snapshot timestamp in seconds; this is not a time-sampled animation or playback range |
 | Mesh prim name | `panel_` followed by the lowercase hexadecimal UTF-8 bytes of the panel ID; injective and stable across panel reordering |
 | `clothcraft:panelId` | Original semantic panel ID as a custom string; mesh indices never become editable IDs |
 | `points` | World-space current positions, `point3f[]`, in metres; explicit f64 to f32 conversion |
 | `faceVertexCounts`, `faceVertexIndices` | Triangles and panel-local transient point indices, preserving compiler winding |
 | `subdivisionScheme`, `orientation`, `doubleSided` | Explicit `none`, `rightHanded`, `true`; polygon cloth without implicit Catmull-Clark or invented thickness |
-| `normals` | Area-weighted smooth `normal3f[]` with `vertex` interpolation for every panel and the collision display mesh; the viewport therefore shades continuously instead of falling back to one normal per face. The 3D header's Smooth/Flat control rewrites the same attribute with `faceVarying` per-corner normals for flat shading |
+| `normals` | Area-weighted smooth `normal3f[]` with `vertex` interpolation for every panel and the collision display mesh; the viewport therefore shades continuously instead of falling back to one normal per face. The 3D header's single shading toggle rewrites the same attribute with `faceVarying` per-corner normals for flat shading |
 | `clothcraft:restUV` | Custom `double2[]` in **local material metres**, retained directly from `Mesh.uv`; independent of drape, placement and board layout |
 | `primvars:st` | Standard `texCoord2f[]` with `vertex` interpolation, a f32 presentation copy of the same local metre coordinates; no atlas packing or [0,1] normalization |
 | `primvars:displayColor` | One constant illustrative color, not fabric appearance or a calibrated material |
@@ -141,7 +142,7 @@ They cover panel-local topology/winding, semantic ID stability and escaping,
 unchanged f64 material coordinates after deformation, display precision,
 inconsistent partitions, invalid snapshots, smooth area-weighted averaging,
 flat per-corner normals and the finite fallback for degenerate or isolated
-vertices. The runner regression also clicks the Smooth/Flat control and reads the
+vertices. The runner regression also clicks the shading toggle and reads the
 authored interpolation and values back from the live stage. The optional independent reader
 uses Pixar's Python `pxr` API; no GPU or native window is created:
 
@@ -208,11 +209,24 @@ vertices use a finite `+Y` fallback. Triangle winding, not the rest geometry,
 defines orientation.
 
 Accepted snapshots, edit commits and remeshes rewrite the affected `points` and
-`normals` together on the event thread. The 3D viewport header exposes a
-Smooth/Flat control. Flat mode authors `faceVarying` per-corner normals from the
-same triangles, and switching back republishes the vertex normals. The control
-is view-only state: it is not saved in the document, does not touch physics and
-resets to Smooth on launch.
+`normals` together on the event thread. The 3D viewport header exposes one
+icon toggle for Smooth/Flat shading. Flat mode authors `faceVarying` per-corner
+normals from the same triangles, and switching back republishes the vertex
+normals. The control is view-only state: it is not saved in the document, does
+not touch physics and resets to Smooth on launch.
+
+### Cloth wireframe overlay
+
+The 3D header's second icon toggle shows or hides `/ClothWire`. The native USD
+renderer draws triangles rather than line primitives, so the overlay authors one
+thin quad per unique garment edge, lifted along the adjacent face normal by
+0.4 mm to avoid z-fighting. Width is about 1.2 mm. Only the simulated garment
+triangles contribute; the avatar collision mesh, sphere collider and any other
+loaded display geometry are excluded. The overlay is view-only state, is not
+saved in the document and never feeds physics. While visible, accepted solver
+steps refresh its positions and normals; while hidden, the mesh is marked
+`invisible` and simulation updates skip it. Topology edits rebuild its quads.
+This is a diagnostic overlay, not a measured performance feature.
 
 The native preview also includes a static display mesh for the collision surface:
 the loaded mannequin in the fitting workspace and a tessellated analytic sphere
