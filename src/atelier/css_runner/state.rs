@@ -41,6 +41,7 @@ pub struct CssRunnerState {
     pub(super) action_batch: Vec<RunnerAction>,
     pub(super) frame_drag: FrameAlignedDrag,
     pub(super) input_dirty: bool,
+    pub wireframe: bool,
     pub(super) board_background: RefCell<Option<super::board::rendering::BoardBackgroundCache>>,
     pub(super) native_number_drag: bool,
     pub(super) number_drag: Arc<Mutex<super::input::number::NumberDragState>>,
@@ -140,6 +141,7 @@ impl CssRunnerState {
             action_batch: Vec::new(),
             frame_drag: FrameAlignedDrag::new(),
             input_dirty: false,
+            wireframe: false,
             board_background: RefCell::new(None),
             native_number_drag: false,
             number_drag: Arc::new(Mutex::new(Default::default())),
@@ -304,6 +306,23 @@ impl CssRunnerState {
             )
         {
             self.status_message = format!("USD update error: {error}");
+        }
+        if self.wireframe {
+            self.sync_usd_wireframe();
+        }
+    }
+
+    /// Refresh or hide the cloth-only wireframe overlay.
+    pub fn sync_usd_wireframe(&mut self) {
+        if let Some(scene) = &self.usd_scene
+            && let Err(error) = clothcraft::usd_scene::update_viewport_wireframe(
+                scene,
+                &self.scene.garment,
+                &self.scene.state,
+                self.wireframe,
+            )
+        {
+            self.status_message = format!("USD wireframe error: {error}");
         }
     }
 
