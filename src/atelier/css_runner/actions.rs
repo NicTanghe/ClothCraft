@@ -50,6 +50,7 @@ pub enum RunnerAction {
     TabMaterial,
     TabEnv,
     CamReset,
+    CubePreset(clothcraft::render::PresetView),
     PieceNext,
     ToolSelect,
     ToolSew,
@@ -284,6 +285,11 @@ pub(super) fn apply_runner_action(
             );
             state.sync_usd_camera();
             state.status_message = "Reset 3D camera".to_string();
+        }
+        RunnerAction::CubePreset(view) => {
+            state.camera.apply_preset(view);
+            state.sync_usd_camera();
+            state.status_message = format!("3D view: {}", view.label());
         }
         RunnerAction::PieceNext => {
             let count = state.project.template.panels.len().max(1);

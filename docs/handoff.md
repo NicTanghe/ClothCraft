@@ -1,5 +1,25 @@
 # Repository handoff
 
+## Basic DOM view cube in the 3D viewport — 18 November 2026 (experimental)
+
+The native 3D viewport now has a small interactive **VIEW** cube net docked
+below the 3D scene. Top/Bottom/Front/Back/Left/Right apply the existing
+`render::PresetView` directions and Iso returns to the isometric preset; each
+click updates the USD camera. It is a flat DOM control net, not a camera-
+projected rotating cube: a projected/rotating cube with per-face hit regions is
+the follow-up. The View menu in #44 and this cube can coexist; they share the
+same camera operations only if unified later.
+
+Limits: no active-face highlight, no drag-to-orbit on the cube, and the net does
+not rotate with the camera. It is always visible in the 3D viewport. It is docked
+below the native USD host rather than overlaid: a DOM text overlay hides the
+native host (observed as a portable-Windows `ui-smoke` timeout), so a real
+in-viewport cube needs GPU/vector drawing. That projected cube is the follow-up.
+
+Validation: library tests (including the new cube face/click regression), strict
+all-target Clippy and formatting passed; a headless RGBA capture of the cube was
+inspected. No GPU or native window run was performed.
+
 ## Functional native import dialogs — 18 November 2026
 
 The fitting editor's left-browser **DXF**, **SVG** and **Avatar** import buttons

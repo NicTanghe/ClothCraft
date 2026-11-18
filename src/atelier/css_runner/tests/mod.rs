@@ -9,5 +9,6 @@ pub(super) mod sewing;
 pub(super) mod shell;
 pub(super) mod simulation;
 pub(super) mod support;
+pub(super) mod view_cube;
 
 pub(super) mod numbers;
