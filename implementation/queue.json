@@ -906,13 +906,13 @@
       "title": "Cloth-only wireframe and icon shading toggle in the 3D viewport",
       "acceptance": "The runner 3D header has a show/hide cloth-wireframe icon toggle whose overlay covers only simulated garment triangles, and a single smooth/flat shading icon toggle replacing the two text buttons; every control has a tooltip; CPU and desktop checks pass; wireframe off leaves avatars and other display meshes unchanged.",
       "points": 3.0,
-      "spent": 0,
+      "spent": 3.0,
       "priority": "high",
       "depends_on": [],
-      "status": "active",
-      "owner": "deepseek-lead",
-      "vruntime": 3.342039609635428,
-      "pr": null
+      "status": "review",
+      "owner": null,
+      "vruntime": 4.092039609635428,
+      "pr": "https://github.com/NicTanghe/ClothCraft/pull/42"
     }
   ]
 }
