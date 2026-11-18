@@ -31,7 +31,7 @@ fn app(state: CssRunnerState) -> OutlineApp {
 }
 
 #[test]
-fn body_outline_is_a_background_board_path() {
+fn body_outline_uses_the_uncached_drawing_layer() {
     let _guard = super::super::super::worker::WORKER_TEST_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -47,7 +47,10 @@ fn body_outline_is_a_background_board_path() {
         .iter()
         .find(|path| path.class.split_whitespace().any(|c| c == "body-outline"))
         .expect("body outline path");
-    assert!(outline.background, "silhouette paints behind the panels");
+    assert!(
+        !outline.background,
+        "silhouette stays on the uncached drawing layer"
+    );
 }
 
 #[test]

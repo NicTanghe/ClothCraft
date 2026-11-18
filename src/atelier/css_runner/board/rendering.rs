@@ -327,9 +327,16 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
         for [a, b] in &state.body_outline {
             commands.extend(polyline(&[*a, *b], false));
         }
-        let mut path = BoardPath::new(commands, None, outline_color, 1.2 * px, "body-outline");
-        path.background = true;
-        nodes.push(path);
+        // Keep the silhouette on the uncached drawing layer, inserted before
+        // the panels. Marking it as cached background would invalidate the grid
+        // raster on every UI rebuild.
+        nodes.push(BoardPath::new(
+            commands,
+            None,
+            outline_color,
+            1.2 * px,
+            "body-outline",
+        ));
     }
 
     let fillet_previews = active_fillet_previews(state);
