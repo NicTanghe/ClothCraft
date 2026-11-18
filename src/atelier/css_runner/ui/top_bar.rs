@@ -52,7 +52,7 @@ pub(in super::super) fn build_runner_top_bar(state: &CssRunnerState) -> Node {
                 <span class="app-title">"ClothCraft"</span>
                 <nav class="top-bar-menus">
                     <button class="menu-item" onclick_shared={queue_action(&state.actions, RunnerAction::Save)} title="Save Project (Ctrl+S)">"Save"</button>
-                    <button id="runner-export-btn" class="menu-item" onclick_shared={queue_action(&state.actions, RunnerAction::Export)} title="Export Artifacts">"Export"</button>
+                    <button id="runner-export-btn" class="menu-item" onclick_shared={queue_action(&state.actions, RunnerAction::ExportSvg)} title="Save True-Scale Pattern SVG">"Export"</button>
                     <button id="settings-toggle" class="menu-item" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleSettings)} title="Settings">"Settings"</button>
                 </nav>
             </div>

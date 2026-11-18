@@ -28,7 +28,8 @@ pub enum RunnerAction {
     Step,
     Reset,
     Save,
-    Export,
+    ExportSvg,
+    ExportObj,
     CleanView,
     PaletteToggle,
     ThemeToggle,
@@ -236,7 +237,8 @@ pub(super) fn apply_runner_action(
         RunnerAction::Step => state.send_control_state(true),
         RunnerAction::Reset => state.reset_simulation(),
         RunnerAction::Save => state.save_project(),
-        RunnerAction::Export => state.export_artifacts(),
+        RunnerAction::ExportSvg => state.export_pattern_svg(),
+        RunnerAction::ExportObj => state.export_obj(),
         RunnerAction::CleanView => state.clean_view = !state.clean_view,
         RunnerAction::PaletteToggle => {
             state.command_palette_open = !state.command_palette_open;

@@ -55,10 +55,10 @@ pub(in super::super) fn build_runner_command_palette(state: &CssRunnerState) -> 
                         </div>
                         <span class="command-shortcut">"Ctrl+S"</span>
                     </button>
-                    <button class="palette-item" onclick_shared={queue_action(&state.actions, RunnerAction::Export)}>
+                    <button class="palette-item" onclick_shared={queue_action(&state.actions, RunnerAction::ExportSvg)}>
                         <div class="item-left">
                             {icon_export()}
-                            <span>"Export Artifacts (OBJ & True-Scale SVG)"</span>
+                            <span>"Export True-Scale Pattern SVG"</span>
                         </div>
                         <span class="command-shortcut">"Ctrl+E"</span>
                     </button>

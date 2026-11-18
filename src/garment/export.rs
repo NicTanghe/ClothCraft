@@ -3,7 +3,7 @@ use super::embedding::MaterialPath;
 use super::{CompiledGarment, GarmentTemplate, seam::Side};
 use crate::model::State;
 use glam::DVec2;
-use std::{fmt::Write as _, fs, path::Path};
+use std::{fmt::Write as _, fs, io::Write as IoWrite, path::Path};
 
 fn xml(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -201,6 +201,18 @@ pub fn print_pattern_svg(template: &GarmentTemplate) -> Result<String, String> {
 // Call only after compiling this template successfully. Artifact export shares
 // that validation with its JSON output instead of triangulating twice.
 fn print_pattern_svg_validated(template: &GarmentTemplate) -> Result<String, String> {
+    let mut out = Vec::new();
+    write_print_sheet(template, &mut out, write_sampled_outline).map_err(|e| e.to_string())?;
+    String::from_utf8(out).map_err(|e| e.to_string())
+}
+
+type PrintResult = Result<(), Box<dyn std::error::Error>>;
+
+fn write_print_sheet<W: IoWrite>(
+    template: &GarmentTemplate,
+    mut out: W,
+    write_outline: impl Fn(&mut W, &super::template::Panel, DVec2, DVec2) -> PrintResult,
+) -> PrintResult {
     const MARGIN_MM: f64 = 20.0;
     const LABEL_MM: f64 = 14.0;
     const GAP_MM: f64 = 22.0;
@@ -216,10 +228,7 @@ fn print_pattern_svg_validated(template: &GarmentTemplate) -> Result<String, Str
         let mut min = DVec2::ZERO;
         let mut max = DVec2::new(panel.pattern.width, panel.pattern.height);
         if !max.is_finite() || max.min_element() <= 0.0 || max.max_element() > 100.0 {
-            return Err(format!(
-                "Invalid printable dimensions for panel {}",
-                panel.id
-            ));
+            return Err(format!("Invalid printable dimensions for panel {}", panel.id).into());
         }
         // Control handles may extend a valid curve beyond the declared corner
         // bounds. Include the sampled contour, the joined cutting line and the
@@ -262,20 +271,18 @@ fn print_pattern_svg_validated(template: &GarmentTemplate) -> Result<String, Str
             || w > 100_000.0
             || h > 100_000.0
         {
-            return Err(format!(
-                "Invalid printable dimensions for panel {}",
-                panel.id
-            ));
+            return Err(format!("Invalid printable dimensions for panel {}", panel.id).into());
         }
         width_mm = width_mm.max(w + 2.0 * MARGIN_MM);
         height_mm += LABEL_MM + h + GAP_MM;
         bounds.push((min * 1000.0, size));
     }
     height_mm += RULER_MM + MARGIN_MM;
-    let mut out = format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width_mm:.3}mm\" height=\"{height_mm:.3}mm\" viewBox=\"0 0 {width_mm:.3} {height_mm:.3}\"><title>{}</title><desc>Material-space sewing outlines and stored draft markings at 1 SVG unit per mm. Print at 100% and check the 100 mm ruler. Single sheet; no page tiling or cutting certification.</desc><rect width=\"100%\" height=\"100%\" fill=\"white\"/>\n",
+    writeln!(
+        out,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width_mm:.3}mm\" height=\"{height_mm:.3}mm\" viewBox=\"0 0 {width_mm:.3} {height_mm:.3}\"><title>{}</title><desc>Material-space sewing outlines and stored draft markings at 1 SVG unit per mm. Print at 100% and check the 100 mm ruler. Single sheet; no page tiling or cutting certification.</desc><rect width=\"100%\" height=\"100%\" fill=\"white\"/>",
         xml(&template.name)
-    );
+    )?;
     let mut y = MARGIN_MM;
     for (panel, (min, size)) in template.panels.iter().zip(bounds) {
         let (w, h) = (size.x, size.y);
@@ -285,59 +292,22 @@ fn print_pattern_svg_validated(template: &GarmentTemplate) -> Result<String, Str
             y + 5.0,
             xml(&panel.id),
             xml(&panel.name)
-        ).unwrap();
+        )?;
         y += LABEL_MM;
-        write!(out, "<g data-panel=\"{}\" transform=\"translate({:.3} {:.3})\">\n<path data-role=\"sewing-outline\" d=\"", xml(&panel.id), MARGIN_MM - min.x, y - min.y).unwrap();
-        if let Some(polygon) = &panel.polygon {
-            // Each Bézier boundary is sampled in material metres. The first
-            // point of the following edge repeats the previous endpoint.
-            for i in 0..polygon.edges.len() {
-                let points = polygon.edge_points(i)?;
-                for (j, p) in points.iter().enumerate() {
-                    if i > 0 && j == 0 {
-                        continue;
-                    }
-                    write!(
-                        out,
-                        "{} {:.3} {:.3} ",
-                        if i == 0 && j == 0 { "M" } else { "L" },
-                        p.x * 1000.0,
-                        p.y * 1000.0
-                    )
-                    .unwrap();
-                }
-            }
-            out.push_str("Z ");
-            for hole in &polygon.holes {
-                for (j, p) in hole.points.iter().enumerate() {
-                    write!(
-                        out,
-                        "{} {:.3} {:.3} ",
-                        if j == 0 { "M" } else { "L" },
-                        p.x * 1000.0,
-                        p.y * 1000.0
-                    )
-                    .unwrap();
-                }
-                out.push_str("Z ");
-            }
-        } else {
-            write!(
-                out,
-                "M 0.000 0.000 L {w:.3} 0.000 L {w:.3} {h:.3} L 0.000 {h:.3} Z "
-            )
-            .unwrap();
-        }
-        out.push_str(
-            "\" fill=\"none\" stroke=\"black\" stroke-width=\"0.3\" fill-rule=\"evenodd\"/>\n",
-        );
+        writeln!(
+            out,
+            "<g data-panel=\"{}\" transform=\"translate({:.3} {:.3})\">",
+            xml(&panel.id),
+            MARGIN_MM - min.x,
+            y - min.y
+        )?;
+        write_outline(&mut out, panel, min, size)?;
         if let Some(polygon) = &panel.polygon {
             if let Some(contour) = polygon.cutting_contour()? {
                 write!(
                     out,
                     "<path data-role=\"cutting-contour\" fill-rule=\"evenodd\" d=\""
-                )
-                .unwrap();
+                )?;
                 for ring in std::iter::once(&contour.outer).chain(contour.holes.iter()) {
                     for (j, p) in ring.iter().enumerate() {
                         write!(
@@ -346,37 +316,183 @@ fn print_pattern_svg_validated(template: &GarmentTemplate) -> Result<String, Str
                             if j == 0 { "M" } else { "L" },
                             p.x * 1000.0,
                             p.y * 1000.0
-                        )
-                        .unwrap();
+                        )?;
                     }
-                    out.push_str("Z ");
+                    out.write_all(b"Z ")?;
                 }
-                out.push_str("\" fill=\"none\" stroke=\"#c62828\" stroke-width=\"0.35\" stroke-dasharray=\"3 2\"/>\n");
+                out.write_all(b"\" fill=\"none\" stroke=\"#c62828\" stroke-width=\"0.35\" stroke-dasharray=\"3 2\"/>\n")?;
             }
             for (edge, notches) in &polygon.notches {
                 for (i, notch) in notches.iter().enumerate() {
                     let marker = polygon.notch_marker(edge, notch)?;
-                    write!(out, "<polyline data-role=\"notch\" points=\"").unwrap();
+                    write!(out, "<polyline data-role=\"notch\" points=\"")?;
                     for p in marker {
-                        write!(out, "{:.3},{:.3} ", p.x * 1000.0, p.y * 1000.0).unwrap();
+                        write!(out, "{:.3},{:.3} ", p.x * 1000.0, p.y * 1000.0)?;
                     }
-                    writeln!(out,"\" fill=\"none\" stroke=\"#c62828\" stroke-width=\"0.3\"><title>notch {} · {}</title></polyline>",i + 1,xml(edge)).unwrap();
+                    writeln!(
+                        out,
+                        "\" fill=\"none\" stroke=\"#c62828\" stroke-width=\"0.3\"><title>notch {} · {}</title></polyline>",
+                        i + 1,
+                        xml(edge)
+                    )?;
                 }
             }
             for line in &polygon.lines {
-                write!(out, "<polyline data-role=\"internal-line\" points=\"").unwrap();
+                write!(out, "<polyline data-role=\"internal-line\" points=\"")?;
                 for p in line.samples()? {
-                    write!(out, "{:.3},{:.3} ", p.x * 1000.0, p.y * 1000.0).unwrap();
+                    write!(out, "{:.3},{:.3} ", p.x * 1000.0, p.y * 1000.0)?;
                 }
-                writeln!(out,"\" fill=\"none\" stroke=\"#555\" stroke-width=\"0.3\" stroke-dasharray=\"2 2\"><title>{}</title></polyline>",xml(&line.id)).unwrap();
+                writeln!(
+                    out,
+                    "\" fill=\"none\" stroke=\"#555\" stroke-width=\"0.3\" stroke-dasharray=\"2 2\"><title>{}</title></polyline>",
+                    xml(&line.id)
+                )?;
             }
         }
-        out.push_str("</g>\n");
+        out.write_all(b"</g>\n")?;
         y += h + GAP_MM;
     }
     let ruler_y = y + 8.0;
-    writeln!(out, "<g data-role=\"calibration-ruler\" stroke=\"black\" stroke-width=\"0.3\" fill=\"none\"><path d=\"M {MARGIN_MM:.3} {ruler_y:.3} h 100.000 M {MARGIN_MM:.3} {:.3} v 10.000 M {:.3} {:.3} v 10.000\"/></g><text x=\"{MARGIN_MM:.3}\" y=\"{:.3}\" font-family=\"sans-serif\" font-size=\"4\">100 mm calibration ruler — print at actual size (100%)</text></svg>",ruler_y-5.0,MARGIN_MM+100.0,ruler_y-5.0,ruler_y+17.0).unwrap();
-    Ok(out)
+    writeln!(
+        out,
+        "<g data-role=\"calibration-ruler\" stroke=\"black\" stroke-width=\"0.3\" fill=\"none\"><path d=\"M {MARGIN_MM:.3} {ruler_y:.3} h 100.000 M {MARGIN_MM:.3} {:.3} v 10.000 M {:.3} {:.3} v 10.000\"/></g><text x=\"{MARGIN_MM:.3}\" y=\"{:.3}\" font-family=\"sans-serif\" font-size=\"4\">100 mm calibration ruler — print at actual size (100%)</text></svg>",
+        ruler_y - 5.0,
+        MARGIN_MM + 100.0,
+        ruler_y - 5.0,
+        ruler_y + 17.0
+    )?;
+    Ok(())
+}
+
+fn write_sampled_outline(
+    out: &mut impl IoWrite,
+    panel: &super::template::Panel,
+    _min: DVec2,
+    size: DVec2,
+) -> PrintResult {
+    let (w, h) = (size.x, size.y);
+    write!(out, "<path data-role=\"sewing-outline\" d=\"")?;
+    if let Some(polygon) = &panel.polygon {
+        // Each Bézier boundary is sampled in material metres. The first
+        // point of the following edge repeats the previous endpoint.
+        for i in 0..polygon.edges.len() {
+            let points = polygon.edge_points(i)?;
+            for (j, p) in points.iter().enumerate() {
+                if i > 0 && j == 0 {
+                    continue;
+                }
+                write!(
+                    out,
+                    "{} {:.3} {:.3} ",
+                    if i == 0 && j == 0 { "M" } else { "L" },
+                    p.x * 1000.0,
+                    p.y * 1000.0
+                )?;
+            }
+        }
+        out.write_all(b"Z ")?;
+        for hole in &polygon.holes {
+            for (j, p) in hole.points.iter().enumerate() {
+                write!(
+                    out,
+                    "{} {:.3} {:.3} ",
+                    if j == 0 { "M" } else { "L" },
+                    p.x * 1000.0,
+                    p.y * 1000.0
+                )?;
+            }
+            out.write_all(b"Z ")?;
+        }
+    } else {
+        write!(
+            out,
+            "M 0.000 0.000 L {w:.3} 0.000 L {w:.3} {h:.3} L 0.000 {h:.3} Z "
+        )?;
+    }
+    out.write_all(
+        b"\" fill=\"none\" stroke=\"black\" stroke-width=\"0.3\" fill-rule=\"evenodd\"/>\n",
+    )?;
+    Ok(())
+}
+
+/// Save the physical pattern sheet with streamed, native cubic sewing outlines.
+#[cfg(feature = "desktop")]
+pub fn save_print_pattern_svg(template: &GarmentTemplate, path: &Path) -> Result<(), String> {
+    template.compile()?;
+    crate::document::atomic_write_with(path, |file| {
+        let mut out = std::io::BufWriter::new(file);
+        write_print_sheet(template, &mut out, write_native_outline).map_err(|e| e.to_string())?;
+        out.flush().map_err(|e| e.to_string())
+    })
+}
+
+#[cfg(feature = "desktop")]
+fn write_native_outline(
+    out: &mut impl IoWrite,
+    panel: &super::template::Panel,
+    min: DVec2,
+    size: DVec2,
+) -> PrintResult {
+    use cssimpler::core::{
+        Color, PathCommand::*, VectorPaint, VectorPath, VectorPoint, VectorScene, VectorViewBox,
+    };
+
+    let mm = |p: DVec2| VectorPoint::new((p.x * 1000.0) as f32, (p.y * 1000.0) as f32);
+    let mut commands = Vec::new();
+    if let Some(polygon) = &panel.polygon {
+        commands.push(MoveTo(mm(polygon.points[0])));
+        for (i, edge) in polygon.edges.iter().enumerate() {
+            let end = mm(polygon.points[(i + 1) % polygon.points.len()]);
+            commands.push(match polygon.curves.get(edge) {
+                Some(&[a, b]) => CubicTo {
+                    control1: mm(a),
+                    control2: mm(b),
+                    end,
+                },
+                None => LineTo(end),
+            });
+        }
+        commands.push(Close);
+        for hole in &polygon.holes {
+            commands.push(MoveTo(mm(hole.points[0])));
+            commands.extend(hole.points[1..].iter().map(|&p| LineTo(mm(p))));
+            commands.push(Close);
+        }
+    } else {
+        let w = size.x as f32;
+        let h = size.y as f32;
+        commands.extend([
+            MoveTo(VectorPoint::new(0.0, 0.0)),
+            LineTo(VectorPoint::new(w, 0.0)),
+            LineTo(VectorPoint::new(w, h)),
+            LineTo(VectorPoint::new(0.0, h)),
+            Close,
+        ]);
+    }
+    let path = VectorPath::new(
+        commands,
+        VectorPaint {
+            fill: None,
+            stroke: Some(Color::rgb(0, 0, 0)),
+            stroke_width: 0.3,
+        },
+    )?;
+    // SVG's child viewport has unitless dimensions, inherited from the
+    // physical sheet (1 unit = 1 mm). Its translation cancels the viewBox offset.
+    // One millimetre covers the sampling tolerance used for sheet bounds
+    // (0.25 mm) and the outline stroke.
+    let x = min.x as f32 - 1.0;
+    let y = min.y as f32 - 1.0;
+    let width = size.x as f32 + 2.0;
+    let height = size.y as f32 + 2.0;
+    let scene = VectorScene::new(VectorViewBox::new(x, y, width, height), vec![path])?;
+    writeln!(
+        out,
+        "<g data-role=\"sewing-outline\" transform=\"translate({x} {y})\">"
+    )?;
+    scene.write_svg(&mut *out)?;
+    writeln!(out, "</g>")?;
+    Ok(())
 }
 
 pub fn obj(garment: &CompiledGarment, state: &State) -> String {

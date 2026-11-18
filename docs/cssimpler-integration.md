@@ -1,6 +1,6 @@
 # cssimpler integration
 
-Both native desktop editors use cssimpler revision `5249a0d`, which includes
+Both native desktop editors use cssimpler revision `0c614b6`, which includes
 captured event handlers, typed UI actions, frame-aligned pointer scheduling and
 the transition update described in cssimpler's `docs/`. The fitting runner
 delivers commands through one per-instance
@@ -56,6 +56,17 @@ frame. Release flushes the final delta immediately. Cursor recentering stays loc
 to ClothCraft because cssimpler does not expose relative pointer capture; the
 coalescing and scheduling come from cssimpler. Frame-aligned input is opt-in per
 app, so the Studio V2 editor keeps its existing immediate event path.
+
+## Export patterns from the fitting editor
+
+**Export** opens a save dialog for a single-sheet true-scale SVG. It uses the
+same millimetre sheet layout, draft markings and 100 mm calibration ruler as
+the CLI print export. CSSimpler streams the sewing outlines with their cubic
+controls to a buffered file. The export uses the committed material geometry
+and is independent of board pan, zoom and theme. Print at 100% and verify the
+ruler. The asset browser also offers a separate OBJ save dialog for the current
+3D garment.
+
 
 ## Native vector board (FC-0061)
 
