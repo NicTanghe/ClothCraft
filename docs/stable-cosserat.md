@@ -1,7 +1,10 @@
 # Stable Cosserat rods: CPU research implementation
 
-`cosserat` is an opt-in f64 rod-network solver, not a new cloth-shell backend or
-an editor mode. It implements the material and local alternating solve from
+`cosserat` is an opt-in f64 rod-network solver. This draft ports the CPU
+research APIs; the experimental desktop solver menu and worker integration are
+not yet ported. It is an approximate rod-truss alternative, not a calibrated
+cloth-shell backend. The
+solver implements the material and local alternating solve from
 Hsu, Wang, Wu and Yuksel, [Stable Cosserat Rods](https://graphics.cs.utah.edu/research/projects/stable-cosserat-rods/)
 (SIGGRAPH 2025), with a deliberately small-scene CPU contact experiment. It
 does **not** reproduce the published GPU yarn-cloth benchmarks.
@@ -17,8 +20,9 @@ The separate YarnBall GPU code is GPL-licensed and is not included.
 Call `RodModel::new` with *rest* vertex positions in metres, segment endpoint
 pairs, joint pairs, optional rest material frames, pin lists and one material.
 Each joint connects two segments sharing a vertex. Segment/joint indices are
-runtime data; this API is not a garment file format. No panel, seam, saved
-project or 2D material coordinate is converted into a rod implicitly. The
+runtime data; this API is not a garment file format. The low-level API does not
+implicitly convert panels, seams, saved projects or 2D material coordinates.
+The garment adapter below compiles the existing material-space mesh. The
 existing fiber guides remain geometric surface attachments, not physical yarns.
 
 Each segment stores a unit quaternion rotating local +X onto its rest tangent.
@@ -65,7 +69,9 @@ and the final free-position residual RMS (N) of the *pre-drag implicit
 objective*. It does not include an orientation torque residual or certify
 convergence. When contact is enabled it also reports contact energy, the
 computed closest-pair distance, bounded updates and rejected local line
-searches. These are CPU wall timings, not GPU timestamps or viewport cadence.
+searches. The fixed-avatar wrapper additionally reports the detected surface
+minimum distance when finite. These are CPU wall timings, not GPU timestamps or
+viewport cadence.
 
 ## Experimental rod self-contact
 
@@ -81,7 +87,8 @@ against the same local inertial, stretch and contact objective before acceptance
 Pairs are recomputed exhaustively; there is no broad phase, pair cache or
 candidate limit. This small-scene implementation is expensive: a vertex update
 can traverse all segment pairs repeatedly for backtracking. Pairs sharing a
-vertex are excluded entirely, including their immediate neighborhood. Starting
+vertex or locally connected by sewing are excluded entirely, including their
+immediate neighborhoods, as detailed below. Starting
 states must be separated above the numerical clearance for all included pairs;
 initial intersections are rejected, not repaired. For the motion bound, an
 interval gap projected along the candidate normal is a lower bound in exact
@@ -92,8 +99,9 @@ candidate when the segment directions are numerically independent. Below its
 near-parallel threshold the interior can be missed: energy, forces and the
 reported minimum can be approximate there. Floating-point
 predicates are not certified; the tests do not prove a universal nonintersection
-guarantee. Friction, self-contact for excluded pairs, rod/shell or rod/avatar
-contacts, and collision response for existing garment meshes are absent.
+guarantee. Friction, self-contact for excluded pairs and direct rod-segment
+against triangle contact are absent. The separate experimental surface path
+below handles the garment triangle surface against a fixed avatar.
 
 ## Reproduce and validation
 
@@ -135,3 +143,141 @@ segment endpoints, several segment pairs can contribute to the same physical
 crossing; the barrier is not deduplicated, and contact stiffness is dependent
 on segmentation. No calibrated yarn radius or yarn-level garment attachment is
 claimed.
+
+## Experimental surface attachment
+
+`garment::rod_attachment` provides an independent, runtime-only mapping from
+panel-local material points to a caller-supplied triangulation over rod points.
+The support triangles are interpolation cells; they introduce no physical
+shell elements, stiffness, sewing or collisions. Binding rejects uncovered
+points, degenerate cells and ambiguous overlapping cells at queried positions;
+points on a shared edge are accepted only when their coefficients agree. It
+does not establish that the supplied support covers the whole panel or respects
+holes and boundaries. The caller must guarantee this, use support vertices
+corresponding to rod positions, and rebuild the mapping whenever topology or
+rest coordinates change. The mapping cannot detect reordered topology with the
+same vertex count. No vertex indices are stored in authoring files.
+
+This is a building block, not a panel-to-yarn compiler or a solver-menu option.
+In particular, this mapping by itself supplies no yarn-crossing, sewing or
+collision physics and is not connected to the renderer.
+
+`GarmentRodMapping` binds the compiled vertex material coordinates of one named
+panel and retains the compiled garment for identity checks. Its output is in
+that panel's compiled vertex order. This makes an existing panel usable as the
+visible surface, but still requires an independently constructed and correctly
+ordered rod support; `evaluate` rejects a different compiled garment.
+
+`RectRodGrid` is a first, explicitly experimental rectangular material-space
+lattice generator. It places rod nodes on a regular grid, joins perpendicular
+rods at shared vertices and adds bending joints along each grid line. It is a
+welded lattice, **not woven yarn**: without diagonal members or crossing-angle
+stiffness it has an unresisted in-plane shear mode and is not a calibrated
+fabric model. Its support triangles only interpolate positions. It accepts
+explicit rod parameters, grid resolution and runtime pin indices, uses a flat
+2D rest shape, and does not clip to arbitrary panels, make seams, initialize
+from a draped garment, handle avatar collisions or integrate with the UI.
+
+## Experimental sewing terms
+
+`RodModel::with_stitches` adds quadratic stitches to the same implicit
+positional objective as inertia and rod stretch. A `RodStitch` has sorted,
+unique runtime vertex indices and coefficients summing to zero; its gap is the
+weighted position sum and its energy is `0.5 * k * |gap|²`, with `k` in N/m.
+Stitch forces and their local Hessian are included in the position solve, and
+the final positional residual includes stitches. `stitch_energy_j` is reported
+separately from rod elastic energy. No projection is applied after the solve;
+finite penalties and finite iterations do not guarantee zero gap.
+
+`garment::rod_sewing::compile_rod_stitches` transfers the existing garment
+seam quadrature to supplied garment-to-rod vertex weights. The coefficient is
+`seam.stiffness * sample.weight_m`, consistent with the current cloth solver.
+`GarmentRodMapping::global_weights` exposes the panel attachment weights to
+construct this map. Callers must rebuild the weights and stitch model when
+panel, seam or rod topology changes. This is not automatic worker/UI integration.
+
+Stitches can be combined with experimental rod self-contact. Segment pairs are
+excluded entirely when they share an endpoint or have endpoints appearing on
+opposite sides of the same stitch sample. These are local sewing exclusions,
+but exclude the full segment pair, not just the stitched points: separation is
+not guaranteed for excluded pairs, and long segments make the excluded region
+larger. Every other pair remains in detection. Sewing energy is included in the
+contact line search and all positional residuals. Start from a separated state
+for every nonexcluded pair. Friction, certified geometric predicates and
+production-scale sewing convergence remain unimplemented.
+
+`PanelRodNetwork::compile` is an additional research topology that turns each
+edge of an existing compiled panel triangulation into a rod, retaining the
+panel's resolution, outline and holes. Its triangles are only interpolation
+support. This is a welded triangular truss, not generated woven yarn; it has no
+bending joints or physical calibration and must not be treated as a cloth
+backend. It starts flat from 2D material coordinates, not from a draped state.
+It does not automatically apply garment pins or seams, and provides no avatar
+contact. The general attachment binder's work limit can reject large panels.
+
+`GarmentRodNetwork` is a CPU research harness that combines all compiled panel
+triangle edges into one welded rod truss, uses existing compiled seam samples
+and pin membership, and initializes rod positions and velocities from the
+compiled garment's placed or currently displayed 3D state. Rod rest lengths still come solely from the
+2D material coordinates. Near-opposite triangle edges are paired deterministically into approximate rod
+paths, and the explicit rod bending/twist rigidity applies at those joints.
+Their placement and stiffness depend on triangulation and are not a calibrated
+yarn weave or fabric bending model. Rod frames initialize from placed edge
+tangents and adjacent face normals; degenerate or opposing face normals are
+rejected. Vertex order matches the compiled garment mesh. The harness takes one
+explicitly supplied isotropic rod material for the entire model. `approximate_rod_material` derives one approximate material from the compiled garment: total mesh
+mass divided by unique rod-edge length for linear density; total material area
+divided by that length for equivalent width; area-weighted averages of warp,
+weft and shear multiplied by width for stretch/shear rigidity; and area-weighted
+bending multiplied by width for bend/twist rigidity. This is mesh-dependent and
+discards grain, directional response and per-panel material differences. It is
+not yarn reconstruction or a measured fabric calibration.
+
+`RodCheckpoint` serializes the full rod state (including orientations and
+fixed-point history) along with a versioned exact witness of the compiled rod
+model. Restoration rejects a different rest geometry, topology, mass,
+stiffness, pins or stitches and preserves the destination state on error.
+The witness is not a hash. This is a research API, not an existing project
+format; callers must separately persist compatible solver/contact settings and
+invalidate checkpoints when those settings make resumption inappropriate.
+
+
+## Experimental fixed-avatar surface contact
+
+`GarmentRodAvatar` wraps a compiled garment rod network with a fixed triangle
+surface using the existing CPU OGC world. Garment triangles and avatar faces
+participate in vertex-face and edge-edge detection; local sewing exclusions
+follow the existing garment seam samples. The contact solve refreshes detection
+in blocks of at most 64 vertices, adds OGC contact gradients to the rod/sewing
+objective and clips each candidate to the current OGC region before
+energy-checked backtracking. A fresh detection checks for newly active terms at
+each block boundary; a block that missed one is rolled back and retried with
+per-vertex detection. All vertices remain inside the region from that block's
+last detection. The solve
+uses the rod local Hessian as a positive search preconditioner; the OGC Hessian
+is not included. Final residuals include OGC contact forces, and
+`surface_contact_energy_j` reports OGC surface energy, including garment
+self-contact as well as avatar contact. Enabling the separate rod barrier too
+adds a second self-contact energy; it is an experiment, not calibrated cloth.
+When no surface contact is active, a full rod step first tries a contact-free
+path. Successive OGC detections certify its straight path through convex safe
+regions. If contact turns on near the end, an inactive prefix can be accepted
+only when it lowers the complete implicit rod/sewing/inertial objective. The
+accepted velocity is recomputed from that prefix; its force residual is
+reported unavailable. Otherwise the contact solve runs.
+
+The avatar is fixed for the lifetime of this wrapper. OGC starts from an
+initially separated state and applies only to included pairs; seam-local
+exclusions and floating-point predicates limit its guarantees. It does not
+repair intersections, determine whether a garment already lies inside a closed
+avatar, implement friction or animated avatars, or directly collide a yarn
+cross-section against the surface. The CPU path has no production performance
+claim. The desktop worker and solver-menu integration from FoldCraft PR 49
+have not yet been ported. The rod model currently limits networks to 4096
+vertices.
+
+`RodAvatarCheckpoint` additionally records an exact witness of the fixed
+avatar vertices, combined triangle topology and OGC settings. Restoration
+rejects a changed witness transactionally; rod time-step, gravity, drag and
+rod-barrier settings must still be managed by the caller. This research cache is
+not yet part of a saved fitting project.
