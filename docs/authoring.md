@@ -63,6 +63,12 @@ tests; a native window/GPU run is separate.
 
 ### Cut-and-sewn darts
 
+For a V-shaped cut already drawn on a piece, choose **Sew** on the 2D board
+and click the two legs in either order. The shared tip pairs with itself,
+and stitches run from the tip toward the two free ends at matching fractions
+of each leg's rest length. For a dart saved with the old crossed pairing,
+use **Trim** on one sewn leg to remove the seam, then sew the legs again.
+
 In **Edit**, select a straight, unsewn polygon boundary in 2D or 3D. In the
 inspector, choose **Cut-and-sewn dart…**, then enter the intake center's distance
 from the edge start, intake width and inward depth in millimetres. The 2D board
