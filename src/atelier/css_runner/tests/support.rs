@@ -1,7 +1,7 @@
 //! Shared headless fixtures and pointer-event helpers.
 
 use super::super::super::{DocumentFiles, worker};
-use super::super::board::geometry::{compute_2d_view_box_m, compute_2d_viewport_rects};
+use super::super::board::geometry::{compute_2d_view_box_m, compute_2d_viewport_rect};
 use super::super::board::native::BoardPath;
 use super::super::state::CssRunnerState;
 use clothcraft::fitting::FittingProject;
@@ -12,10 +12,10 @@ use glam::DVec2;
 use std::fs;
 
 pub(super) fn board_to_screen_px(state: &CssRunnerState, board_m: DVec2) -> (f32, f32) {
-    let (_canvas, svg_rect) = compute_2d_viewport_rects(state);
-    let (vbx, vby, span) = compute_2d_view_box_m(state);
-    let u = ((board_m.x - vbx) / span) as f32;
-    let v = ((board_m.y - vby) / span) as f32;
+    let svg_rect = compute_2d_viewport_rect(state);
+    let (vbx, vby, width, height) = compute_2d_view_box_m(state);
+    let u = ((board_m.x - vbx) / width) as f32;
+    let v = ((board_m.y - vby) / height) as f32;
     (svg_rect.x + u * svg_rect.w, svg_rect.y + v * svg_rect.h)
 }
 

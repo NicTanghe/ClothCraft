@@ -64,14 +64,14 @@ fn native_board_has_aligned_leaf_layers_and_preserves_authored_cubic_controls() 
     state.board_2d_pan = (0.123_456_789, -0.087_654_321);
     let template_before = serde_json::to_string(&state.project.template).unwrap();
     let (paths, vb) = render_runner_2d_paths(&state);
-    let (x, y, span) = compute_2d_view_box_m(&state);
+    let (x, y, width, height) = compute_2d_view_box_m(&state);
     assert_eq!(
         (vb.min_x, vb.min_y, vb.width, vb.height),
         (
             (x * 1000.0) as f32,
             (y * 1000.0) as f32,
-            (span * 1000.0) as f32,
-            (span * 1000.0) as f32
+            (width * 1000.0) as f32,
+            (height * 1000.0) as f32
         )
     );
     let front = paths
@@ -118,6 +118,7 @@ fn native_board_cpu_paints_both_themes_and_updates_after_pan_and_zoom() {
     let dir = tempfile::tempdir().unwrap();
     let mut state = state(dir.path(), true);
     let stylesheet = load_studio_stylesheet().unwrap();
+    state.window_size = (920.0, 730.0);
     let mut images = Vec::new();
     for (theme, zoom, pan) in [
         (Theme::Dark, 1.0, (0.0, 0.0)),
@@ -172,7 +173,7 @@ fn native_board_cpu_paints_both_themes_and_updates_after_pan_and_zoom() {
 
 #[test]
 fn native_board_layers_match_hit_testing_across_layouts_and_window_sizes() {
-    use clothcraft::atelier::css_runner::{build_runner_ui, compute_2d_viewport_rects};
+    use clothcraft::atelier::css_runner::{build_runner_ui, compute_2d_viewport_rect};
     use clothcraft::css_ui::ViewLayoutMode;
     use cssimpler::core::{LayoutBox, RenderNode};
     fn bounds(node: &RenderNode, id: &str) -> Option<LayoutBox> {
@@ -194,14 +195,16 @@ fn native_board_layers_match_hit_testing_across_layouts_and_window_sizes() {
                 w,
                 h,
             );
-            let expected = compute_2d_viewport_rects(&state).1;
+            let expected = compute_2d_viewport_rect(&state);
+            let (_, _, width, height) = compute_2d_view_box_m(&state);
+            assert!((width / f64::from(expected.w) - height / f64::from(expected.h)).abs() < 1e-12);
             for id in ["board-2d", "board-2d-background", "board-2d-drawing"] {
                 let b = bounds(&tree, id).unwrap();
-                assert!((b.width - b.height).abs() < 1.5, "{id}: {b:?}");
                 assert!(
                     (b.x - expected.x).abs() < 3.0
                         && (b.y - expected.y).abs() < 3.0
-                        && (b.width - expected.w).abs() < 3.0,
+                        && (b.width - expected.w).abs() < 3.0
+                        && (b.height - expected.h).abs() < 3.0,
                     "{id} at {w}x{h} ({mode:?}): {b:?} vs {expected:?}"
                 );
             }

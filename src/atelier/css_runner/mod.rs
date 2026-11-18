@@ -26,7 +26,7 @@ pub use actions::{RunnerAction, RunnerUiOp, update_runner};
 pub use app::{create_runner_app, run};
 #[allow(unused_imports)]
 pub use board::geometry::{
-    cad_2d_bar_layout, compute_2d_view_box_m, compute_2d_viewport_rects, screen_to_board_m,
+    cad_2d_bar_layout, compute_2d_view_box_m, compute_2d_viewport_rect, screen_to_board_m,
     screen_to_board_unclamped_m, viewport_2d_span_x, viewport_3d_rect,
 };
 #[allow(unused_imports)]

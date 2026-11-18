@@ -3,7 +3,7 @@
 use super::super::state::CssRunnerState;
 use super::corners::{active_fillet_previews, fillet_drag_handle_local};
 use super::geometry::{
-    board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rects, dist_point_to_segment,
+    board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect, dist_point_to_segment,
     panel_raw_points, panel_to_board_pt, point_in_poly_2d, sample_polygon_boundary,
 };
 use super::types::Hover2dTarget;
@@ -27,8 +27,8 @@ pub(in super::super) fn hit_test_2d(
     state: &CssRunnerState,
     board_m: DVec2,
 ) -> Option<Hover2dTarget> {
-    let (_canvas, svg_rect) = compute_2d_viewport_rects(state);
-    let (_vbx, _vby, view_span) = compute_2d_view_box_m(state);
+    let svg_rect = compute_2d_viewport_rect(state);
+    let (_vbx, _vby, view_span, _) = compute_2d_view_box_m(state);
     let px_m = view_span / (svg_rect.w.max(1.0) as f64);
     let hit_r = 10.0 * px_m;
     let template = state.active_template();

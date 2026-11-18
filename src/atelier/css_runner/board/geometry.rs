@@ -49,33 +49,25 @@ pub fn viewport_2d_span_x(state: &CssRunnerState) -> (f32, f32) {
     }
 }
 
-/// Exact CSS layout rects for `#viewport-2d`'s `.canvas-area` and square `#board-2d`.
-pub fn compute_2d_viewport_rects(state: &CssRunnerState) -> (Rect2d, Rect2d) {
+/// Exact CSS layout rect for the full 2D pattern board.
+pub fn compute_2d_viewport_rect(state: &CssRunnerState) -> Rect2d {
     let win_h = state.window_size.1.max(100.0);
     let body_y = 40.0_f32;
     let body_h = (win_h - 40.0 - 26.0).max(1.0);
     if matches!(state.layout_mode, ViewLayoutMode::ThreeDOnly) {
-        return (Rect2d::default(), Rect2d::default());
+        return Rect2d::default();
     }
     let (vp2d_x, vp2d_w) = viewport_2d_span_x(state);
 
     // `.viewport-header` (32px) + `.cad-2d-bar` (`bar_h`)
     let (_rows, bar_h) = cad_2d_bar_layout(vp2d_w);
     let top_chrome_h = 32.0_f32 + bar_h;
-    let canvas_rect = Rect2d {
+    Rect2d {
         x: vp2d_x,
         y: body_y + top_chrome_h,
         w: vp2d_w,
         h: (body_h - top_chrome_h).max(1.0),
-    };
-    let sq = canvas_rect.w.min(canvas_rect.h).floor().max(1.0);
-    let svg_rect = Rect2d {
-        x: canvas_rect.x + (canvas_rect.w - sq) * 0.5,
-        y: canvas_rect.y + (canvas_rect.h - sq) * 0.5,
-        w: sq,
-        h: sq,
-    };
-    (canvas_rect, svg_rect)
+    }
 }
 
 /// Exact CSS layout rect for `#viewport-3d`'s `.canvas-area` (for 3D camera orbit gating).
@@ -148,8 +140,8 @@ pub(in super::super) fn board_to_panel_pt(
     authoring::rotate_2d(board - origin, -rot)
 }
 
-/// Square 2D board viewBox `(min_x_m, min_y_m, span_m)` derived from `template` and pan/zoom.
-pub fn compute_2d_view_box_m(state: &CssRunnerState) -> (f64, f64, f64) {
+/// Metric board viewBox `(min_x_m, min_y_m, width_m, height_m)` derived from `template` and pan/zoom.
+pub fn compute_2d_view_box_m(state: &CssRunnerState) -> (f64, f64, f64, f64) {
     let template = &state.project.template;
     let mut g_min_x = f64::INFINITY;
     let mut g_max_x = f64::NEG_INFINITY;
@@ -193,32 +185,34 @@ pub fn compute_2d_view_box_m(state: &CssRunnerState) -> (f64, f64, f64) {
     let half_span = max_span * 0.5 + margin;
 
     let zoom = state.board_2d_zoom.clamp(0.25, 10.0);
-    let view_span = (half_span * 2.0) / zoom;
-    let vb_min_x = center_x + state.board_2d_pan.0 - view_span * 0.5;
-    let vb_min_y = center_y + state.board_2d_pan.1 - view_span * 0.5;
-    (vb_min_x, vb_min_y, view_span)
+    let rect = compute_2d_viewport_rect(state);
+    let width = f64::from(rect.w.max(1.0));
+    let height = f64::from(rect.h.max(1.0));
+    let metres_per_pixel = (half_span * 2.0) / (zoom * width.min(height));
+    let width = width * metres_per_pixel;
+    let height = height * metres_per_pixel;
+    let vb_min_x = center_x + state.board_2d_pan.0 - width * 0.5;
+    let vb_min_y = center_y + state.board_2d_pan.1 - height * 0.5;
+    (vb_min_x, vb_min_y, width, height)
 }
 
 pub fn screen_to_board_m(state: &CssRunnerState, px: f32, py: f32) -> Option<DVec2> {
-    let (_canvas, svg_rect) = compute_2d_viewport_rects(state);
-    if !svg_rect.contains(px, py) {
+    let rect = compute_2d_viewport_rect(state);
+    if !rect.contains(px, py) {
         return None;
     }
-    let (vb_x, vb_y, span) = compute_2d_view_box_m(state);
-    let u = ((px - svg_rect.x) / svg_rect.w) as f64;
-    let v = ((py - svg_rect.y) / svg_rect.h) as f64;
-    Some(DVec2::new(vb_x + u * span, vb_y + v * span))
+    screen_to_board_unclamped_m(state, px, py)
 }
 
 pub fn screen_to_board_unclamped_m(state: &CssRunnerState, px: f32, py: f32) -> Option<DVec2> {
-    let (_canvas, svg_rect) = compute_2d_viewport_rects(state);
-    if svg_rect.w <= 0.0 || svg_rect.h <= 0.0 {
+    let rect = compute_2d_viewport_rect(state);
+    if rect.w <= 0.0 || rect.h <= 0.0 {
         return None;
     }
-    let (vb_x, vb_y, span) = compute_2d_view_box_m(state);
-    let u = ((px - svg_rect.x) / svg_rect.w) as f64;
-    let v = ((py - svg_rect.y) / svg_rect.h) as f64;
-    Some(DVec2::new(vb_x + u * span, vb_y + v * span))
+    let (x, y, width, height) = compute_2d_view_box_m(state);
+    let u = f64::from(px - rect.x) / f64::from(rect.w);
+    let v = f64::from(py - rect.y) / f64::from(rect.h);
+    Some(DVec2::new(x + u * width, y + v * height))
 }
 
 pub(in super::super) fn dist_point_to_segment(p: DVec2, a: DVec2, b: DVec2) -> f64 {

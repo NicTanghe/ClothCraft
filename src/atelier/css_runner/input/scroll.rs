@@ -1,7 +1,7 @@
 //! Pointer-anchored board zoom and 3D camera zoom.
 
 use super::super::board::geometry::{
-    compute_2d_view_box_m, compute_2d_viewport_rects, viewport_3d_rect,
+    compute_2d_view_box_m, compute_2d_viewport_rect, viewport_3d_rect,
 };
 use super::super::state::CssRunnerState;
 use cssimpler::renderer::EngineEvent;
@@ -20,34 +20,20 @@ pub(in super::super) fn handle_scroll(state: &mut CssRunnerState, event: &Engine
                 return false;
             }
             let (px, py) = state.last_pointer_pos;
-            let (canvas_2d, svg_2d) = compute_2d_viewport_rects(state);
+            let canvas_2d = compute_2d_viewport_rect(state);
             let rect_3d = viewport_3d_rect(state);
             if canvas_2d.contains(px, py) {
-                let (vbx, vby, old_span) = compute_2d_view_box_m(state);
-                let u = if svg_2d.w > 0.0 {
-                    ((px - svg_2d.x) / svg_2d.w) as f64 - 0.5
-                } else {
-                    0.0
-                };
-                let v = if svg_2d.h > 0.0 {
-                    ((py - svg_2d.y) / svg_2d.h) as f64 - 0.5
-                } else {
-                    0.0
-                };
-                let anchor_x = vbx + (0.5 + u) * old_span;
-                let anchor_y = vby + (0.5 + v) * old_span;
-                let center_x = vbx + 0.5 * old_span - state.board_2d_pan.0;
-                let center_y = vby + 0.5 * old_span - state.board_2d_pan.1;
-
+                let (_, _, width, height) = compute_2d_view_box_m(state);
+                let offset_x = (f64::from(px - canvas_2d.x) / f64::from(canvas_2d.w) - 0.5) * width;
+                let offset_y =
+                    (f64::from(py - canvas_2d.y) / f64::from(canvas_2d.h) - 0.5) * height;
                 let old_zoom = state.board_2d_zoom.clamp(0.25, 10.0);
                 let factor = (1.0 + dy as f64 * 0.15 * state.board_2d_zoom_speed).clamp(0.5, 2.0);
                 let new_zoom = (old_zoom * factor).clamp(0.25, 10.0);
-                let new_span = old_span * (old_zoom / new_zoom);
+                let scale_change = 1.0 - old_zoom / new_zoom;
                 state.board_2d_zoom = new_zoom;
-                if svg_2d.contains(px, py) {
-                    state.board_2d_pan.0 = anchor_x - center_x - u * new_span;
-                    state.board_2d_pan.1 = anchor_y - center_y - v * new_span;
-                }
+                state.board_2d_pan.0 += offset_x * scale_change;
+                state.board_2d_pan.1 += offset_y * scale_change;
                 return true;
             } else if rect_3d.contains(px, py) {
                 state.camera.distance = (state.camera.distance - dy).clamp(0.5, 15.0);

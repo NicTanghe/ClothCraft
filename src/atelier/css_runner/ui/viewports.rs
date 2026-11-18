@@ -2,7 +2,7 @@
 
 use super::super::actions::{RunnerAction, RunnerUiOp, queue_action, queue_ui_op};
 use super::super::board::geometry::{
-    cad_2d_bar_layout, compute_2d_viewport_rects, viewport_2d_span_x,
+    cad_2d_bar_layout, compute_2d_viewport_rect, viewport_2d_span_x,
 };
 use super::super::board::native::board_node;
 use super::super::board::rendering::render_runner_2d_paths;
@@ -40,7 +40,7 @@ pub(in super::super) fn build_runner_3d_viewport(_state: &CssRunnerState) -> Nod
 
 pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
     let (paths, view_box) = render_runner_2d_paths(state);
-    let (_canvas_rect, svg_rect) = compute_2d_viewport_rects(state);
+    let svg_rect = compute_2d_viewport_rect(state);
     let board = board_node(paths, view_box, svg_rect.w, svg_rect.h);
     let connected = compute_connected_2d_highlight(state);
 
