@@ -72,6 +72,11 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
 }
 
 pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
+    let body_class = if state.show_body_outline {
+        "viewport-tool-btn active"
+    } else {
+        "viewport-tool-btn"
+    };
     let (paths, view_box) = render_runner_2d_paths(state);
     let svg_rect = compute_2d_viewport_rect(state);
     let board = board_node(paths, view_box, svg_rect.w, svg_rect.h);
@@ -370,6 +375,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                     <span class="viewport-sub">{sub_text}</span>
                 </div>
                 <div class="viewport-tools">
+                    <button id="body-outline-toggle" class={body_class} onclick_shared={queue_action(&state.actions, RunnerAction::ToggleBodyOutline)} title="Show/hide the gray avatar silhouette">"Body"</button>
                     <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dIn)} title="Zoom In (+)">"+"</button>
                     <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dOut)} title="Zoom Out (-)">"-"</button>
                     <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dFit)} title="Fit Board (0)">"Fit"</button>

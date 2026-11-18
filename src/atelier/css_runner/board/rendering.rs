@@ -315,6 +315,23 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
         }
     };
 
+    // Basic gray avatar silhouette: front projection in board millimetres,
+    // anchored by the first panel. See body_outline.rs for the limits.
+    if state.show_body_outline && !state.body_outline.is_empty() {
+        let outline_color = if is_dark {
+            Some(Color::rgba(148, 163, 184, 150))
+        } else {
+            Some(Color::rgba(100, 116, 139, 150))
+        };
+        let mut commands = Vec::new();
+        for [a, b] in &state.body_outline {
+            commands.extend(polyline(&[*a, *b], false));
+        }
+        let mut path = BoardPath::new(commands, None, outline_color, 1.2 * px, "body-outline");
+        path.background = true;
+        nodes.push(path);
+    }
+
     let fillet_previews = active_fillet_previews(state);
     let corner_tool_active = state.active_2d_tool == "Corner";
     let sel_pts = effective_selected_points(state);

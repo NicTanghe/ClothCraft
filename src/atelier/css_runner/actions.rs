@@ -50,6 +50,7 @@ pub enum RunnerAction {
     TabMaterial,
     TabEnv,
     CamReset,
+    ToggleBodyOutline,
     PieceNext,
     ToolSelect,
     ToolSew,
@@ -284,6 +285,13 @@ pub(super) fn apply_runner_action(
             );
             state.sync_usd_camera();
             state.status_message = "Reset 3D camera".to_string();
+        }
+        RunnerAction::ToggleBodyOutline => {
+            state.show_body_outline = !state.show_body_outline;
+            state.status_message = format!(
+                "Body outline: {}",
+                if state.show_body_outline { "ON" } else { "OFF" }
+            );
         }
         RunnerAction::PieceNext => {
             let count = state.project.template.panels.len().max(1);

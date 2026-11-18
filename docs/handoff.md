@@ -1,5 +1,25 @@
 # Repository handoff
 
+## Basic gray body silhouette on the 2D board — 18 November 2026 (experimental)
+
+The 2D pattern board can show a gray avatar silhouette behind the pieces, with a
+**Body** toggle in the board header. This is a deliberately small prototype:
+avatar world X/Y is projected orthographically, Y is flipped for the board's
+downward axis, and the result is anchored to the first panel's board layout and
+3D translation. Edges between front-facing and back-facing projected triangles
+form the outline; open edges are included, non-manifold edges are ignored.
+
+Limits: this is not fitted to individual panels, does not use the 3D camera, and
+is recomputed only when the state is created or a static avatar is imported.
+Editing panel layout or moving pieces does not move the silhouette. It renders
+as native CSSimpler vector paths (the board's equivalent of gray SVG), not an
+SVG file or export. Rendering and the headless board capture were inspected;
+no GPU/window run was performed.
+
+Validation: 167 library tests passed with 8 ignored, including four outline
+regressions (projection fixture, empty input, background path, toggle); strict
+all-target Clippy and formatting passed.
+
 ## Functional native import dialogs — 18 November 2026
 
 The fitting editor's left-browser **DXF**, **SVG** and **Avatar** import buttons
