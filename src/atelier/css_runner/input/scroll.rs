@@ -13,6 +13,7 @@ pub(in super::super) fn handle_scroll(state: &mut CssRunnerState, event: &Engine
                 || state.command_palette_open
                 || state.solver_menu_open
                 || state.import_dialog.is_some()
+                || state.camera_menu_open
             {
                 return false;
             }

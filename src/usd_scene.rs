@@ -958,6 +958,13 @@ pub fn viewport_sphere(sphere: &crate::contact::Sphere) -> crate::avatar::Surfac
 #[cfg(feature = "desktop")]
 pub const VIEWPORT_CAMERA_PATH: &str = "/World/ViewportCamera";
 
+/// Authored 35 mm still camera used by the viewport.
+#[cfg(feature = "desktop")]
+const VIEWPORT_FOCAL_LENGTH_MM: f32 = 35.0;
+/// Vertical 35 mm aperture in millimetres.
+#[cfg(feature = "desktop")]
+const VIEWPORT_VERTICAL_APERTURE_MM: f32 = 24.0;
+
 #[cfg(feature = "desktop")]
 pub fn default_scene_camera(
     positions: &[glam::DVec3],
@@ -1000,11 +1007,11 @@ pub fn init_viewport_camera(
     let cam = geom::Camera::define(stage, &path).map_err(|e| e.to_string())?;
     cam.create_focal_length_attr()
         .map_err(|e| e.to_string())?
-        .set(35.0_f32)
+        .set(VIEWPORT_FOCAL_LENGTH_MM)
         .map_err(|e| e.to_string())?;
     cam.create_vertical_aperture_attr()
         .map_err(|e| e.to_string())?
-        .set(24.0_f32)
+        .set(VIEWPORT_VERTICAL_APERTURE_MM)
         .map_err(|e| e.to_string())?;
     cam.create_horizontal_aperture_attr()
         .map_err(|e| e.to_string())?
@@ -1031,6 +1038,30 @@ pub fn update_viewport_camera(
     cam.create_clipping_range_attr()
         .map_err(|e| e.to_string())?
         .set(gf::vec2f((dist * 0.001).max(0.0001), dist * 1000.0))
+        .map_err(|e| e.to_string())?;
+    let projection = if camera.orthographic {
+        geom::Projection::Orthographic
+    } else {
+        geom::Projection::Perspective
+    };
+    cam.create_projection_attr()
+        .map_err(|e| e.to_string())?
+        .set(projection)
+        .map_err(|e| e.to_string())?;
+    // The USD renderer derives orthographic height from verticalAperture * 0.1
+    // scene units, while perspective uses focal length and vertical aperture.
+    // Match the authored perspective height at the target so switching
+    // projection does not jump scale, and keep zoom meaningful in orthographic.
+    let perspective_fov =
+        2.0 * (VIEWPORT_VERTICAL_APERTURE_MM / (2.0 * VIEWPORT_FOCAL_LENGTH_MM)).atan();
+    let aperture = if camera.orthographic {
+        (camera.distance * (perspective_fov * 0.5).tan() * 20.0).max(0.001)
+    } else {
+        VIEWPORT_VERTICAL_APERTURE_MM
+    };
+    cam.create_vertical_aperture_attr()
+        .map_err(|e| e.to_string())?
+        .set(aperture)
         .map_err(|e| e.to_string())?;
     cam.set_transform(gf::Matrix4d(world.to_cols_array().map(f64::from)))
         .map_err(|e| e.to_string())?;

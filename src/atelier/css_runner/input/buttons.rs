@@ -36,6 +36,7 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                 || state.command_palette_open
                 || state.solver_menu_open
                 || state.import_dialog.is_some()
+                || state.camera_menu_open
             {
                 return false;
             }
@@ -68,6 +69,7 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                 || state.command_palette_open
                 || state.solver_menu_open
                 || state.import_dialog.is_some()
+                || state.camera_menu_open
             {
                 return false;
             }

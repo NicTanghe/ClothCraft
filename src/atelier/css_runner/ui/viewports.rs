@@ -13,6 +13,7 @@ use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::icons::{
     icon_shading_flat, icon_shading_smooth, icon_wireframe_off, icon_wireframe_on,
 };
+use clothcraft::render::PresetView;
 use clothcraft::usd_scene::ShadingMode;
 use cssimpler::core::Node;
 use cssimpler::ui;
@@ -52,6 +53,54 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
             "viewport-tool-btn icon-only",
         )
     };
+    let camera_class = if state.camera_menu_open {
+        "viewport-tool-btn active"
+    } else {
+        "viewport-tool-btn"
+    };
+    let preset_buttons: Vec<Node> = PresetView::ALL
+        .iter()
+        .map(|view| {
+            let id = format!("camera-preset-{}", format!("{view:?}").to_lowercase());
+            ui! {
+                <button id={id} class="camera-menu-item"
+                    onclick_shared={queue_action(&state.actions, RunnerAction::CameraPreset(*view))}>
+                    {view.label()}
+                </button>
+            }
+        })
+        .collect();
+    let projection_label = format!(
+        "Projection: {}",
+        if state.camera.orthographic {
+            "Orthographic"
+        } else {
+            "Perspective"
+        }
+    );
+    let camera_backdrop = state.camera_menu_open.then(|| {
+        ui! {
+            <div id="camera-menu-backdrop" class="camera-menu-backdrop"
+                onclick_shared={queue_action(&state.actions, RunnerAction::CameraMenu)} />
+        }
+    });
+    let camera_dropdown = state.camera_menu_open.then(|| {
+        ui! {
+            <div id="camera-dropdown" class="camera-dropdown">
+                <span class="camera-menu-label">"Preset view"</span>
+                <div class="camera-preset-grid">{preset_buttons}</div>
+                <div class="camera-menu-separator"></div>
+                <button id="camera-projection" class="camera-menu-item"
+                    onclick_shared={queue_action(&state.actions, RunnerAction::ProjectionToggle)}>
+                    {projection_label}
+                </button>
+                <button id="camera-reset-view" class="camera-menu-item"
+                    onclick_shared={queue_action(&state.actions, RunnerAction::CamReset)}>
+                    "Reset view"
+                </button>
+            </div>
+        }
+    });
     ui! {
         <div id="viewport-3d" class="viewport-container">
             <div class="viewport-header">
@@ -60,10 +109,15 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
                     <span class="viewport-sub">"USD native 3D viewport (VBD + OGC)"</span>
                 </div>
                 <div class="viewport-tools">
+                    <button id="camera-menu-trigger" class={camera_class}
+                        onclick_shared={queue_action(&state.actions, RunnerAction::CameraMenu)}
+                        title="View presets, projection and camera reset">"View ▾"</button>
                     <button id="wireframe-toggle" class={wire_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleWireframe)} title={wire_title}>{wire_icon}</button>
                     <button id="shading-toggle" class="viewport-tool-btn icon-only" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleShading)} title={shading_title}>{shading_icon}</button>
                 </div>
             </div>
+            {camera_backdrop}
+            {camera_dropdown}
             <div class="canvas-area">
                 <div id="runner-viewport-3d-scene" class="viewport"></div>
             </div>

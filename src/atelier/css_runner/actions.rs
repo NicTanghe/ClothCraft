@@ -50,6 +50,9 @@ pub enum RunnerAction {
     TabMaterial,
     TabEnv,
     CamReset,
+    CameraMenu,
+    CameraPreset(clothcraft::render::PresetView),
+    ProjectionToggle,
     PieceNext,
     ToolSelect,
     ToolSew,
@@ -266,6 +269,7 @@ pub(super) fn apply_runner_action(
         RunnerAction::PaletteToggle => {
             state.command_palette_open = !state.command_palette_open;
             state.settings_open = false;
+            state.camera_menu_open = false;
         }
         RunnerAction::ThemeToggle => state.theme = state.theme.toggled(),
         RunnerAction::ViewSplit => state.layout_mode = ViewLayoutMode::Split,
@@ -283,7 +287,31 @@ pub(super) fn apply_runner_action(
                 Some(&state.scene.collider.surface),
             );
             state.sync_usd_camera();
+            state.camera_menu_open = false;
             state.status_message = "Reset 3D camera".to_string();
+        }
+        RunnerAction::CameraMenu => {
+            state.camera_menu_open = !state.camera_menu_open;
+            state.solver_menu_open = false;
+        }
+        RunnerAction::CameraPreset(view) => {
+            state.camera.apply_preset(view);
+            state.sync_usd_camera();
+            state.camera_menu_open = false;
+            state.status_message = format!("3D view: {}", view.label());
+        }
+        RunnerAction::ProjectionToggle => {
+            state.camera.toggle_projection();
+            state.sync_usd_camera();
+            state.camera_menu_open = false;
+            state.status_message = format!(
+                "3D projection: {}",
+                if state.camera.orthographic {
+                    "Orthographic"
+                } else {
+                    "Perspective"
+                }
+            );
         }
         RunnerAction::PieceNext => {
             let count = state.project.template.panels.len().max(1);
@@ -362,6 +390,7 @@ pub(super) fn apply_runner_action(
         RunnerAction::SolverMenu => {
             state.solver_menu_open = !state.solver_menu_open;
             state.settings_open = false;
+            state.camera_menu_open = false;
         }
         RunnerAction::SolverGpu => state.select_solver(true),
         RunnerAction::SolverAl => state.select_solver_method(true, ContactMethod::BarrierAl),
