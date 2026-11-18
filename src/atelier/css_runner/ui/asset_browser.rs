@@ -90,9 +90,12 @@ pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Nod
                     <div class="quick-action-group">
                         <span class="group-label">"Import"</span>
                         <div class="quick-actions-row">
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI --project or File menu to import DXF".into()))}>"DXF"</button>
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI or File menu to import SVG".into()))}>"SVG"</button>
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI --avatar to swap mannequin OBJ".into()))}>"Avatar"</button>
+                            <button id="import-dxf" class="btn-action" title="Import DXF pattern outlines"
+                                onclick_shared={queue_action(&state.actions, RunnerAction::ImportDxf)}>"DXF"</button>
+                            <button id="import-svg" class="btn-action" title="Import SVG pattern outlines"
+                                onclick_shared={queue_action(&state.actions, RunnerAction::ImportSvg)}>"SVG"</button>
+                            <button id="import-avatar" class="btn-action" title="Replace the static avatar from OBJ, glTF or GLB"
+                                onclick_shared={queue_action(&state.actions, RunnerAction::ImportAvatar)}>"Avatar"</button>
                         </div>
                     </div>
                     <div class="quick-action-group">

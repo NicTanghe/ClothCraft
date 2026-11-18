@@ -7,26 +7,21 @@ pub mod core_state;
 #[path = "atelier/css_runner/mod.rs"]
 pub mod css_runner;
 pub use clothcraft::commands;
-#[allow(unused_imports)]
 pub use clothcraft::css_ui;
-#[allow(unused_imports)]
 pub use core_state::*;
 
 // GPU and diagnostic entry points remain available during native adapter migration.
 #[path = "atelier/perf.rs"]
 pub mod perf;
-#[allow(dead_code)]
 #[path = "atelier/worker.rs"]
 pub mod worker;
 
-#[allow(dead_code)]
 pub struct DocumentFiles {
     pub output: PathBuf,
     pub source: Option<PathBuf>,
     pub modified: bool,
 }
 
-#[allow(dead_code)]
 pub fn current_worker_result(done: Option<worker::Done>, generation: u64) -> Option<worker::Done> {
     done.filter(|d| d.generation == generation)
 }
@@ -35,13 +30,10 @@ pub fn current_worker_result(done: Option<worker::Done>, generation: u64) -> Opt
 pub struct RunOptions {
     pub barrier_al: bool,
     pub smoke: bool,
-    pub drag_test: bool,
     pub perf_test: bool,
-    pub authoring_test: bool,
     pub gpu_sim: bool,
 }
 
-#[allow(dead_code)]
 pub fn run(
     project: FittingProject,
     scene: FittingScene,

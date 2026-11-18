@@ -1,7 +1,11 @@
 //! Queued UI actions, operation dispatch and frame updates.
 
 use super::board::interaction::set_active_2d_tool;
-use super::editing::{round_selected_corner, toggle_selected_curve, undo_redo_2d};
+use super::board::types::ToolDraft2d;
+use super::editing::{
+    confirm_pending_sew, round_selected_corner, toggle_selected_curve, undo_redo_2d,
+};
+use super::imports::ImportKind;
 use super::mesh_preparation;
 use super::state::{
     CssRunnerState, DEFAULT_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED, MIN_2D_ZOOM_SPEED, ObjectCategory,
@@ -28,6 +32,9 @@ pub enum RunnerAction {
     Step,
     Reset,
     Save,
+    ImportDxf,
+    ImportSvg,
+    ImportAvatar,
     ExportSvg,
     ExportObj,
     CleanView,
@@ -105,6 +112,7 @@ pub enum RunnerUiOp {
     Reset2dZoomSpeed,
     SetCornerMode(bool),
     SetCornerRule(CornerRule),
+    SetShadingMode(clothcraft::usd_scene::ShadingMode),
     AdjustCornerRadiusMm(f64),
     AdjustCornerTension(f64),
     ApplyCornerRoundSelected,
@@ -114,6 +122,17 @@ pub enum RunnerUiOp {
     SelectPiece(usize),
     LoadPreset(GarmentKind),
     StatusNote(String),
+    ImportChoose,
+    ImportRefresh,
+    ImportToggleOutline(usize),
+    ImportSetFabric(String),
+    ImportToggleAck,
+    ImportApply,
+    ImportCancel,
+    ConfirmSew {
+        ease: bool,
+    },
+    CancelSew,
 }
 
 pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidation {
@@ -248,6 +267,9 @@ pub(super) fn apply_runner_action(
         RunnerAction::Step => state.send_control_state(true),
         RunnerAction::Reset => state.reset_simulation(),
         RunnerAction::Save => state.save_project(),
+        RunnerAction::ImportDxf => state.open_import_dialog(ImportKind::Dxf),
+        RunnerAction::ImportSvg => state.open_import_dialog(ImportKind::Svg),
+        RunnerAction::ImportAvatar => state.open_import_dialog(ImportKind::Avatar),
         RunnerAction::ExportSvg => state.export_pattern_svg(),
         RunnerAction::ExportObj => state.export_obj(),
         RunnerAction::CleanView => state.clean_view = !state.clean_view,
@@ -421,6 +443,11 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                         value.clamp(min, max),
                     );
                 }
+                NumberField::ImportTolerance => state.import_tolerance_mm = value.clamp(0.01, 5.0),
+                NumberField::ImportMesh => state.import_mesh_mm = value.clamp(3.0, 500.0),
+                NumberField::ImportScale => {
+                    state.import_scale_mm_per_unit = value.clamp(0.0, 1000.0)
+                }
             }
         }
         RunnerUiOp::CommitPlacement => {
@@ -515,6 +542,13 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             state.corner_preview_active = true;
             state.status_message = format!("Continuity rule: {:?}", rule);
         }
+        RunnerUiOp::SetShadingMode(mode) => {
+            if state.shading != mode {
+                state.shading = mode;
+                state.sync_usd_shading();
+                state.status_message = format!("Viewport shading: {}", mode.label());
+            }
+        }
         RunnerUiOp::AdjustCornerRadiusMm(delta) => {
             state.corner_radius_mm = (state.corner_radius_mm + delta).clamp(1.0, 250.0);
             state.corner_preview_active = true;
@@ -546,6 +580,17 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                 state.status_message = msg;
             }
         }
+        RunnerUiOp::ImportChoose => {
+            if let Some(kind) = state.import_dialog.as_ref().map(|dialog| dialog.kind) {
+                state.open_import_dialog(kind);
+            }
+        }
+        RunnerUiOp::ImportRefresh => state.refresh_import(),
+        RunnerUiOp::ImportToggleOutline(index) => state.toggle_import_outline(index),
+        RunnerUiOp::ImportSetFabric(fabric) => state.set_import_fabric(fabric),
+        RunnerUiOp::ImportToggleAck => state.toggle_import_acknowledged(),
+        RunnerUiOp::ImportApply => state.apply_import(),
+        RunnerUiOp::ImportCancel => state.close_import_dialog(),
         RunnerUiOp::LoadPreset(kind) => {
             let subdivisions = state
                 .project
@@ -599,6 +644,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                             usd,
                             &state.scene.garment,
                             &state.scene.state,
+                            state.shading,
                         );
                     }
                     state.sync_usd_camera();
@@ -612,6 +658,15 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         }
         RunnerUiOp::StatusNote(msg) => {
             state.status_message = msg;
+        }
+        RunnerUiOp::ConfirmSew { ease } => {
+            confirm_pending_sew(state, ease);
+        }
+        RunnerUiOp::CancelSew => {
+            if matches!(state.draft_2d, Some(ToolDraft2d::SewConfirm { .. })) {
+                state.draft_2d = None;
+                state.status_message = "Sewing cancelled; no seam was added".into();
+            }
         }
     }
 }

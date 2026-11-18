@@ -4,8 +4,8 @@ use super::super::board::interaction::set_active_2d_tool;
 use super::super::board::selection::effective_selected_points;
 use super::super::board::types::{Drag2d, ToolDraft2d};
 use super::super::editing::{
-    commit_authoring_command, finish_internal_line_draft, finish_pen_draft, round_selected_corner,
-    undo_redo_2d,
+    commit_authoring_command, confirm_pending_sew, finish_internal_line_draft, finish_pen_draft,
+    round_selected_corner, undo_redo_2d,
 };
 use super::super::state::CssRunnerState;
 use clothcraft::authoring::Command;
@@ -22,6 +22,14 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                         return true;
                     }
                     return false;
+                }
+                if state.import_dialog.is_some() {
+                    if matches!(&k.logical_key, cssimpler::renderer::KeyIdentity::Named(name) if name == "Escape")
+                    {
+                        state.close_import_dialog();
+                        return true;
+                    }
+                    return true;
                 }
                 let ctrl = k.modifiers.control || k.modifiers.super_key;
                 if let cssimpler::renderer::KeyIdentity::Character(ref ch) = k.logical_key {
@@ -192,6 +200,10 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                         }
                     }
                     if name == "Enter" {
+                        if matches!(state.draft_2d, Some(ToolDraft2d::SewConfirm { .. })) {
+                            confirm_pending_sew(state, false);
+                            return true;
+                        }
                         if matches!(state.draft_2d, Some(ToolDraft2d::Pen { .. })) {
                             return finish_pen_draft(state);
                         }
