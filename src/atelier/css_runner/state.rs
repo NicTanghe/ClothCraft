@@ -75,6 +75,8 @@ pub struct CssRunnerState {
     pub settings_open: bool,
     pub left_drawer_open: bool,
     pub selected_piece_index: usize,
+    /// Uncommitted Arrange field edit; see `placement`.
+    pub placement_draft: Option<super::placement::PlacementDraft>,
     pub selected_2d_point: Option<(String, usize)>,
     pub selected_2d_points: Vec<(String, usize)>,
     pub selected_2d_edge: Option<(String, String)>,
@@ -168,6 +170,7 @@ impl CssRunnerState {
             settings_open: false,
             left_drawer_open: true,
             selected_piece_index: 0,
+            placement_draft: None,
             selected_2d_point: None,
             selected_2d_points: Vec::new(),
             selected_2d_edge: None,
