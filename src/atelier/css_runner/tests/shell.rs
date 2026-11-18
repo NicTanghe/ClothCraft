@@ -716,11 +716,11 @@ fn viewport_shading_toggle_rewrites_usd_normals() {
         app.state().scene.garment.panels[0].vertices.len()
     );
 
-    let flat_button = app.find_element_bounds_by_id("#shading-flat").unwrap();
+    let shading_button = app.find_element_bounds_by_id("#shading-toggle").unwrap();
     assert!(cssimpler::renderer::dispatch_click(
         app.scene(),
-        flat_button.x + flat_button.width * 0.5,
-        flat_button.y + flat_button.height * 0.5
+        shading_button.x + shading_button.width * 0.5,
+        shading_button.y + shading_button.height * 0.5
     ));
     app.frame(FrameInfo {
         delta: Duration::from_millis(16),
@@ -743,11 +743,10 @@ fn viewport_shading_toggle_rewrites_usd_normals() {
             .all(|corner| corner[0] == corner[1] && corner[1] == corner[2])
     );
 
-    let smooth_button = app.find_element_bounds_by_id("#shading-smooth").unwrap();
     assert!(cssimpler::renderer::dispatch_click(
         app.scene(),
-        smooth_button.x + smooth_button.width * 0.5,
-        smooth_button.y + smooth_button.height * 0.5
+        shading_button.x + shading_button.width * 0.5,
+        shading_button.y + shading_button.height * 0.5
     ));
     app.frame(FrameInfo {
         delta: Duration::from_millis(16),
@@ -774,4 +773,130 @@ fn viewport_shading_toggle_rewrites_usd_normals() {
     let (interpolation, moved) = read(app.state());
     assert_eq!(interpolation.as_str(), "vertex");
     assert_ne!(moved, smooth);
+}
+
+#[test]
+fn viewport_wireframe_toggle_authors_only_the_cloth_overlay() {
+    use cssimpler::renderer::gpu::openusd::{gf, tf};
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let stylesheet = load_studio_stylesheet().expect("load studio stylesheet");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let avatar = dir.path().join("avatar.obj");
+    std::fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").expect("write avatar");
+    let project = FittingProject::basic(GarmentKind::Tshirt, 1, avatar);
+    let scene = project.compile().expect("compile scene");
+    let files = DocumentFiles {
+        output: dir.path().join("wireframe_out"),
+        source: None,
+        modified: false,
+    };
+    let (tx, latest) = worker::start_cpu().expect("start cpu worker");
+    let state = CssRunnerState::new(project, scene, files, tx, latest);
+    let mut app = create_runner_app(state, &stylesheet);
+    app.set_viewport(cssimpler::renderer::ViewportSize::new(1600, 980));
+    app.frame(FrameInfo {
+        delta: Duration::ZERO,
+        frame_index: 0,
+    });
+
+    let read_points = |state: &CssRunnerState, path: &str| -> Vec<gf::Vec3f> {
+        state
+            .usd_scene
+            .as_ref()
+            .unwrap()
+            .stage()
+            .attribute(format!("{path}.points"))
+            .unwrap()
+            .get::<Vec<gf::Vec3f>>()
+            .unwrap()
+            .unwrap()
+    };
+    let read_visibility = |state: &CssRunnerState| -> String {
+        let token = state
+            .usd_scene
+            .as_ref()
+            .unwrap()
+            .stage()
+            .attribute("/ClothWire.visibility")
+            .unwrap()
+            .get::<tf::Token>()
+            .unwrap()
+            .unwrap();
+        token.as_ref().to_owned()
+    };
+
+    assert!(!app.state().wireframe);
+    assert_eq!(read_visibility(app.state()), "invisible");
+    let ui = super::super::build_runner_ui(app.state());
+    assert_eq!(
+        find_title(&ui, "wireframe-toggle"),
+        Some("Show cloth wireframe")
+    );
+    assert_eq!(
+        find_title(&ui, "shading-toggle"),
+        Some("Smooth shading — click for flat shading")
+    );
+    let cloth_points = read_points(app.state(), "/ClothWire");
+    let collider_points = read_points(app.state(), "/Collider");
+    assert!(!cloth_points.is_empty(), "cloth wireframe has edges");
+
+    let button = app.find_element_bounds_by_id("#wireframe-toggle").unwrap();
+    assert!(cssimpler::renderer::dispatch_click(
+        app.scene(),
+        button.x + button.width * 0.5,
+        button.y + button.height * 0.5
+    ));
+    app.frame(FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 1,
+    });
+    assert!(app.state().wireframe);
+    assert_eq!(read_visibility(app.state()), "inherited");
+    let ui = super::super::build_runner_ui(app.state());
+    assert_eq!(
+        find_title(&ui, "wireframe-toggle"),
+        Some("Hide cloth wireframe")
+    );
+    let visible_points = read_points(app.state(), "/ClothWire");
+    assert_eq!(visible_points.len(), cloth_points.len());
+
+    // A cloth update reaches the overlay; the avatar/collision mesh is untouched.
+    let panel = &app.state().scene.garment.panels[0];
+    let vertex = app.state().scene.garment.mesh.triangles[panel.triangles.start].vertices[0];
+    app.state_mut().scene.state.x[vertex] += glam::DVec3::new(0.02, 0.0, 0.0);
+    app.state_mut().sync_usd_points();
+    assert_ne!(read_points(app.state(), "/ClothWire"), visible_points);
+    assert_eq!(read_points(app.state(), "/Collider"), collider_points);
+
+    assert!(cssimpler::renderer::dispatch_click(
+        app.scene(),
+        button.x + button.width * 0.5,
+        button.y + button.height * 0.5
+    ));
+    app.frame(FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 2,
+    });
+    assert!(!app.state().wireframe);
+    assert_eq!(read_visibility(app.state()), "invisible");
+}
+
+fn find_title<'a>(node: &'a cssimpler::core::Node, id: &str) -> Option<&'a str> {
+    match node {
+        cssimpler::core::Node::Element(element) => {
+            if element.id.as_deref() == Some(id) {
+                return element.attribute("title");
+            }
+            for child in &element.children {
+                if let Some(title) = find_title(child, id) {
+                    return Some(title);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }

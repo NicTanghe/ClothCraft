@@ -245,6 +245,7 @@ pub fn apply(state: &mut CssRunnerState, physics: bool) -> Result<(), String> {
             state.shading,
         );
     }
+    state.sync_usd_wireframe();
     state.send_control_state(false);
     state.status_message = format!(
         "{} mesh prepared; reset to arrangement ({} vertices, {} triangles)",
