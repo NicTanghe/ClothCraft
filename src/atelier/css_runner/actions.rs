@@ -94,6 +94,7 @@ pub enum RunnerUiOp {
     MeshField(usize, String),
     PrepareMesh(bool),
 
+    CycleMeasurementBits,
     ToggleSettings,
     CloseSettings,
     Adjust2dZoomSpeed(f64),
@@ -447,6 +448,18 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             }
         }
 
+        RunnerUiOp::CycleMeasurementBits => {
+            let bits = match state.project.template.measurement_bits {
+                8 => 10,
+                10 => 16,
+                _ => 8,
+            };
+            super::editing::commit_authoring_command(
+                state,
+                clothcraft::authoring::Command::SetMeasurementBits(bits),
+                format!("Measurement precision: {bits} bits"),
+            );
+        }
         RunnerUiOp::ToggleSettings => {
             state.settings_open = !state.settings_open;
             if state.settings_open {

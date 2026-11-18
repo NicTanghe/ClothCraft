@@ -161,49 +161,107 @@ pub(in super::super) fn hit_test_2d(
     None
 }
 
-pub(in super::super) fn nearest_edge_anchor(
+pub(in super::super) fn measurement_pick(
     template: &GarmentTemplate,
-    board_m: DVec2,
-    max_dist_m: f64,
-) -> Option<(String, String, f64)> {
-    let mut best: Option<(f64, String, String, f64)> = None;
-    for (pidx, panel) in template.panels.iter().enumerate() {
-        let Some(ref poly) = panel.polygon else {
+    board: DVec2,
+    tolerance: f64,
+    selected: usize,
+    owner: Option<&str>,
+) -> Option<(
+    usize,
+    clothcraft::garment::polygon::MeasurementAnchor,
+    DVec2,
+)> {
+    use clothcraft::garment::polygon::MeasurementAnchor;
+    for idx in panel_order_selected_first(template.panels.len(), selected) {
+        let panel = &template.panels[idx];
+        if owner.is_some_and(|id| id != panel.id) {
             continue;
-        };
-        for (eidx, ename) in poly.edges.iter().enumerate() {
-            let Ok(sampled) = poly.edge_points(eidx) else {
-                continue;
-            };
-            let local = board_to_panel_pt(template, pidx, board_m);
-            let mut total_len = 0.0_f64;
-            let mut best_s = 0.0_f64;
-            let mut min_d = f64::INFINITY;
-            for pair in sampled.windows(2) {
-                let seg = pair[1] - pair[0];
-                let seg_l = seg.length();
-                let t = if seg_l > 1e-12 {
-                    ((local - pair[0]).dot(seg) / (seg_l * seg_l)).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let d = local.distance(pair[0] + seg * t);
-                if d < min_d {
-                    min_d = d;
-                    best_s = total_len + seg_l * t;
+        }
+        let Some(poly) = &panel.polygon else { continue };
+        let local = board_to_panel_pt(template, idx, board);
+        // Scan sampled segments once. Resolve a named station only for the winner.
+        let mut nearest: Option<(&str, f64)> = None;
+        let mut consider = |edge, points: &[DVec2]| {
+            for pair in points.windows(2) {
+                let distance = dist_point_to_segment(local, pair[0], pair[1]);
+                if distance <= tolerance && nearest.is_none_or(|(_, d)| distance < d) {
+                    nearest = Some((edge, distance));
                 }
-                total_len += seg_l;
             }
-            if min_d <= max_dist_m && total_len > 1e-12 && best.as_ref().is_none_or(|b| min_d < b.0)
-            {
-                best = Some((
-                    min_d,
-                    panel.id.clone(),
-                    ename.clone(),
-                    (best_s / total_len).clamp(0.0, 1.0),
-                ));
+        };
+        for (i, edge) in poly.edges.iter().enumerate() {
+            if let Ok(points) = poly.edge_points(i) {
+                consider(edge.as_str(), &points);
             }
         }
+        for hole in &poly.holes {
+            for (i, edge) in hole.edges.iter().enumerate() {
+                consider(
+                    edge.as_str(),
+                    &[hole.points[i], hole.points[(i + 1) % hole.points.len()]],
+                );
+            }
+        }
+        for line in &poly.lines {
+            if let Ok(points) = line.samples() {
+                consider(line.id.as_str(), &points);
+            }
+        }
+        let anchor = if let Some((edge, _)) = nearest {
+            let (station, _) = poly.measurement_anchor_at_point(edge, local).ok()?;
+            let (edge, t) = station.station()?;
+            if !poly.curves.contains_key(edge) && !poly.lines.iter().any(|l| l.id == edge) {
+                MeasurementAnchor::fixed(edge.into(), t, template.measurement_bits).ok()?
+            } else {
+                station
+            }
+        } else if point_in_poly_2d(local, &sample_polygon_boundary(poly))
+            && !poly
+                .holes
+                .iter()
+                .any(|h| point_in_poly_2d(local, &h.points))
+        {
+            poly.interior_anchor(local)?
+        } else {
+            continue;
+        };
+        let resolved = poly.measurement_anchor_position(&anchor).ok()?;
+        return Some((idx, anchor, panel_to_board_pt(template, idx, resolved)));
     }
-    best.map(|(_, pid, ename, t)| (pid, ename, t))
+    None
+}
+
+#[cfg(test)]
+mod measurement_tests {
+    use super::*;
+    use clothcraft::garment::polygon::MeasurementAnchor;
+
+    #[test]
+    fn rotated_board_pick_resolves_material_coordinates() {
+        let mut template = GarmentTemplate::load(std::path::Path::new(
+            "examples/templates/curved-panels.json",
+        ))
+        .unwrap();
+        template.panels[0].layout_rotation_degrees = 57.;
+        template.panels[0].layout_2d = Some(DVec2::new(4., -3.));
+        let local = DVec2::new(0.18, 0.25);
+        let board = panel_to_board_pt(&template, 0, local);
+        let owner = &template.panels[0].id;
+        let (idx, anchor, projected) =
+            measurement_pick(&template, board, 0.001, 0, Some(owner)).unwrap();
+        assert_eq!(idx, 0);
+        assert!(matches!(anchor, MeasurementAnchor::Barycentric { .. }));
+        let poly = template.panels[0].polygon.as_ref().unwrap();
+        assert!(
+            poly.measurement_anchor_position(&anchor)
+                .unwrap()
+                .distance(local)
+                < 1e-12
+        );
+        assert!(projected.distance(board) < 1e-12);
+        assert!(
+            measurement_pick(&template, board + DVec2::splat(3.), 0.001, 0, Some(owner)).is_none()
+        );
+    }
 }

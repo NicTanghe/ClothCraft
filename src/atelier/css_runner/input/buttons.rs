@@ -6,7 +6,7 @@ use super::super::board::geometry::{
     panel_raw_points, panel_to_board_pt, screen_to_board_m, screen_to_board_unclamped_m,
     viewport_3d_rect,
 };
-use super::super::board::hit_testing::{hit_test_2d, nearest_edge_anchor};
+use super::super::board::hit_testing::{hit_test_2d, measurement_pick};
 use super::super::board::selection::{batch_corners_for_points, effective_selected_points};
 use super::super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::super::editing::{
@@ -19,7 +19,7 @@ use clothcraft::authoring::corner_tool::{
 };
 use clothcraft::authoring::{self, Command};
 use clothcraft::garment::meshing::MeshingSettings;
-use clothcraft::garment::polygon::{MeasurementAnchor, PatternMeasurement};
+use clothcraft::garment::polygon::PatternMeasurement;
 use clothcraft::garment::seam::{BoundaryRef, Side};
 use clothcraft::garment::shapes::Primitive;
 use cssimpler::renderer::EngineEvent;
@@ -278,75 +278,65 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                 }
                             }
                             "Measure" => {
-                                let anchor = nearest_edge_anchor(
+                                let first = match &state.draft_2d {
+                                    Some(ToolDraft2d::Measure {
+                                        panel_id, first, ..
+                                    }) => Some((panel_id.clone(), first.clone())),
+                                    _ => None,
+                                };
+                                let Some((idx, anchor, _)) = measurement_pick(
                                     &state.project.template,
                                     board_m,
-                                    12.0 * px_m,
-                                );
-                                match state.draft_2d.clone() {
-                                    Some(ToolDraft2d::Measure {
-                                        first_board_m: Some(p0),
-                                        second_board_m: None,
-                                        first_anchor,
-                                        ..
-                                    }) => {
-                                        let dist_mm = p0.distance(board_m) * 1000.0;
-                                        state.draft_2d = Some(ToolDraft2d::Measure {
-                                            first_board_m: Some(p0),
-                                            second_board_m: Some(board_m),
-                                            hover_board_m: None,
-                                            first_anchor: first_anchor.clone(),
-                                            last_distance_mm: Some(dist_mm),
-                                        });
-                                        if let (Some((pa, ea, ta)), Some((pb, eb, tb))) =
-                                            (first_anchor, anchor)
-                                            && pa == pb
-                                            && (ea != eb || (ta - tb).abs() > 1e-4)
-                                            && let Some(p) = state
-                                                .project
-                                                .template
-                                                .panels
-                                                .iter()
-                                                .find(|p| p.id == pa)
-                                            && let Some(ref poly) = p.polygon
-                                        {
-                                            let mid =
-                                                format!("measure_{}", poly.measurements.len() + 1);
-                                            let measurement = PatternMeasurement {
-                                                id: mid.clone(),
-                                                label: format!("{dist_mm:.1} mm"),
-                                                a: MeasurementAnchor { edge: ea, t: ta },
-                                                b: MeasurementAnchor { edge: eb, t: tb },
-                                            };
+                                    12. * px_m,
+                                    state.selected_piece_index,
+                                    first.as_ref().map(|(id, _)| id.as_str()),
+                                ) else {
+                                    state.status_message =
+                                        "Pick a measurement point on the same pattern piece".into();
+                                    return true;
+                                };
+                                let panel = &state.project.template.panels[idx];
+                                let pid = panel.id.clone();
+                                if let Some((_, a)) = first {
+                                    let poly = panel.polygon.as_ref().unwrap();
+                                    let mid = (1..)
+                                        .map(|n| format!("measure_{n}"))
+                                        .find(|id| poly.measurements.iter().all(|m| &m.id != id))
+                                        .unwrap();
+                                    let measurement = PatternMeasurement {
+                                        id: mid.clone(),
+                                        label: mid,
+                                        a,
+                                        b: anchor,
+                                    };
+                                    match poly.measurement_length(&measurement) {
+                                        Ok(length) if length > 0. => {
                                             if commit_authoring_command(
                                                 state,
                                                 Command::SetMeasurement {
-                                                    panel: pa,
+                                                    panel: pid,
                                                     measurement,
                                                 },
-                                                format!("Measured & saved: {dist_mm:.1} mm"),
+                                                format!("Measured {:.1} mm", length * 1000.),
                                             ) {
-                                                return true;
+                                                state.draft_2d = None;
                                             }
                                         }
-                                        state.status_message =
-                                            format!("Measured distance: {dist_mm:.1} mm");
-                                        return true;
+                                        _ => {
+                                            state.status_message =
+                                                "Pick two distinct material points".into()
+                                        }
                                     }
-                                    _ => {
-                                        state.draft_2d = Some(ToolDraft2d::Measure {
-                                            first_board_m: Some(board_m),
-                                            second_board_m: None,
-                                            hover_board_m: Some(board_m),
-                                            first_anchor: anchor,
-                                            last_distance_mm: None,
-                                        });
-                                        state.status_message =
-                                            "Measure: click second point to measure distance"
-                                                .into();
-                                        return true;
-                                    }
+                                } else {
+                                    state.draft_2d = Some(ToolDraft2d::Measure {
+                                        panel_id: pid,
+                                        first: anchor,
+                                        hover_board_m: None,
+                                    });
+                                    state.status_message =
+                                        "Pick the second point on this pattern piece".into();
                                 }
+                                return true;
                             }
                             "Trim" => {
                                 let hit = hit_test_2d(state, board_m);

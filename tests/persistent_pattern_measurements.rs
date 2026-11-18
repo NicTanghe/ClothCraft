@@ -34,11 +34,11 @@ fn record() -> PatternMeasurement {
     PatternMeasurement {
         id: "width".into(),
         label: "Width".into(),
-        a: MeasurementAnchor {
+        a: MeasurementAnchor::Station {
             edge: "edge_1".into(),
             t: 0.25,
         },
-        b: MeasurementAnchor {
+        b: MeasurementAnchor::Station {
             edge: "edge_3".into(),
             t: 0.75,
         },
@@ -101,7 +101,10 @@ fn saved_crud_history_and_legacy_json_preserve_physics() {
     let redo = history.restore(&undo.template, true).unwrap();
     let mut renamed = record();
     renamed.label = "Finished width".into();
-    renamed.a.t = 0.5;
+    renamed.a = MeasurementAnchor::Station {
+        edge: renamed.a.station().unwrap().0.into(),
+        t: 0.5,
+    };
     let changed = set(&redo.template, renamed.clone());
     assert_eq!(
         changed.template.panels[0]
@@ -141,6 +144,7 @@ fn save_reopen_retains_measurements_and_preexisting_drape_signature() {
     let mut project = FittingProject::load(&path).unwrap();
     let old_signature = project.mesh_signature.clone();
     project.template = set(&project.template, record()).template;
+    project.template.measurement_bits = 16;
     // The old saved signature must still accept the changed metadata.
     let scene = project.compile().unwrap();
     assert_eq!(scene.state.x, state.x);
@@ -180,7 +184,7 @@ fn straight_curved_and_exact_station_splits_preserve_attachment() {
             .template;
         }
         let mut m = record();
-        m.b = MeasurementAnchor {
+        m.b = MeasurementAnchor::Station {
             edge: "edge_1".into(),
             t: 0.8,
         };
@@ -202,11 +206,14 @@ fn straight_curved_and_exact_station_splits_preserve_attachment() {
             assert!(old.distance(new) <= 0.0005, "drift {} m", old.distance(new));
         }
         let m = &split.panels[0].polygon.as_ref().unwrap().measurements[0];
-        assert_ne!(m.a.edge, m.b.edge);
+        assert_ne!(m.a.station().unwrap().0, m.b.station().unwrap().0);
     }
     let t = fixture();
     let mut m = record();
-    m.a.t = 0.5;
+    m.a = MeasurementAnchor::Station {
+        edge: m.a.station().unwrap().0.into(),
+        t: 0.5,
+    };
     let t = set(&t, m).template;
     let before = positions(&t);
     let split = authoring::apply(
@@ -222,7 +229,9 @@ fn straight_curved_and_exact_station_splits_preserve_attachment() {
     assert_eq!(
         split.panels[0].polygon.as_ref().unwrap().measurements[0]
             .a
-            .t,
+            .station()
+            .unwrap()
+            .1,
         0.
     );
     assert!(before[0].distance(positions(&split)[0]) < 1e-12);
@@ -298,7 +307,10 @@ fn dangling_invalid_and_destructive_edits_fail_atomically() {
     let t = set(&fixture(), record()).template;
     let before = serde_json::to_value(&t).unwrap();
     let mut invalid = record();
-    invalid.a.edge = "missing".into();
+    invalid.a = MeasurementAnchor::Station {
+        edge: "missing".into(),
+        t: 0.5,
+    };
     assert!(
         authoring::apply(
             &t,
@@ -332,9 +344,10 @@ fn dangling_invalid_and_destructive_edits_fail_atomically() {
         .is_err()
     );
     let mut loaded = t.clone();
-    loaded.panels[0].polygon.as_mut().unwrap().measurements[0]
-        .b
-        .t = f64::NAN;
+    loaded.panels[0].polygon.as_mut().unwrap().measurements[0].b = MeasurementAnchor::Station {
+        edge: "edge_3".into(),
+        t: f64::NAN,
+    };
     assert!(loaded.compile().is_err());
     let two = authoring::apply(
         &t,
@@ -386,11 +399,11 @@ fn internal_and_hole_stations_mirror_correctly_and_referenced_lines_cannot_disap
     let m = PatternMeasurement {
         id: "stations".into(),
         label: "Stations".into(),
-        a: MeasurementAnchor {
+        a: MeasurementAnchor::Station {
             edge: "guide".into(),
             t: 0.2,
         },
-        b: MeasurementAnchor {
+        b: MeasurementAnchor::Station {
             edge: "hole_a".into(),
             t: 0.3,
         },
@@ -411,8 +424,8 @@ fn internal_and_hole_stations_mirror_correctly_and_referenced_lines_cannot_disap
         assert!(DVec2::new(0.4 - old.x, old.y).distance(new) < 1e-12);
     }
     let m = &mirror.panels[0].polygon.as_ref().unwrap().measurements[0];
-    assert_eq!(m.a.t, 0.2);
-    assert!((m.b.t - 0.7).abs() < 1e-12);
+    assert_eq!(m.a.station().unwrap().1, 0.2);
+    assert!((m.b.station().unwrap().1 - 0.7).abs() < 1e-12);
     assert!(
         authoring::apply(
             &t,
@@ -460,4 +473,65 @@ fn measurement_metadata_coexists_with_trims_without_weakening_geometry_guard() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn interior_attachment_follows_affine_panel_edits_and_survives_split_and_reload() {
+    let template = fixture();
+    let poly = template.panels[0].polygon.as_ref().unwrap();
+    let local = DVec2::new(0.135, 0.12);
+    let mut measurement = record();
+    measurement.a = poly.interior_anchor(local).unwrap();
+    measurement.b = MeasurementAnchor::fixed("edge_1".into(), 0.73, 8).unwrap();
+    let saved = set(&template, measurement).template;
+    let changed = authoring::apply(&saved, Command::SetMeasurementBits(16)).unwrap();
+    assert!(!changed.reset_simulation);
+    let split = authoring::apply(
+        &changed.template,
+        Command::SplitBoundary {
+            panel: saved.panels[0].id.clone(),
+            edge: "edge_1".into(),
+            at_m: 0.1,
+        },
+    )
+    .unwrap();
+    let mut loaded: GarmentTemplate =
+        serde_json::from_slice(&serde_json::to_vec(&split.template).unwrap()).unwrap();
+    assert_eq!(loaded.measurement_bits, 16);
+    let poly = loaded.panels[0].polygon.as_mut().unwrap();
+    let [a, b] = poly.measurement_points(&poly.measurements[0]).unwrap();
+    assert!(a.distance(local) < 1e-12);
+    assert!((b.x - 0.4 * (0.73_f64 * 255.).round() / 255.).abs() <= 0.3 / 510.);
+    let transform = |p: DVec2| DVec2::new(2. * p.x + 0.3 * p.y, 1.2 * p.y) + DVec2::new(0.8, 0.1);
+    for pt in &mut poly.points {
+        *pt = transform(*pt);
+    }
+    let [next_a, next_b] = poly.measurement_points(&poly.measurements[0]).unwrap();
+    assert!(next_a.distance(transform(a)) < 1e-12 && next_b.distance(transform(b)) < 1e-12);
+}
+
+#[test]
+fn fixed_precision_includes_both_endpoints_and_bounds_rounding_error() {
+    for bits in [8, 10, 16] {
+        let levels = f64::from((1_u32 << bits) - 1);
+        for t in [0., 0.2345, 1.] {
+            let anchor = MeasurementAnchor::fixed("edge_1".into(), t, bits).unwrap();
+            let actual = anchor.station().unwrap().1;
+            assert!((actual - t).abs() <= 0.5 / levels);
+            if t == 0. || t == 1. {
+                assert_eq!(actual, t);
+            }
+        }
+    }
+}
+
+#[test]
+fn collapsing_a_barycentric_reference_triangle_is_rejected() {
+    let mut t = fixture();
+    let p = t.panels[0].polygon.as_mut().unwrap();
+    let anchor = p.interior_anchor(DVec2::new(0.1, 0.12)).unwrap();
+    for point in &mut p.points {
+        point.y = 0.;
+    }
+    assert!(p.measurement_anchor_position(&anchor).is_err());
 }

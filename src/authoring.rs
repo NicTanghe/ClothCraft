@@ -41,6 +41,7 @@ pub enum PointConstruction {
 }
 
 pub enum Command {
+    SetMeasurementBits(u8),
     /// Create or replace a panel-local, nonphysical saved measurement.
     SetMeasurement {
         panel: String,
@@ -780,6 +781,7 @@ pub fn same_physics(a: &GarmentTemplate, b: &GarmentTemplate) -> bool {
     let without_layout = |t: &GarmentTemplate| {
         let mut t = t.clone();
         t.mirror_links.clear();
+        t.measurement_bits = 8;
         t.fabric_appearance.clear();
         t.graphics.clear();
         t.trims.clear();
@@ -819,7 +821,8 @@ pub fn only_appearance_changed(a: &GarmentTemplate, b: &GarmentTemplate) -> bool
             })
             .collect::<Vec<_>>()
     };
-    if a.fabric_appearance == b.fabric_appearance
+    if a.measurement_bits == b.measurement_bits
+        && a.fabric_appearance == b.fabric_appearance
         && a.graphics == b.graphics
         && a.trims == b.trims
         && markings(a) == markings(b)
@@ -828,6 +831,7 @@ pub fn only_appearance_changed(a: &GarmentTemplate, b: &GarmentTemplate) -> bool
     }
     let strip = |source: &GarmentTemplate| {
         let mut t = source.clone();
+        t.measurement_bits = 8;
         t.fabric_appearance.clear();
         t.graphics.clear();
         t.trims.clear();
@@ -1382,7 +1386,7 @@ fn remove_point_inner(
                 || polygon
                     .measurements
                     .iter()
-                    .any(|m| &m.a.edge == *name || &m.b.edge == *name)
+                    .any(|m| m.a.uses_edge(name) || m.b.uses_edge(name))
         })
     }) {
         return Err(
@@ -1487,6 +1491,7 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
     let mut selected = None;
     let mut new_point = None;
     match command {
+        Command::SetMeasurementBits(bits) => template.measurement_bits = bits,
         Command::SetMeasurement { panel, measurement } => {
             let p = template
                 .panels
@@ -1707,7 +1712,7 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             if poly
                 .measurements
                 .iter()
-                .any(|m| m.a.edge == line || m.b.edge == line)
+                .any(|m| m.a.uses_edge(&line) || m.b.uses_edge(&line))
             {
                 return Err("Remove the measurement before deleting its internal line".into());
             }
@@ -2156,7 +2161,17 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                 let split_geometry = polygon.clone();
                 for measurement in &mut polygon.measurements {
                     for anchor in [&mut measurement.a, &mut measurement.b] {
-                        if anchor.edge == edge {
+                        if let crate::garment::polygon::MeasurementAnchor::Barycentric {
+                            vertices,
+                            ..
+                        } = anchor
+                        {
+                            for v in vertices {
+                                if v.edge == edge && v.end {
+                                    v.edge = name.clone();
+                                }
+                            }
+                        } else if anchor.uses_edge(&edge) {
                             *anchor = geometry::split_measurement_anchor(
                                 &previous_polygon,
                                 &split_geometry,

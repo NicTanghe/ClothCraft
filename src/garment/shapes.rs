@@ -143,8 +143,18 @@ pub fn mirror(poly: &mut PolygonPattern, axis: MirrorAxis, size: DVec2) {
     }
     for measurement in &mut poly.measurements {
         for anchor in [&mut measurement.a, &mut measurement.b] {
-            if !poly.lines.iter().any(|line| line.id == anchor.edge) {
-                anchor.t = 1. - anchor.t;
+            use super::polygon::MeasurementAnchor::*;
+            match anchor {
+                Barycentric { vertices, .. } => {
+                    for v in vertices {
+                        v.end = !v.end;
+                    }
+                }
+                Station { edge, t } if !poly.lines.iter().any(|l| &l.id == edge) => *t = 1. - *t,
+                Fixed { edge, bits, code } if !poly.lines.iter().any(|l| &l.id == edge) => {
+                    *code = (((1u32 << *bits) - 1) as u16) - *code
+                }
+                _ => {}
             }
         }
     }

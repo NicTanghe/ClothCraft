@@ -175,7 +175,7 @@ pub fn validate_dart(
         || polygon
             .measurements
             .iter()
-            .any(|m| m.a.edge == edge || m.b.edge == edge)
+            .any(|m| m.a.uses_edge(edge) || m.b.uses_edge(edge))
     {
         return Err(
             "Dart on a curved or annotated boundary needs explicit reference remapping".into(),

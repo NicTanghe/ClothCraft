@@ -110,10 +110,8 @@ pub enum ToolDraft2d {
         hover_local_m: Option<DVec2>,
     },
     Measure {
-        first_board_m: Option<DVec2>,
-        second_board_m: Option<DVec2>,
+        panel_id: String,
+        first: clothcraft::garment::polygon::MeasurementAnchor,
         hover_board_m: Option<DVec2>,
-        first_anchor: Option<(String, String, f64)>,
-        last_distance_mm: Option<f64>,
     },
 }

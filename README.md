@@ -6,6 +6,28 @@ Draw patterns, sew them together, place them around an avatar and simulate the r
 
 **This is a research prototype, not a production garment tool.** Expect unfinished interactions, residual oscillation, slow simulation on dense meshes and cases that still fail. Help is welcome with the interface, physics, testing, documentation and file formats. You do not need to be a programmer to contribute a useful reproduction, workflow sketch or testable hypothesis.
 
+### Measuring a pattern piece
+
+With **Measure**, click two locations on the same editable polygon panel. The ruler
+shows their straight-line distance in flat garment material, in millimetres.
+Moving or rotating the piece on the board preserves the measurement. Scaling
+or reshaping the piece updates the distance.
+
+Straight boundary picks store the named edge and an integer station. Settings
+cycles the precision for new picks through 8 (default), 10 and 16 bits. The
+garment JSON saves this preference and each station's precision. Codes from
+zero to 255, 1023 or 65535 include both ends exactly. On a straight edge of
+length L, rounding moves a pick by at most L / (2 × maximum code). Splitting
+an edge remaps its station to the correct child and can incur another rounding
+step. Older fractional stations and curved-edge arclength stations retain
+their original representation.
+
+Interior picks store three named contour corners of that piece and dimensionless
+barycentric weights. The point follows the corners through translation, rotation,
+scaling and shear, independent of board layout and simulation mesh density.
+A local reshape follows the three chosen corners. An edit that destroys the
+reference frame can require removing or redefining the measurement.
+
 ![ClothCraft workspace](docs/screenshots/workspace.png)
 
 In either native window, click the solver badge in the top bar to choose the

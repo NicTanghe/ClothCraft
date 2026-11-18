@@ -22,6 +22,10 @@ pub(in super::super) fn build_runner_settings(state: &CssRunnerState) -> Option<
                         title="Close settings (Escape)">"Close"</button>
                 </div>
                 <div class="settings-entry">
+                    <span class="settings-label">"New measurement precision"</span>
+                    <button class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions,RunnerUiOp::CycleMeasurementBits)}>{format!("{} bits",state.project.template.measurement_bits)}</button>
+                </div>
+                <div class="settings-entry">
                     <span class="settings-label">"2D zoom speed"</span>
                     <div class="settings-controls">
                         <button id="zoom-speed-dec" class="cad-2d-pill" title="Decrease 2D zoom speed"

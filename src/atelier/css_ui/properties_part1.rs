@@ -90,11 +90,11 @@ impl MeasurementDraftState {
             value: PatternMeasurement {
                 id: format!("meas_{}", panel_id),
                 label: "Width Check".into(),
-                a: MeasurementAnchor {
+                a: MeasurementAnchor::Station {
                     edge: edge_a.into(),
                     t: 0.25,
                 },
-                b: MeasurementAnchor {
+                b: MeasurementAnchor::Station {
                     edge: edge_b.into(),
                     t: 0.75,
                 },
@@ -882,11 +882,11 @@ fn render_active_measurement_draft(
             </div>
             <div class="field-row" id="meas-station-a">
                 <label>Station A</label>
-                <span class="value">{format!("{} · t={:.3}", meas.a.edge, meas.a.t)}</span>
+                <span class="value">{meas.a.station().map(|(e,t)|format!("{e} · t={t:.3}")).unwrap_or_else(||"Barycentric".into())}</span>
             </div>
             <div class="field-row" id="meas-station-b">
                 <label>Station B</label>
-                <span class="value">{format!("{} · t={:.3}", meas.b.edge, meas.b.t)}</span>
+                <span class="value">{meas.b.station().map(|(e,t)|format!("{e} · t={t:.3}")).unwrap_or_else(||"Barycentric".into())}</span>
             </div>
             <div class={len_class} id="meas-computed-distance">
                 {len_text}
@@ -1179,11 +1179,11 @@ mod tests {
             poly.measurements.push(PatternMeasurement {
                 id: "meas_1".into(),
                 label: "Chest Width".into(),
-                a: MeasurementAnchor {
+                a: MeasurementAnchor::Station {
                     edge: "edge_0".into(),
                     t: 0.2,
                 },
-                b: MeasurementAnchor {
+                b: MeasurementAnchor::Station {
                     edge: "edge_2".into(),
                     t: 0.8,
                 },
@@ -1238,11 +1238,11 @@ mod tests {
             value: PatternMeasurement {
                 id: "meas_valid".into(),
                 label: "Valid Meas".into(),
-                a: MeasurementAnchor {
+                a: MeasurementAnchor::Station {
                     edge: "edge_0".into(),
                     t: 0.1,
                 },
-                b: MeasurementAnchor {
+                b: MeasurementAnchor::Station {
                     edge: "edge_2".into(),
                     t: 0.9,
                 },
