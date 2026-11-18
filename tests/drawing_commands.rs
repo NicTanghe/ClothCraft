@@ -393,6 +393,44 @@ fn split_preserves_area_and_perimeter() {
 }
 
 #[test]
+fn editing_an_anchor_keeps_implicit_piece_positions() {
+    let mut before = GarmentTemplate::load(std::path::Path::new(
+        "examples/templates/curved-panels.json",
+    ))
+    .unwrap();
+    before.seams.clear();
+    for panel in &mut before.panels {
+        panel.layout_2d = None;
+    }
+    for index in 0..before.panels.len() {
+        let panel = &before.panels[index];
+        let anchor = 0;
+        let position = panel.polygon.as_ref().unwrap().points[anchor] - DVec2::new(0.08, 0.);
+        let edit = authoring::apply(
+            &before,
+            Command::Anchor {
+                panel: panel.id.clone(),
+                anchor,
+                position,
+            },
+        )
+        .unwrap();
+        let new = edit.template.panels[index].polygon.as_ref().unwrap();
+        let moved = authoring::layout(&edit.template, index) + new.points[anchor];
+        assert!(moved.distance(authoring::layout(&before, index) + position) < 1e-12);
+        let untouched = authoring::layout(&edit.template, index) + new.points[1];
+        let expected =
+            authoring::layout(&before, index) + panel.polygon.as_ref().unwrap().points[1];
+        assert!(untouched.distance(expected) < 1e-12);
+        let other = 1 - index;
+        assert_eq!(
+            authoring::layout(&edit.template, other),
+            authoring::layout(&before, other)
+        );
+    }
+}
+
+#[test]
 fn splitting_keeps_the_material_frame_and_implicit_board_layout() {
     let mut before = GarmentTemplate::load(std::path::Path::new(
         "examples/templates/curved-panels.json",

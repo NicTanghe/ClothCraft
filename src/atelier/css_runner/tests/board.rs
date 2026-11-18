@@ -1,11 +1,11 @@
 //! Board tools, gestures, cancellation and history regressions.
 
 use super::super::super::{DocumentFiles, worker};
-use super::super::actions::{RunnerAction, RunnerUiOp, apply_runner_ui_op};
+use super::super::actions::{RunnerAction, RunnerUiOp, apply_runner_action, apply_runner_ui_op};
 use super::super::app::create_runner_app;
 use super::super::board::corners::active_fillet_previews;
 use super::super::board::geometry::{
-    compute_2d_viewport_rect, panel_raw_points, panel_to_board_pt,
+    compute_2d_view_box_m, compute_2d_viewport_rect, panel_raw_points, panel_to_board_pt,
 };
 use super::super::board::interaction::set_active_2d_tool;
 use super::super::board::native::BoardPath;
@@ -922,6 +922,54 @@ fn test_selection_double_click_splits_curved_edge_and_undoes() {
             .len(),
         poly.points.len() + 1
     );
+}
+
+#[test]
+fn dragging_an_outer_anchor_keeps_the_board_camera_fixed() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = selection_test_state(dir.path());
+    let before = state.project.template.clone();
+    let panel_idx = 1;
+    let anchor = 1;
+    let original = before.panels[panel_idx].polygon.as_ref().unwrap();
+    let from = panel_to_board_pt(&before, panel_idx, original.points[anchor]);
+    let to = from + DVec2::new(0.08, 0.);
+    let start = board_to_screen_px(&state, from);
+    let end = board_to_screen_px(&state, to);
+    let initial_view = compute_2d_view_box_m(&state);
+
+    handle_runner_event(&mut state, &pointer_move_ev(start.0, start.1));
+    handle_runner_event(&mut state, &pointer_btn_ev(true));
+    handle_runner_event(&mut state, &pointer_move_ev(end.0, end.1));
+
+    let preview = state.preview_template.as_ref().expect("point drag preview");
+    assert_eq!(compute_2d_view_box_m(&state), initial_view);
+
+    let check_points = |template: &GarmentTemplate| {
+        let polygon = template.panels[panel_idx].polygon.as_ref().unwrap();
+        for (i, &point) in polygon.points.iter().enumerate() {
+            let expected = if i == anchor {
+                to
+            } else {
+                panel_to_board_pt(&before, panel_idx, original.points[i])
+            };
+            assert!(panel_to_board_pt(template, panel_idx, point).distance(expected) < 1e-6);
+        }
+    };
+    check_points(preview);
+    handle_runner_event(&mut state, &pointer_btn_ev(false));
+    check_points(&state.project.template);
+    assert_eq!(compute_2d_view_box_m(&state), initial_view);
+    assert!(undo_redo_2d(&mut state, false));
+    assert_eq!(compute_2d_view_box_m(&state), initial_view);
+    assert!(undo_redo_2d(&mut state, true));
+    assert_eq!(compute_2d_view_box_m(&state), initial_view);
+
+    apply_runner_action(&mut state, RunnerAction::Zoom2dFit, false);
+    assert_ne!(compute_2d_view_box_m(&state), initial_view);
 }
 
 #[test]

@@ -3,6 +3,7 @@
 use super::super::worker::{self, Latest, Work};
 use super::super::{DocumentFiles, perf};
 use super::actions::RunnerAction;
+use super::board::geometry::fit_2d_board;
 use super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::mesh_preparation;
 use clothcraft::authoring::corner_tool::CIRCLE_TENSION;
@@ -103,6 +104,7 @@ pub struct CssRunnerState {
     pub corner_preview_active: bool,
     pub open_accordion_idx: usize,
     pub accordion_open: [bool; 6],
+    pub(super) board_2d_fit: (glam::DVec2, f64),
     pub board_2d_pan: (f64, f64),
     pub board_2d_zoom: f64,
     pub board_2d_zoom_speed: f64,
@@ -124,6 +126,7 @@ impl CssRunnerState {
             Some(&scene.collider.surface),
         );
 
+        let board_2d_fit = fit_2d_board(&project.template);
         Self {
             actions: ActionQueue::new(),
             action_batch: Vec::new(),
@@ -194,10 +197,17 @@ impl CssRunnerState {
             corner_preview_active: false,
             open_accordion_idx: 0,
             accordion_open: [true, false, true, false, false, false],
+            board_2d_fit,
             board_2d_pan: (0.0, 0.0),
             board_2d_zoom: 1.0,
             board_2d_zoom_speed: DEFAULT_2D_ZOOM_SPEED,
         }
+    }
+
+    pub(super) fn frame_all_2d(&mut self) {
+        self.board_2d_fit = fit_2d_board(&self.project.template);
+        self.board_2d_pan = (0.0, 0.0);
+        self.board_2d_zoom = 1.0;
     }
 
     pub fn sync_selected_point(&mut self) {

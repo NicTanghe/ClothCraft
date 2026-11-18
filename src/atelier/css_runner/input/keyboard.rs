@@ -134,8 +134,7 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                         return true;
                     }
                     if ch == "0" {
-                        state.board_2d_pan = (0.0, 0.0);
-                        state.board_2d_zoom = 1.0;
+                        state.frame_all_2d();
                         return true;
                     }
                 }

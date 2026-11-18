@@ -1751,6 +1751,7 @@ pub fn preview_move_corner(
     let any_sewn = connected_corners(source, panel, anchor)
         .iter()
         .any(|c| connected_seam_corners(source, &c.panel, c.point).len() > 1);
+    freeze_implicit_layouts(source, template);
     if !any_sewn {
         let p = template
             .panels
@@ -1761,11 +1762,6 @@ pub fn preview_move_corner(
         normalize(p);
         let _ = linked::synchronize(source, template);
         return Ok(());
-    }
-
-    // Preserve board origins when multi-panel normalized origins might shift
-    for (i, p) in template.panels.iter_mut().enumerate() {
-        p.layout_2d = Some(layout(source, i));
     }
 
     let seed_ref = CornerRef {
@@ -2019,9 +2015,7 @@ pub(super) fn move_point_groups_connected(
         }
     }
 
-    for (i, p) in template.panels.iter_mut().enumerate() {
-        p.layout_2d = Some(layout(source, i));
-    }
+    freeze_implicit_layouts(source, template);
 
     let mut representative_by_panel: std::collections::BTreeMap<String, String> =
         std::collections::BTreeMap::new();
@@ -2114,6 +2108,7 @@ pub(super) fn move_points_connected(
             .iter()
             .any(|c| connected_seam_corners(source, &c.panel, c.point).len() > 1)
     });
+    freeze_implicit_layouts(source, template);
     if !any_sewn {
         let p = template
             .panels
@@ -2123,10 +2118,6 @@ pub(super) fn move_points_connected(
         remap_anchors(p, &unique, |point| point + delta)?;
         normalize(p);
         return Ok(());
-    }
-
-    for (i, p) in template.panels.iter_mut().enumerate() {
-        p.layout_2d = Some(layout(source, i));
     }
 
     let corner_deltas = propagate_corner_deltas(

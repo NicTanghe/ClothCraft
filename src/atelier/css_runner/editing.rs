@@ -1,6 +1,7 @@
 //! Transactional authoring commands, history and geometry previews.
 
 use super::board::corners::{clamp_fillet_radius_m, connected_batch_fillet_max_radius_m};
+use super::board::geometry::fit_2d_board;
 use super::board::selection::{
     batch_corners_for_points, effective_selected_points, sanitize_2d_subselection,
 };
@@ -55,6 +56,17 @@ pub(super) fn install_authoring_edit(
         state.set_single_2d_point(p.id.clone(), np);
     }
 
+    // Keep the existing framing behavior when pieces enter or leave the
+    // board. Editing points on existing pieces keeps the current camera.
+    let previous_panels = &state.project.template.panels;
+    if previous_panels.len() != edit.template.panels.len()
+        || previous_panels
+            .iter()
+            .zip(&edit.template.panels)
+            .any(|(old, new)| old.id != new.id)
+    {
+        state.board_2d_fit = fit_2d_board(&edit.template);
+    }
     state.project.template = edit.template;
     if edit.reset_simulation {
         state.project.state = None;
