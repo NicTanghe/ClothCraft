@@ -23,6 +23,14 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                     }
                     return false;
                 }
+                if state.camera_menu_open {
+                    if matches!(&k.logical_key, cssimpler::renderer::KeyIdentity::Named(name) if name == "Escape")
+                    {
+                        state.camera_menu_open = false;
+                        return true;
+                    }
+                    return true;
+                }
                 if state.import_dialog.is_some() {
                     if matches!(&k.logical_key, cssimpler::renderer::KeyIdentity::Named(name) if name == "Escape")
                     {

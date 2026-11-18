@@ -448,6 +448,7 @@ impl CssRunnerState {
         self.settings_open = false;
         self.command_palette_open = false;
         self.solver_menu_open = false;
+        self.camera_menu_open = false;
         self.playing = false;
         self.send_control_state(false);
         let mut dialog = ImportDialog::new(kind);

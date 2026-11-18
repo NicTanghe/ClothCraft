@@ -839,6 +839,27 @@ pub fn update_viewport_camera(
         .map_err(|e| e.to_string())?
         .set(gf::vec2f((dist * 0.001).max(0.0001), dist * 1000.0))
         .map_err(|e| e.to_string())?;
+    let projection = if camera.orthographic {
+        geom::Projection::Orthographic
+    } else {
+        geom::Projection::Perspective
+    };
+    cam.create_projection_attr()
+        .map_err(|e| e.to_string())?
+        .set(projection)
+        .map_err(|e| e.to_string())?;
+    // The USD renderer derives orthographic height from verticalAperture * 0.1
+    // scene units. Match the perspective framing at the target so switching
+    // projection does not jump scale, and keep zoom meaningful in orthographic.
+    let aperture = if camera.orthographic {
+        (camera.distance * (camera.vertical_fov_radians() * 0.5).tan() * 20.0).max(0.001)
+    } else {
+        24.0
+    };
+    cam.create_vertical_aperture_attr()
+        .map_err(|e| e.to_string())?
+        .set(aperture)
+        .map_err(|e| e.to_string())?;
     cam.set_transform(gf::Matrix4d(world.to_cols_array().map(f64::from)))
         .map_err(|e| e.to_string())?;
     Ok(())

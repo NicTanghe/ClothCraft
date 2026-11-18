@@ -1,5 +1,24 @@
 # Repository handoff
 
+## Native 3D view presets and projection — 18 November 2026
+
+Part of [erythrofr/ClothCraft#244](https://github.com/erythrofr/ClothCraft/pull/244)
+is ported to the fitting editor. The 3D header now has a **View** menu with
+Iso/Front/Back/Left/Right/Top/Bottom presets, a Perspective/Orthographic toggle
+and a reset-to-fitted-view action. The interactive egui view cube is not ported;
+the native menu exposes the same seven canonical directions that
+`render::PresetView` already defined.
+
+The USD camera now authors `projection` and updates `verticalAperture` for the
+orthographic projection so switching does not jump scale and zoom remains
+meaningful; previously `Camera::orthographic` only affected the legacy renderer.
+Menu input is gated and Escape or the backdrop closes it.
+
+Observed validation: 164 library tests passed with 8 ignored (including two new
+camera regressions), strict all-target Clippy and formatting passed, and a
+headless RGBA capture of the open menu was inspected. Projection was verified by
+reading the authored USD camera attributes; no GPU window run was performed.
+
 ## Functional native import dialogs — 18 November 2026
 
 The fitting editor's left-browser **DXF**, **SVG** and **Avatar** import buttons

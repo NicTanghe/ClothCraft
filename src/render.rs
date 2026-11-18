@@ -297,6 +297,12 @@ impl Camera {
             ..Default::default()
         }
     }
+    /// Vertical field of view used by the perspective framing and by the
+    /// matched orthographic height. Exposed so the USD camera can keep both
+    /// projections at the same apparent scale.
+    pub fn vertical_fov_radians(&self) -> f32 {
+        FOV_Y
+    }
     /// Half-height of the view volume per unit of camera distance.
     fn half_tan() -> f32 {
         (FOV_Y * 0.5).tan()
