@@ -146,7 +146,7 @@ pub fn mirror(poly: &mut PolygonPattern, axis: MirrorAxis, size: DVec2) {
             use super::polygon::MeasurementAnchor::*;
             match anchor {
                 Barycentric { vertices, .. } => {
-                    for v in vertices {
+                    for v in vertices.iter_mut() {
                         v.end = !v.end;
                     }
                 }

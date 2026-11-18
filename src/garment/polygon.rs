@@ -22,7 +22,7 @@ pub enum MeasurementAnchor {
         bits: u8,
     },
     Barycentric {
-        vertices: [Corner; 3],
+        vertices: Box<[Corner; 3]>,
         weights: [f64; 3],
     },
 }
@@ -195,10 +195,10 @@ impl PolygonPattern {
         let u = (point - a).perp_dot(c - a) / det;
         let v = (b - a).perp_dot(point - a) / det;
         Some(MeasurementAnchor::Barycentric {
-            vertices: [i, j, k].map(|idx| Corner {
+            vertices: Box::new([i, j, k].map(|idx| Corner {
                 edge: self.edges[idx].clone(),
                 end: false,
-            }),
+            })),
             weights: [1. - u - v, u, v],
         })
     }

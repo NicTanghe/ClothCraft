@@ -2166,7 +2166,7 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                             ..
                         } = anchor
                         {
-                            for v in vertices {
+                            for v in vertices.iter_mut() {
                                 if v.edge == edge && v.end {
                                     v.edge = name.clone();
                                 }
