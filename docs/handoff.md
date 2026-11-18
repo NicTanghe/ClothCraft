@@ -17,7 +17,8 @@ SVG file or export. Rendering and the headless board capture were inspected;
 no GPU/window run was performed.
 
 Validation: 167 library tests passed with 8 ignored, including four outline
-regressions (projection fixture, empty input, background path, toggle); strict
+regressions (projection fixture, empty input, uncached drawing-layer
+placement, toggle); strict
 all-target Clippy and formatting passed.
 
 ## Functional native import dialogs — 18 November 2026
