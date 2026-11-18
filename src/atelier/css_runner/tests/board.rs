@@ -5,7 +5,7 @@ use super::super::actions::{RunnerAction, RunnerUiOp, apply_runner_ui_op};
 use super::super::app::create_runner_app;
 use super::super::board::corners::active_fillet_previews;
 use super::super::board::geometry::{
-    compute_2d_viewport_rects, panel_raw_points, panel_to_board_pt,
+    compute_2d_viewport_rect, panel_raw_points, panel_to_board_pt,
 };
 use super::super::board::interaction::set_active_2d_tool;
 use super::super::board::native::BoardPath;
@@ -32,7 +32,7 @@ use glam::DVec2;
 use std::time::Duration;
 
 #[test]
-fn test_2d_native_square_bounds_and_cad_bar() {
+fn test_2d_native_full_canvas_bounds_and_cad_bar() {
     let _guard = worker::WORKER_TEST_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -43,7 +43,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
     let project = FittingProject::basic(GarmentKind::Tshirt, 0, avatar);
     let scene = project.compile().expect("compile scene");
     let files = DocumentFiles {
-        output: dir.path().join("out_square"),
+        output: dir.path().join("out_full_canvas"),
         source: None,
         modified: false,
     };
@@ -145,15 +145,12 @@ fn test_2d_native_square_bounds_and_cad_bar() {
         let svg_bounds = app
             .find_element_bounds_by_id("#board-2d")
             .expect("#board-2d bounds");
-        let (_canvas_rect, expected_svg) = compute_2d_viewport_rects(app.state());
-        assert!(
-            (svg_bounds.width - svg_bounds.height).abs() < 1.5,
-            "rendered #board-2d must be square at {w}x{h} ({mode:?}, clean={clean_view}, drawer={drawer_open}): {svg_bounds:?}"
-        );
+        let expected_svg = compute_2d_viewport_rect(app.state());
         assert!(
             (svg_bounds.x - expected_svg.x).abs() < 3.0
                 && (svg_bounds.y - expected_svg.y).abs() < 3.0
-                && (svg_bounds.width - expected_svg.w).abs() < 3.0,
+                && (svg_bounds.width - expected_svg.w).abs() < 3.0
+                && (svg_bounds.height - expected_svg.h).abs() < 3.0,
             "CSS layout ({svg_bounds:?}) must align with hit-test rect ({expected_svg:?}) at {w}x{h}"
         );
         let bar_bounds = app
@@ -578,7 +575,7 @@ fn test_2d_offboard_drag_and_mixed_mirror_seam_propagation() {
         &state,
         panel_to_board_pt(&state.project.template, 0, fp_pt_before),
     );
-    let (canvas_2d, _svg_2d) = compute_2d_viewport_rects(&state);
+    let canvas_2d = compute_2d_viewport_rect(&state);
     let off_x = sx + 22.0;
     let off_y = (canvas_2d.y - 45.0).min(-20.0);
     assert!(!canvas_2d.contains(off_x, off_y));

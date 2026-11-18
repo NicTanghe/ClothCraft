@@ -2,7 +2,7 @@
 
 use super::super::board::corners::{clamp_fillet_radius_m, connected_batch_fillet_max_radius_m};
 use super::super::board::geometry::{
-    board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rects, dist_point_to_segment,
+    board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect, dist_point_to_segment,
     panel_raw_points, panel_to_board_pt, screen_to_board_m, screen_to_board_unclamped_m,
     viewport_3d_rect,
 };
@@ -36,7 +36,7 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             if state.settings_open || state.command_palette_open || state.solver_menu_open {
                 return false;
             }
-            let (canvas_2d, _svg_2d) = compute_2d_viewport_rects(state);
+            let canvas_2d = compute_2d_viewport_rect(state);
             let (px, py) = state.last_pointer_pos;
             if *btn_state == cssimpler::renderer::ButtonState::Pressed && canvas_2d.contains(px, py)
             {
@@ -71,14 +71,14 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             let was_down = state.pointer_down;
             state.pointer_down = *btn_state == cssimpler::renderer::ButtonState::Pressed;
             let (px, py) = state.last_pointer_pos;
-            let (canvas_2d, svg_2d) = compute_2d_viewport_rects(state);
+            let canvas_2d = compute_2d_viewport_rect(state);
             let rect_3d = viewport_3d_rect(state);
 
             if state.pointer_down && !was_down {
                 if canvas_2d.contains(px, py) {
                     if let Some(board_m) = screen_to_board_m(state, px, py) {
-                        let (_vbx, _vby, view_span) = compute_2d_view_box_m(state);
-                        let px_m = view_span / (svg_2d.w.max(1.0) as f64);
+                        let (_vbx, _vby, view_span, _) = compute_2d_view_box_m(state);
+                        let px_m = view_span / (canvas_2d.w.max(1.0) as f64);
 
                         match state.active_2d_tool.as_str() {
                             "Rect" => {
@@ -952,13 +952,6 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                 return true;
                             }
                         }
-                    } else {
-                        // Inside canvas_2d padding outside square svg_2d: pan only
-                        state.drag_2d = Some(Drag2d::Pan {
-                            start_pan: state.board_2d_pan,
-                            start_pointer: (px, py),
-                        });
-                        return true;
                     }
                 } else if rect_3d.contains(px, py) {
                     state.dragging_3d = true;

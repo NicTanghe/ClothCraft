@@ -1,7 +1,7 @@
 //! Pointer motion for hover, drafts, dragging and camera orbit.
 
 use super::super::board::geometry::{
-    board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rects, screen_to_board_m,
+    board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect, screen_to_board_m,
     screen_to_board_unclamped_m,
 };
 use super::super::board::hit_testing::hit_test_2d;
@@ -90,8 +90,8 @@ pub(in super::super) fn handle_motion(state: &mut CssRunnerState, event: &Engine
             }
 
             if state.drag_2d.is_some() {
-                let (_canvas, svg_rect) = compute_2d_viewport_rects(state);
-                let (_vbx, _vby, view_span) = compute_2d_view_box_m(state);
+                let svg_rect = compute_2d_viewport_rect(state);
+                let (_vbx, _vby, view_span, _) = compute_2d_view_box_m(state);
                 let px_m = view_span / (svg_rect.w.max(1.0) as f64);
 
                 let drag = state.drag_2d.take().unwrap();

@@ -5,7 +5,7 @@ use super::corners::{
     active_fillet_previews, connected_fillet_max_radius_m, fillet_drag_handle_local,
 };
 use super::geometry::{
-    compute_2d_view_box_m, compute_2d_viewport_rects, panel_raw_points, panel_to_board_pt,
+    compute_2d_view_box_m, compute_2d_viewport_rect, panel_raw_points, panel_to_board_pt,
 };
 use super::native::{BoardPath, circle, dashed_commands, point, polyline, rectangle};
 use super::selection::{compute_connected_2d_highlight, effective_selected_points};
@@ -153,14 +153,14 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
     }
 
     // Display commands use millimetres; authored geometry remains f64 metres.
-    let (vb_min_x_m, vb_min_y_m, view_span_m) = compute_2d_view_box_m(state);
+    let (vb_min_x_m, vb_min_y_m, view_width_m, view_height_m) = compute_2d_view_box_m(state);
     let vb_min_x = vb_min_x_m * 1000.0;
     let vb_min_y = vb_min_y_m * 1000.0;
-    let vb_w = view_span_m * 1000.0;
-    let vb_h = vb_w;
+    let vb_w = view_width_m * 1000.0;
+    let vb_h = view_height_m * 1000.0;
     let view_box = VectorViewBox::new(vb_min_x as f32, vb_min_y as f32, vb_w as f32, vb_h as f32);
 
-    let (_canvas_rect, svg_rect) = compute_2d_viewport_rects(state);
+    let svg_rect = compute_2d_viewport_rect(state);
     let px = (vb_w / (svg_rect.w.max(1.0) as f64)).max(0.25);
 
     // Explicit native paints include their alpha channel.

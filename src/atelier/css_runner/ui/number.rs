@@ -65,7 +65,11 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
                         initial_mode_radius, initial_preview_active,
                         cursor: if native_drag { super::super::input::cursor_wrap::CursorWrap::new() } else { None },
                     });
-                }}>"↕"</button>
+                }}>
+                <svg viewBox="0 0 24 24" class="icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4" />
+                </svg>
+            </button>
         </div>
     }
 }

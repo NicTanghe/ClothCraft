@@ -4,7 +4,7 @@ use super::super::super::worker;
 use super::super::actions::{RunnerUiOp, apply_runner_ui_op};
 use super::super::app::create_runner_app;
 use super::super::board::geometry::{
-    compute_2d_viewport_rects, screen_to_board_m, viewport_3d_rect,
+    compute_2d_viewport_rect, screen_to_board_m, viewport_3d_rect,
 };
 use super::super::input::handle_runner_event;
 use super::super::state::{DEFAULT_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED, MIN_2D_ZOOM_SPEED};
@@ -96,7 +96,7 @@ fn settings_controls_close_and_do_not_edit_the_board() {
         // Blank panel clicks are absorbed rather than reaching the backdrop.
         click!("#settings-panel");
         assert!(app.state().settings_open);
-        let board = compute_2d_viewport_rects(app.state()).1;
+        let board = compute_2d_viewport_rect(app.state());
         let (x, y) = (board.x + board.w * 0.5, board.y + board.h * 0.5);
         let zoom_before = app.state().board_2d_zoom;
         let tool_before = app.state().active_2d_tool.clone();
@@ -165,7 +165,7 @@ fn zoom_speed_affects_both_scroll_units_preserves_anchor_and_keeps_limits() {
         .unwrap_or_else(|e| e.into_inner());
     let dir = tempfile::tempdir().unwrap();
     let mut state = selection_test_state(dir.path());
-    let board = compute_2d_viewport_rects(&state).1;
+    let board = compute_2d_viewport_rect(&state);
     let (x, y) = (board.x + board.w * 0.3, board.y + board.h * 0.6);
     handle_runner_event(&mut state, &pointer_move_ev(x, y));
     for (speed, expected, delta) in [

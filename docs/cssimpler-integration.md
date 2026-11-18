@@ -68,7 +68,7 @@ identities, hit testing, transactions, undo/redo and file exports remain in the
 application model. Pattern SVG import/export is independent of this display route.
 
 `#board-2d` replaces the former SVG host. Two native leaves share the exact same
-square viewBox and CSS size: `#board-2d-background` contains the background/grid/axes
+viewBox and CSS size matching the full canvas: `#board-2d-background` contains the background/grid/axes
 and requests a bounded raster cache; `#board-2d-drawing` contains pieces, handles,
 links and previews and stays uncached. Grid changes (including theme, pan, zoom
 and resizing) invalidate its raster automatically. The parent is not cached, and
