@@ -93,8 +93,8 @@ fn settings_controls_close_and_do_not_edit_the_board() {
         click!("#zoom-speed-inc");
         click!("#zoom-speed-reset");
         assert_eq!(app.state().board_2d_zoom_speed, DEFAULT_2D_ZOOM_SPEED);
-        // Blank panel clicks are absorbed rather than reaching the backdrop.
-        click!("#settings-panel");
+        // A click on the noninteractive header stays inside the settings modal.
+        click!("#settings-title");
         assert!(app.state().settings_open);
         let board = compute_2d_viewport_rect(app.state());
         let (x, y) = (board.x + board.w * 0.5, board.y + board.h * 0.5);
@@ -156,6 +156,13 @@ fn settings_controls_close_and_do_not_edit_the_board() {
     );
     assert!(!app.state().files.modified);
     assert!(!app.state().history.can_undo());
+
+    click!("#settings-toggle");
+    for expected in [10, 16, 8] {
+        click!("#measurement-precision");
+        assert_eq!(app.state().project.template.measurement_bits, expected);
+        assert!(app.state().history.can_undo());
+    }
 }
 
 #[test]

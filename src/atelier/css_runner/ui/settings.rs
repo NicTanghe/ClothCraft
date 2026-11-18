@@ -16,14 +16,14 @@ pub(in super::super) fn build_runner_settings(state: &CssRunnerState) -> Option<
                 onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CloseSettings)} />
             <div id="settings-panel" class="settings-panel" onclick_shared={|| {}}>
                 <div class="settings-header">
-                    <span class="settings-title">"Settings"</span>
+                    <span id="settings-title" class="settings-title">"Settings"</span>
                     <button id="settings-close" class="cad-2d-pill"
                         onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CloseSettings)}
                         title="Close settings (Escape)">"Close"</button>
                 </div>
                 <div class="settings-entry">
                     <span class="settings-label">"New measurement precision"</span>
-                    <button class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions,RunnerUiOp::CycleMeasurementBits)}>{format!("{} bits",state.project.template.measurement_bits)}</button>
+                    <button id="measurement-precision" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions,RunnerUiOp::CycleMeasurementBits)}>{format!("{} bits",state.project.template.measurement_bits)}</button>
                 </div>
                 <div class="settings-entry">
                     <span class="settings-label">"2D zoom speed"</span>
