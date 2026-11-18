@@ -1,7 +1,7 @@
 //! USD camera and 3D navigation regressions.
 
 use super::super::super::{DocumentFiles, worker};
-use super::super::actions::ACT_RUN_CAM_RESET;
+use super::super::actions::RunnerAction;
 use super::super::app::create_runner_app;
 use super::super::board::geometry::viewport_3d_rect;
 use super::super::input::handle_runner_event;
@@ -11,7 +11,6 @@ use clothcraft::css_ui::load_studio_stylesheet;
 use clothcraft::fitting::FittingProject;
 use clothcraft::garment::presets::GarmentKind;
 use cssimpler::renderer::{EngineEvent, FrameInfo};
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 #[test]
@@ -63,13 +62,14 @@ fn test_3d_camera_orbit_zoom_and_reset_usd() {
     let cy = vp3d.y + vp3d.h * 0.5;
     handle_runner_event(app.state_mut(), &pointer_move_ev(cx, cy));
     handle_runner_event(app.state_mut(), &pointer_btn_ev(true));
-    assert!(handle_runner_event(
+    // Pointer motion updates state but defers the repaint to the next frame.
+    assert!(!handle_runner_event(
         app.state_mut(),
         &pointer_move_ev(cx + 45.0, cy - 20.0)
     ));
     handle_runner_event(app.state_mut(), &pointer_btn_ev(false));
     assert!((app.state().camera.yaw - initial_yaw).abs() > 0.1);
-    assert!(handle_runner_event(
+    assert!(!handle_runner_event(
         app.state_mut(),
         &EngineEvent::Scroll {
             delta: cssimpler::renderer::ScrollDelta::Lines { x: 0.0, y: 2.0 },
@@ -79,10 +79,8 @@ fn test_3d_camera_orbit_zoom_and_reset_usd() {
     assert!((app.state().camera.distance - initial_dist).abs() > 0.1);
     assert_ne!(read_xform(app.state()), initial_xf);
 
-    // Reset via ACT_RUN_CAM_RESET button in #rail-3d
-    app.state_mut()
-        .actions
-        .fetch_or(ACT_RUN_CAM_RESET, Ordering::Relaxed);
+    // Reset via RunnerAction::CamReset button in #rail-3d
+    app.state_mut().actions.push(RunnerAction::CamReset);
     app.frame(FrameInfo {
         delta: Duration::from_millis(16),
         frame_index: 1,

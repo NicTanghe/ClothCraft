@@ -1,11 +1,10 @@
 //! Draft-only controls for static material-space preparation in the native runner.
-use super::actions::queue_ui_op;
+use super::actions::{RunnerAction, queue_ui_op};
 use super::{CssRunnerState, RunnerUiOp};
 use clothcraft::garment::{GarmentTemplate, template::Panel};
 use clothcraft::mesh_resolution::{features::MeshFeature, preparation};
 use cssimpler::core::ElementNode as Element;
 use cssimpler::{core::Node, ui};
-use std::sync::Arc;
 
 pub struct MeshDraft {
     pub level: u8,
@@ -262,13 +261,13 @@ pub fn apply(state: &mut CssRunnerState, physics: bool) -> Result<(), String> {
 pub fn render(state: &CssRunnerState) -> Node {
     if !state.mesh_draft.open {
         return ui! { <div id="native-mesh-preparation" class="accordion collapsed">
-            <button id="mesh-preparation-header" class="accordion-header" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::MeshToggleOpen)}>"Mesh preparation ▸"</button>
+            <button id="mesh-preparation-header" class="accordion-header" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshToggleOpen)}>"Mesh preparation ▸"</button>
         </div> };
     }
     let stops: Vec<Node> = (0..=16)
         .map(|level| {
             let drag = state.pointer_down;
-            let ops = Arc::clone(&state.pending_ui_ops);
+            let ops = state.actions.clone();
             let mut node = Element::new("button")
                 .with_id(format!("mesh-level-{level}"))
                 .with_class(if level == state.mesh_draft.level {
@@ -280,17 +279,11 @@ pub fn render(state: &CssRunnerState) -> Node {
                     "title",
                     format!("{:.2}x spacing", 2_f64.powf(2.0 - f64::from(level) / 4.0)),
                 )
-                .on_click_shared(queue_ui_op(
-                    &state.pending_ui_ops,
-                    RunnerUiOp::MeshLevel(level),
-                ))
-                .on_mousedown_shared(queue_ui_op(
-                    &state.pending_ui_ops,
-                    RunnerUiOp::MeshLevel(level),
-                ))
+                .on_click_shared(queue_ui_op(&state.actions, RunnerUiOp::MeshLevel(level)))
+                .on_mousedown_shared(queue_ui_op(&state.actions, RunnerUiOp::MeshLevel(level)))
                 .on_mouseenter_shared(move || {
-                    if drag && let Ok(mut q) = ops.lock() {
-                        q.push(RunnerUiOp::MeshLevel(level));
+                    if drag {
+                        ops.push(RunnerAction::Ui(RunnerUiOp::MeshLevel(level)));
                     }
                 });
             node.children.push(Node::Text(
@@ -321,15 +314,15 @@ pub fn render(state: &CssRunnerState) -> Node {
     ];
     let fields: Vec<Node> = [0,1,2,3,4,5,6,7,8,12,9,10,11].into_iter().filter(|i| *i < 5 || ((*i == 5 || *i == 6) && (state.mesh_draft.options[2] || state.mesh_draft.options[3])) || ((*i == 7 || *i == 8 || *i == 12) && state.mesh_draft.options[4]) || ((*i >= 9 && *i <= 11) && state.mesh_draft.options[5])).map(|i| {
         let label = labels[i];
-        let ops = Arc::clone(&state.pending_ui_ops);
+        let ops = state.actions.clone();
         let input = Element::new("input").with_id(format!("mesh-value-{i}"))
-            .on_mousedown_shared(queue_ui_op(&state.pending_ui_ops, RunnerUiOp::MeshInputFocus))
+            .on_mousedown_shared(queue_ui_op(&state.actions, RunnerUiOp::MeshInputFocus))
             .with_attribute("type", "text").with_attribute("value", &state.mesh_draft.fields[i])
-            .on_input_shared(move |value| { if let Ok(mut q) = ops.lock() { q.push(RunnerUiOp::MeshField(i, value.into())); } });
+            .on_input_shared(move |value| { ops.push(RunnerAction::Ui(RunnerUiOp::MeshField(i, value.into()))); });
         ui! { <div class="prop-row"><span class="prop-label">{label}</span>{Node::Element(input)}</div> }
     }).collect();
     let toggles: Vec<Node> = ["Scope: all polygon pieces", "Smooth refinement transitions", "Refine fold endpoints", "Add parallel fold lines", "Gathering refinement", "Down-fill sizing estimate"].iter().enumerate().map(|(i,label)| {
-        ui! { <button id={format!("mesh-option-{i}")} class="mesh-toggle" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::MeshToggle(i))}>
+        ui! { <button id={format!("mesh-option-{i}")} class="mesh-toggle" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshToggle(i))}>
             {format!("{} {label}", if state.mesh_draft.options[i] { "[x]" } else { "[ ]" })}
         </button> }
     }).collect();
@@ -339,7 +332,7 @@ pub fn render(state: &CssRunnerState) -> Node {
         .panels
         .get(state.selected_piece_index);
     let paths: Vec<Node> = panel.and_then(|p| p.polygon.as_ref()).map(|p| p.edges.iter().cloned().chain(p.holes.iter().flat_map(|h| h.edges.clone())).chain(p.lines.iter().map(|l| l.id.clone())).map(|path| {
-        ui! { <button class={if state.mesh_draft.path == path { "mesh-path active" } else { "mesh-path" }} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::MeshChoosePath(path.clone()))}>{path}</button> }
+        ui! { <button class={if state.mesh_draft.path == path { "mesh-path active" } else { "mesh-path" }} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshChoosePath(path.clone()))}>{path}</button> }
     }).collect()).unwrap_or_default();
     let estimated_spacing = panel
         .and_then(|p| {
@@ -407,17 +400,11 @@ pub fn render(state: &CssRunnerState) -> Node {
     let mut physics = Element::new("button")
         .with_id("prepare-physics-mesh")
         .with_class("action-btn")
-        .on_click_shared(queue_ui_op(
-            &state.pending_ui_ops,
-            RunnerUiOp::PrepareMesh(true),
-        ));
+        .on_click_shared(queue_ui_op(&state.actions, RunnerUiOp::PrepareMesh(true)));
     let mut uniform = Element::new("button")
         .with_id("prepare-uniform-mesh")
         .with_class("action-btn")
-        .on_click_shared(queue_ui_op(
-            &state.pending_ui_ops,
-            RunnerUiOp::PrepareMesh(false),
-        ));
+        .on_click_shared(queue_ui_op(&state.actions, RunnerUiOp::PrepareMesh(false)));
     if busy {
         physics = physics.with_attribute("disabled", "disabled");
         uniform = uniform.with_attribute("disabled", "disabled");
@@ -430,7 +417,7 @@ pub fn render(state: &CssRunnerState) -> Node {
         .push(Node::Text("Use uniform mesh and reset".into()));
     ui! {
         <div id="native-mesh-preparation" class="accordion open">
-            <button id="mesh-preparation-header" class="accordion-header" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::MeshToggleOpen)}>"Mesh preparation ▾"</button>
+            <button id="mesh-preparation-header" class="accordion-header" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshToggleOpen)}>"Mesh preparation ▾"</button>
             <div class="accordion-content">
                 <div class="prop-row"><span>"Coarse"</span><span>"Fine"</span></div>
                 <div class="mesh-slider">{stops}</div>
@@ -441,7 +428,7 @@ pub fn render(state: &CssRunnerState) -> Node {
                 <div class="mesh-paths">{paths}</div>
                 {fields}
                 <p>{format!("Saved features: {feature_summary}")}</p>
-                <button class="action-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::MeshReload)}>"Reload settings from selected piece"</button>
+                <button class="action-btn" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshReload)}>"Reload settings from selected piece"</button>
                 <p>"Base settings apply to the chosen scope; feature switches apply to the named path on the selected piece. Applying resets the drape."</p>
                 <p>"Sizing hints only: these controls do not apply pressure, shrinkage or crease forces. Ratio 1 means no compression. Parallel lines require an internal fold line."</p>
                 {Node::Element(physics)}
@@ -455,9 +442,7 @@ pub fn render(state: &CssRunnerState) -> Node {
 #[cfg(test)]
 mod tests {
     use super::super::super::{DocumentFiles, worker};
-    use super::super::{
-        actions::apply_runner_ui_op, handle_runner_event, undo_redo_2d, update_runner,
-    };
+    use super::super::{handle_runner_event, undo_redo_2d, update_runner};
     use super::*;
     use clothcraft::{fitting::FittingProject, garment::presets::GarmentKind};
     use cssimpler::{
@@ -503,10 +488,12 @@ mod tests {
         None
     }
     fn drain(state: &mut CssRunnerState) {
-        let ops = std::mem::take(&mut *state.pending_ui_ops.lock().unwrap());
-        for op in ops {
-            apply_runner_ui_op(state, op);
+        let mut batch = std::mem::take(&mut state.action_batch);
+        state.actions.drain_into(&mut batch);
+        for action in batch.drain(..) {
+            super::super::actions::apply_runner_action(state, action, false);
         }
+        state.action_batch = batch;
     }
     #[test]
     fn native_mesh_controls_stage_inputs_and_dispatch_real_backend_transaction() {

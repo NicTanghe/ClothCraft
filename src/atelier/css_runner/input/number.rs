@@ -62,12 +62,9 @@ pub(in super::super) fn handle_number_event(
             drag.pointer_y = position.y;
             drag.shift = modifiers.shift;
             drag.control = modifiers.control;
-            if let Some(active) = &mut drag.active {
-                if active.cursor.is_none() {
-                    let dy = (active.last_y - position.y) as f64;
-                    edit = move_value(active, dy, modifiers.shift, modifiers.control);
-                }
-                active.last_y = position.y;
+            if drag.active.is_some() {
+                // Value changes are applied once per displayed frame in
+                // tick_number_drag; this event only records the latest pointer.
                 state.last_pointer_pos = (position.x, position.y);
                 consumed = true;
             }
@@ -89,10 +86,14 @@ pub(in super::super) fn handle_number_event(
             if *button == ButtonState::Released
                 && let Some(mut active) = drag.active.take()
             {
-                // Include physical motion since the last rendered frame.
-                if let Some(cursor) = &mut active.cursor
-                    && let Some(dy) = cursor.sample()
-                {
+                // Flush motion since the last displayed frame.
+                if let Some(cursor) = &mut active.cursor {
+                    if let Some(dy) = cursor.sample() {
+                        edit = move_value(&mut active, dy, modifiers.shift, modifiers.control);
+                    }
+                } else {
+                    let dy = (active.last_y - drag.pointer_y) as f64;
+                    active.last_y = drag.pointer_y;
                     edit = move_value(&mut active, dy, modifiers.shift, modifiers.control);
                 }
                 consumed = true;
@@ -141,9 +142,16 @@ pub(in super::super) fn handle_number_event(
 pub(in super::super) fn tick_number_drag(state: &mut CssRunnerState) -> bool {
     let mut drag = state.number_drag.lock().unwrap();
     let (shift, control) = (drag.shift, drag.control);
+    let pointer_y = drag.pointer_y;
     let edit = drag.active.as_mut().and_then(|active| {
-        let dy = active.cursor.as_mut()?.sample()?;
-        move_value(active, dy, shift, control)
+        if let Some(cursor) = active.cursor.as_mut() {
+            let dy = cursor.sample()?;
+            move_value(active, dy, shift, control)
+        } else {
+            let dy = (active.last_y - pointer_y) as f64;
+            active.last_y = pointer_y;
+            move_value(active, dy, shift, control)
+        }
     });
     drop(drag);
     if let Some((field, value)) = edit {

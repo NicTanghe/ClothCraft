@@ -1,9 +1,6 @@
 //! Selected-piece property accordions.
 
-use super::super::super::actions::{
-    ACT_RUN_ACC_0, ACT_RUN_ACC_1, ACT_RUN_ACC_2, ACT_RUN_ACC_3, ACT_RUN_ACC_4, ACT_RUN_ACC_5,
-    RunnerUiOp, queue_action, queue_ui_op,
-};
+use super::super::super::actions::{RunnerAction, RunnerUiOp, queue_action, queue_ui_op};
 use super::super::super::board::corners::active_fillet_previews;
 use super::super::super::board::geometry::panel_edge_length_m;
 use super::super::super::board::selection::{
@@ -83,7 +80,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
     // Accordion 0: Information
     let acc_info = ui! {
         <div class={if open_0 { "accordion open" } else { "accordion collapsed" }}>
-            <button class="accordion-header" onclick_shared={queue_action(&state.actions, ACT_RUN_ACC_0)}>
+            <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(0))}>
                 <span>"1. Piece Information"</span>
                 {if open_0 { icon_chevron_down() } else { icon_chevron_right() }}
             </button>
@@ -277,7 +274,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
 
     let acc_line = ui! {
         <div class={if open_1 { "accordion open" } else { "accordion collapsed" }}>
-            <button class="accordion-header" onclick_shared={queue_action(&state.actions, ACT_RUN_ACC_1)}>
+            <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(1))}>
                 <span>"2. Boundary & Allowance"</span>
                 {if open_1 { icon_chevron_down() } else { icon_chevron_right() }}
             </button>
@@ -310,28 +307,28 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
                                 <span id="corner-menu-badge" class="cad-corner-menu-badge">{corner_menu_badge}</span>
                             </div>
                             <div class="cad-prop-actions">
-                                <button id="prop-corner-radius-mode" class={mode_radius_prop_btn} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerMode(true))}>"Radius"</button>
-                                <button id="prop-corner-shape-mode" class={mode_shape_prop_btn} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerMode(false))}>"Shape"</button>
+                                <button id="prop-corner-radius-mode" class={mode_radius_prop_btn} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerMode(true))}>"Radius"</button>
+                                <button id="prop-corner-shape-mode" class={mode_shape_prop_btn} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerMode(false))}>"Shape"</button>
                             </div>
                             <div class="cad-prop-actions">
-                                <button id="prop-radius-dec" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerRadiusMm(-2.0))}>"-2 mm"</button>
+                                <button id="prop-radius-dec" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustCornerRadiusMm(-2.0))}>"-2 mm"</button>
                                 {number_field(state, "prop-radius-value", NumberField::CornerRadius)}
-                                <button id="prop-radius-inc" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerRadiusMm(2.0))}>"+2 mm"</button>
+                                <button id="prop-radius-inc" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustCornerRadiusMm(2.0))}>"+2 mm"</button>
                             </div>
                             <div class="cad-prop-actions">
-                                <button id="prop-tension-dec" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerTension(-0.05))}>"T-"</button>
+                                <button id="prop-tension-dec" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustCornerTension(-0.05))}>"T-"</button>
                                 {number_field(state, "prop-tension-value", NumberField::CornerTension)}
-                                <button id="prop-tension-inc" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerTension(0.05))}>"T+"</button>
+                                <button id="prop-tension-inc" class="cad-prop-btn" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustCornerTension(0.05))}>"T+"</button>
                             </div>
                             <div class="cad-prop-actions">
-                                <button class={rule_sharp_btn} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerRule(CornerRule::Sharp))}>"Sharp"</button>
-                                <button class={rule_smooth_btn} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerRule(CornerRule::Smooth))}>"Smooth"</button>
-                                <button class={rule_sym_btn} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerRule(CornerRule::Symmetric))}>"Sym"</button>
+                                <button class={rule_sharp_btn} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerRule(CornerRule::Sharp))}>"Sharp"</button>
+                                <button class={rule_smooth_btn} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerRule(CornerRule::Smooth))}>"Smooth"</button>
+                                <button class={rule_sym_btn} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerRule(CornerRule::Symmetric))}>"Sym"</button>
                             </div>
                             <div class="cad-prop-actions">
-                                <button id="prop-apply-round" class="cad-prop-btn primary" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::ApplyCornerRoundSelected)}>{format!("Round ({:.0} mm)", state.corner_radius_mm)}</button>
-                                <button class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::ToggleSelectedCurve(true))}>"To Bézier"</button>
-                                <button class="cad-prop-btn" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::ToggleSelectedCurve(false))}>"To Straight"</button>
+                                <button id="prop-apply-round" class="cad-prop-btn primary" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ApplyCornerRoundSelected)}>{format!("Round ({:.0} mm)", state.corner_radius_mm)}</button>
+                                <button class="cad-prop-btn" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleSelectedCurve(true))}>"To Bézier"</button>
+                                <button class="cad-prop-btn" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleSelectedCurve(false))}>"To Straight"</button>
                             </div>
                         </div>
                     </div>
@@ -345,7 +342,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
     // Accordion 2: 3D Arrangement
     let acc_arrange = ui! {
         <div class={if open_2 { "accordion open" } else { "accordion collapsed" }}>
-            <button class="accordion-header" onclick_shared={queue_action(&state.actions, ACT_RUN_ACC_2)}>
+            <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(2))}>
                 <span>"3. 3D Arrangement"</span>
                 {if open_2 { icon_chevron_down() } else { icon_chevron_right() }}
             </button>
@@ -382,7 +379,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
     // Accordion 3: Pins
     let acc_pins = ui! {
         <div class={if open_3 { "accordion open" } else { "accordion collapsed" }}>
-            <button class="accordion-header" onclick_shared={queue_action(&state.actions, ACT_RUN_ACC_3)}>
+            <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(3))}>
                 <span>"4. Pins & Restraints"</span>
                 {if open_3 { icon_chevron_down() } else { icon_chevron_right() }}
             </button>
@@ -412,7 +409,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
     // Accordion 4: Fabric & Mechanical Properties
     let acc_fabric = ui! {
         <div class={if open_4 { "accordion open" } else { "accordion collapsed" }}>
-            <button class="accordion-header" onclick_shared={queue_action(&state.actions, ACT_RUN_ACC_4)}>
+            <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(4))}>
                 <span>"5. Fabric Mechanics"</span>
                 {if open_4 { icon_chevron_down() } else { icon_chevron_right() }}
             </button>
@@ -450,7 +447,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
     // Accordion 5: Simulation Diagnostics
     let acc_sim = ui! {
         <div class={if open_5 { "accordion open" } else { "accordion collapsed" }}>
-            <button class="accordion-header" onclick_shared={queue_action(&state.actions, ACT_RUN_ACC_5)}>
+            <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(5))}>
                 <span>"6. Simulation Diagnostics"</span>
                 {if open_5 { icon_chevron_down() } else { icon_chevron_right() }}
             </button>

@@ -1,9 +1,6 @@
 //! Stage, viewport hosts and responsive CAD toolbar.
 
-use super::super::actions::{
-    ACT_RUN_2D_FIT, ACT_RUN_2D_NEXT_PIECE, ACT_RUN_2D_ZOOM_IN, ACT_RUN_2D_ZOOM_OUT, RunnerUiOp,
-    queue_action, queue_ui_op,
-};
+use super::super::actions::{RunnerAction, RunnerUiOp, queue_action, queue_ui_op};
 use super::super::board::geometry::{
     cad_2d_bar_layout, compute_2d_viewport_rects, viewport_2d_span_x,
 };
@@ -164,48 +161,48 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
     };
 
     let undo_btn = ui! {
-        <button id="cad-undo-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::Undo2d)} title="Undo (Ctrl+Z)">{undo_label}</button>
+        <button id="cad-undo-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::Undo2d)} title="Undo (Ctrl+Z)">{undo_label}</button>
     };
     let redo_btn = ui! {
-        <button id="cad-redo-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::Redo2d)} title="Redo (Ctrl+Shift+Z)">{redo_label}</button>
+        <button id="cad-redo-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::Redo2d)} title="Redo (Ctrl+Shift+Z)">{redo_label}</button>
     };
     let mode_radius_btn = ui! {
-        <button id="cad-corner-radius-mode" class={radius_mode_class} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerMode(true))} title="Circular fillet mode">"Radius"</button>
+        <button id="cad-corner-radius-mode" class={radius_mode_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerMode(true))} title="Circular fillet mode">"Radius"</button>
     };
     let mode_shape_btn = ui! {
-        <button id="cad-corner-shape-mode" class={shape_mode_class} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerMode(false))} title="Shaped tension fillet mode">"Shape"</button>
+        <button id="cad-corner-shape-mode" class={shape_mode_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerMode(false))} title="Shaped tension fillet mode">"Shape"</button>
     };
     let radius_dec_btn = ui! {
-        <button id="cad-radius-dec" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerRadiusMm(-2.0))} title="Decrease corner radius">"-2"</button>
+        <button id="cad-radius-dec" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustCornerRadiusMm(-2.0))} title="Decrease corner radius">"-2"</button>
     };
     let radius_val = number_field(state, "cad-radius-readout", NumberField::CornerRadius);
     let radius_inc_btn = ui! {
-        <button id="cad-radius-inc" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerRadiusMm(2.0))} title="Increase corner radius">"+2"</button>
+        <button id="cad-radius-inc" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustCornerRadiusMm(2.0))} title="Increase corner radius">"+2"</button>
     };
     let tension_dec_btn = ui! {
-        <button id="cad-tension-dec" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerTension(-0.05))} title="Decrease tension">"T-"</button>
+        <button id="cad-tension-dec" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustCornerTension(-0.05))} title="Decrease tension">"T-"</button>
     };
     let tension_val = number_field(state, "cad-tension-readout", NumberField::CornerTension);
     let tension_inc_btn = ui! {
-        <button id="cad-tension-inc" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::AdjustCornerTension(0.05))} title="Increase tension">"T+"</button>
+        <button id="cad-tension-inc" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustCornerTension(0.05))} title="Increase tension">"T+"</button>
     };
     let apply_round_btn = ui! {
-        <button id="cad-apply-round-btn" class="cad-2d-pill primary" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::ApplyCornerRoundSelected)} title="Round selected corner (Enter)">"Round"</button>
+        <button id="cad-apply-round-btn" class="cad-2d-pill primary" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ApplyCornerRoundSelected)} title="Round selected corner (Enter)">"Round"</button>
     };
     let rule_sharp_btn = ui! {
-        <button id="cad-rule-sharp" class={sharp_class} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerRule(CornerRule::Sharp))} title="Sharp independent handles">"Sharp"</button>
+        <button id="cad-rule-sharp" class={sharp_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerRule(CornerRule::Sharp))} title="Sharp independent handles">"Sharp"</button>
     };
     let rule_smooth_btn = ui! {
-        <button id="cad-rule-smooth" class={smooth_class} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerRule(CornerRule::Smooth))} title="Smooth G1 collinear handles">"Smooth"</button>
+        <button id="cad-rule-smooth" class={smooth_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerRule(CornerRule::Smooth))} title="Smooth G1 collinear handles">"Smooth"</button>
     };
     let rule_sym_btn = ui! {
-        <button id="cad-rule-sym" class={sym_class} onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::SetCornerRule(CornerRule::Symmetric))} title="Symmetric equal-length handles">"Sym"</button>
+        <button id="cad-rule-sym" class={sym_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerRule(CornerRule::Symmetric))} title="Symmetric equal-length handles">"Sym"</button>
     };
     let curve_on_btn = ui! {
-        <button id="cad-curve-on-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::ToggleSelectedCurve(true))} title="Convert selected boundary/corner to cubic Bézier">"Curve"</button>
+        <button id="cad-curve-on-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleSelectedCurve(true))} title="Convert selected boundary/corner to cubic Bézier">"Curve"</button>
     };
     let curve_off_btn = ui! {
-        <button id="cad-curve-off-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.pending_ui_ops, RunnerUiOp::ToggleSelectedCurve(false))} title="Straighten selected boundary/corner">"Straight"</button>
+        <button id="cad-curve-off-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleSelectedCurve(false))} title="Straighten selected boundary/corner">"Straight"</button>
     };
 
     let (_vp2d_x, vp2d_w) = viewport_2d_span_x(state);
@@ -340,10 +337,10 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                     <span class="viewport-sub">{sub_text}</span>
                 </div>
                 <div class="viewport-tools">
-                    <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, ACT_RUN_2D_ZOOM_IN)} title="Zoom In (+)">"+"</button>
-                    <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, ACT_RUN_2D_ZOOM_OUT)} title="Zoom Out (-)">"-"</button>
-                    <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, ACT_RUN_2D_FIT)} title="Fit Board (0)">"Fit"</button>
-                    <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, ACT_RUN_2D_NEXT_PIECE)} title="Cycle Piece (])">"Next Piece ▾"</button>
+                    <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dIn)} title="Zoom In (+)">"+"</button>
+                    <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dOut)} title="Zoom Out (-)">"-"</button>
+                    <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dFit)} title="Fit Board (0)">"Fit"</button>
+                    <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::NextPiece2d)} title="Cycle Piece (])">"Next Piece ▾"</button>
                 </div>
             </div>
             {cad_bar}

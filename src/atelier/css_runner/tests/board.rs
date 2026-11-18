@@ -1,7 +1,7 @@
 //! Board tools, gestures, cancellation and history regressions.
 
 use super::super::super::{DocumentFiles, worker};
-use super::super::actions::{ACT_RUN_VIEW_2D, ACT_RUN_VIEW_SPLIT, RunnerUiOp, apply_runner_ui_op};
+use super::super::actions::{RunnerAction, RunnerUiOp, apply_runner_ui_op};
 use super::super::app::create_runner_app;
 use super::super::board::corners::active_fillet_previews;
 use super::super::board::geometry::{
@@ -29,7 +29,6 @@ use clothcraft::garment::presets::GarmentKind;
 use cssimpler::core::Node;
 use cssimpler::renderer::{EngineEvent, FrameInfo};
 use glam::DVec2;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 #[test]
@@ -74,7 +73,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
             1600,
             980,
             ViewLayoutMode::Split,
-            ACT_RUN_VIEW_SPLIT,
+            RunnerAction::ViewSplit,
             false,
             true,
         ),
@@ -82,7 +81,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
             1600,
             980,
             ViewLayoutMode::Split,
-            ACT_RUN_VIEW_SPLIT,
+            RunnerAction::ViewSplit,
             true,
             false,
         ),
@@ -90,7 +89,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
             1600,
             980,
             ViewLayoutMode::TwoDOnly,
-            ACT_RUN_VIEW_2D,
+            RunnerAction::View2d,
             false,
             true,
         ),
@@ -98,7 +97,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
             1280,
             800,
             ViewLayoutMode::Split,
-            ACT_RUN_VIEW_SPLIT,
+            RunnerAction::ViewSplit,
             false,
             true,
         ),
@@ -106,7 +105,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
             1024,
             768,
             ViewLayoutMode::Split,
-            ACT_RUN_VIEW_SPLIT,
+            RunnerAction::ViewSplit,
             false,
             true,
         ),
@@ -114,7 +113,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
             1024,
             768,
             ViewLayoutMode::Split,
-            ACT_RUN_VIEW_SPLIT,
+            RunnerAction::ViewSplit,
             false,
             false,
         ),
@@ -122,7 +121,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
             1024,
             768,
             ViewLayoutMode::TwoDOnly,
-            ACT_RUN_VIEW_2D,
+            RunnerAction::View2d,
             false,
             true,
         ),
@@ -133,9 +132,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
         app.state_mut().window_size = (w as f32, h as f32);
         app.state_mut().clean_view = clean_view;
         app.state_mut().left_drawer_open = drawer_open;
-        app.state_mut()
-            .actions
-            .fetch_or(view_act, Ordering::Relaxed);
+        app.state_mut().actions.push(view_act);
         app.set_viewport(cssimpler::renderer::ViewportSize::new(w, h));
         app.frame(FrameInfo {
             delta: Duration::from_millis(16),
@@ -190,9 +187,7 @@ fn test_2d_native_square_bounds_and_cad_bar() {
     app.state_mut().window_size = (1280.0, 800.0);
     app.state_mut().clean_view = false;
     app.state_mut().left_drawer_open = true;
-    app.state_mut()
-        .actions
-        .fetch_or(ACT_RUN_VIEW_SPLIT, Ordering::Relaxed);
+    app.state_mut().actions.push(RunnerAction::ViewSplit);
     app.set_viewport(cssimpler::renderer::ViewportSize::new(1280, 800));
     app.frame(FrameInfo {
         delta: Duration::from_millis(16),

@@ -7,7 +7,7 @@ use glam::DVec2;
 
 /// A display path with a semantic role used by board inspection and regression tests.
 /// The document remains the source of editable identities and f64 geometry.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BoardPath {
     pub path: VectorPath,
     pub class: &'static str,

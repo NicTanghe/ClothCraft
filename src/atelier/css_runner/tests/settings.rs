@@ -186,7 +186,8 @@ fn zoom_speed_affects_both_scroll_units_preserves_anchor_and_keeps_limits() {
         state.board_2d_pan = (0.0, 0.0);
         state.board_2d_zoom_speed = speed;
         let anchor = screen_to_board_m(&state, x, y).unwrap();
-        assert!(handle_runner_event(
+        // Scroll paints are deferred to the frame-aligned update.
+        assert!(!handle_runner_event(
             &mut state,
             &EngineEvent::Scroll {
                 delta,
@@ -205,7 +206,7 @@ fn zoom_speed_affects_both_scroll_units_preserves_anchor_and_keeps_limits() {
     apply_runner_ui_op(&mut state, RunnerUiOp::Reset2dZoomSpeed);
     for (start, delta, expected) in [(9.99, 10000.0, 10.0), (0.251, -10000.0, 0.25)] {
         state.board_2d_zoom = start;
-        assert!(handle_runner_event(
+        assert!(!handle_runner_event(
             &mut state,
             &EngineEvent::Scroll {
                 delta: ScrollDelta::Lines { x: 0.0, y: delta },
@@ -221,7 +222,7 @@ fn zoom_speed_affects_both_scroll_units_preserves_anchor_and_keeps_limits() {
     );
     state.camera.distance = 5.0;
     state.board_2d_zoom_speed = MAX_2D_ZOOM_SPEED;
-    assert!(handle_runner_event(
+    assert!(!handle_runner_event(
         &mut state,
         &EngineEvent::Scroll {
             delta: ScrollDelta::Lines { x: 0.0, y: 1.0 },

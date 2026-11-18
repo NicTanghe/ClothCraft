@@ -1,14 +1,7 @@
 //! Shell layout, instance-local handlers and rendering regressions.
 
 use super::super::super::{DocumentFiles, worker};
-use super::super::actions::{
-    ACT_RUN_PALETTE_TOGGLE, ACT_RUN_TOOL_AVATAR_DIAG, ACT_RUN_TOOL_CORNER_SELECT2D,
-    ACT_RUN_TOOL_CORNER2D, ACT_RUN_TOOL_EDIT2D, ACT_RUN_TOOL_FREE2D, ACT_RUN_TOOL_GIZMO,
-    ACT_RUN_TOOL_GRAB, ACT_RUN_TOOL_INTERNAL2D, ACT_RUN_TOOL_MEASURE2D, ACT_RUN_TOOL_MEASURE3D,
-    ACT_RUN_TOOL_PEN2D, ACT_RUN_TOOL_PIN, ACT_RUN_TOOL_RECT2D, ACT_RUN_TOOL_SEW2D,
-    ACT_RUN_TOOL_SEW3D, ACT_RUN_TOOL_SPLIT2D, ACT_RUN_TOOL_TRIM2D, ACT_RUN_VIEW_2D,
-    ACT_RUN_VIEW_3D, ACT_RUN_VIEW_SPLIT, update_runner,
-};
+use super::super::actions::{RunnerAction, update_runner};
 use super::super::app::create_runner_app;
 use super::super::state::{CssRunnerState, ObjectCategory};
 use clothcraft::css_ui::{Theme, ViewLayoutMode, load_studio_stylesheet};
@@ -17,7 +10,6 @@ use clothcraft::garment::presets::GarmentKind;
 use clothcraft::gpu_avbd::ContactMethod;
 use clothcraft::vbd::VbdMetrics;
 use cssimpler::renderer::FrameInfo;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 #[test]
@@ -571,20 +563,20 @@ fn test_all_runner_buttons_click_and_layout_bounds() {
 
     // Verify clicking all 2D tools via actions
     for (act, expected) in [
-        (ACT_RUN_TOOL_RECT2D, "Rect"),
-        (ACT_RUN_TOOL_PEN2D, "Pen"),
-        (ACT_RUN_TOOL_FREE2D, "Freehand"),
-        (ACT_RUN_TOOL_SEW2D, "Sew"),
-        (ACT_RUN_TOOL_SPLIT2D, "Split"),
-        (ACT_RUN_TOOL_INTERNAL2D, "Internal Line"),
-        (ACT_RUN_TOOL_MEASURE2D, "Measure"),
-        (ACT_RUN_TOOL_TRIM2D, "Trim"),
-        (ACT_RUN_TOOL_CORNER_SELECT2D, "Corner Select"),
-        (ACT_RUN_TOOL_CORNER2D, "Corner"),
-        (ACT_RUN_TOOL_EDIT2D, "Edit"),
+        (RunnerAction::ToolRect2d, "Rect"),
+        (RunnerAction::ToolPen2d, "Pen"),
+        (RunnerAction::ToolFree2d, "Freehand"),
+        (RunnerAction::ToolSew2d, "Sew"),
+        (RunnerAction::ToolSplit2d, "Split"),
+        (RunnerAction::ToolInternal2d, "Internal Line"),
+        (RunnerAction::ToolMeasure2d, "Measure"),
+        (RunnerAction::ToolTrim2d, "Trim"),
+        (RunnerAction::ToolCornerSelect2d, "Corner Select"),
+        (RunnerAction::ToolCorner2d, "Corner"),
+        (RunnerAction::ToolEdit2d, "Edit"),
     ] {
         frame += 1;
-        app.state_mut().actions.fetch_or(act, Ordering::Relaxed);
+        app.state_mut().actions.push(act);
         app.frame(FrameInfo {
             delta: Duration::from_millis(16),
             frame_index: frame,
@@ -594,15 +586,15 @@ fn test_all_runner_buttons_click_and_layout_bounds() {
 
     // Verify clicking all 3D tools via actions
     for (act, expected) in [
-        (ACT_RUN_TOOL_GRAB, "Grab"),
-        (ACT_RUN_TOOL_SEW3D, "3D Sew"),
-        (ACT_RUN_TOOL_PIN, "Pin"),
-        (ACT_RUN_TOOL_MEASURE3D, "Measure"),
-        (ACT_RUN_TOOL_AVATAR_DIAG, "Avatar Diagnostics"),
-        (ACT_RUN_TOOL_GIZMO, "Gizmo"),
+        (RunnerAction::ToolGrab, "Grab"),
+        (RunnerAction::ToolSew3d, "3D Sew"),
+        (RunnerAction::ToolPin, "Pin"),
+        (RunnerAction::ToolMeasure3d, "Measure"),
+        (RunnerAction::ToolAvatarDiag, "Avatar Diagnostics"),
+        (RunnerAction::ToolGizmo, "Gizmo"),
     ] {
         frame += 1;
-        app.state_mut().actions.fetch_or(act, Ordering::Relaxed);
+        app.state_mut().actions.push(act);
         app.frame(FrameInfo {
             delta: Duration::from_millis(16),
             frame_index: frame,
@@ -632,9 +624,7 @@ fn test_all_runner_buttons_click_and_layout_bounds() {
 
     // Toggle palette back off
     frame += 1;
-    app.state_mut()
-        .actions
-        .fetch_or(ACT_RUN_PALETTE_TOGGLE, Ordering::Relaxed);
+    app.state_mut().actions.push(RunnerAction::PaletteToggle);
     app.frame(FrameInfo {
         delta: Duration::from_millis(16),
         frame_index: frame,
@@ -643,12 +633,12 @@ fn test_all_runner_buttons_click_and_layout_bounds() {
 
     // Clean view + layout modes + drawer toggle roundtrip
     for (act, expected_mode) in [
-        (ACT_RUN_VIEW_3D, ViewLayoutMode::ThreeDOnly),
-        (ACT_RUN_VIEW_2D, ViewLayoutMode::TwoDOnly),
-        (ACT_RUN_VIEW_SPLIT, ViewLayoutMode::Split),
+        (RunnerAction::View3d, ViewLayoutMode::ThreeDOnly),
+        (RunnerAction::View2d, ViewLayoutMode::TwoDOnly),
+        (RunnerAction::ViewSplit, ViewLayoutMode::Split),
     ] {
         frame += 1;
-        app.state_mut().actions.fetch_or(act, Ordering::Relaxed);
+        app.state_mut().actions.push(act);
         app.frame(FrameInfo {
             delta: Duration::from_millis(16),
             frame_index: frame,
