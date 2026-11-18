@@ -2,6 +2,7 @@
 
 pub(super) mod board;
 pub(super) mod documents;
+pub(super) mod imports;
 pub(super) mod inspector;
 pub(super) mod settings;
 pub(super) mod sewing;

@@ -148,12 +148,18 @@ fn numeric_input_uses_native_text_editing_and_clamps_model_values() {
         (NumberField::ZoomSpeed, 99.0, 4.0),
         (NumberField::CornerRadius, -5.0, 1.0),
         (NumberField::CornerTension, 5.0, 1.5),
+        (NumberField::ImportTolerance, 99.0, 5.0),
+        (NumberField::ImportMesh, -5.0, 3.0),
+        (NumberField::ImportScale, -5.0, 0.0),
     ] {
         apply_runner_ui_op(app.state_mut(), RunnerUiOp::SetNumber(field, value));
         let actual = match field {
             NumberField::ZoomSpeed => app.state().board_2d_zoom_speed,
             NumberField::CornerRadius => app.state().corner_radius_mm,
             NumberField::CornerTension => app.state().corner_tension,
+            NumberField::ImportTolerance => app.state().import_tolerance_mm,
+            NumberField::ImportMesh => app.state().import_mesh_mm,
+            NumberField::ImportScale => app.state().import_scale_mm_per_unit,
         };
         assert_eq!(actual, expected);
     }
