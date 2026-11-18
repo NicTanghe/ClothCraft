@@ -2,6 +2,7 @@
 
 pub(super) mod board;
 pub(super) mod settings;
+pub(super) mod sewing;
 pub(super) mod shell;
 pub(super) mod simulation;
 pub(super) mod support;
