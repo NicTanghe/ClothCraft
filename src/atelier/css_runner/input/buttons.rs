@@ -214,16 +214,27 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                 {
                                     let pid = p.id.clone();
                                     let edge_name = ename.clone();
+                                    let first = match &state.draft_2d {
+                                        Some(ToolDraft2d::Sew {
+                                            first_edge: Some((panel, edge)),
+                                        }) => {
+                                            // Consecutive contour edges traverse their shared
+                                            // corner in opposite roles (end of one, start of the other).
+                                            let n = poly.edges.len();
+                                            let reverse = panel == &pid
+                                                && (edge == &poly.edges[(edge_idx + 1) % n]
+                                                    || edge == &poly.edges[(edge_idx + n - 1) % n]);
+                                            Some((panel.clone(), edge.clone(), reverse))
+                                        }
+                                        _ => None,
+                                    };
                                     state.selected_piece_index = panel_idx;
                                     state.clear_2d_subselection();
                                     state.selected_2d_edge = Some((pid.clone(), edge_name.clone()));
                                     state.accordion_open[1] = true;
                                     state.open_accordion_idx = 1;
-                                    if let Some(ToolDraft2d::Sew {
-                                        first_edge: Some((ref first_pid, ref first_edge)),
-                                    }) = state.draft_2d.clone()
-                                    {
-                                        if first_pid == &pid && first_edge == &edge_name {
+                                    if let Some((first_pid, first_edge, reverse)) = first {
+                                        if first_pid == pid && first_edge == edge_name {
                                             state.status_message =
                                                 "Pick a second different boundary edge to sew"
                                                     .into();
@@ -247,7 +258,7 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                                     edge: Some(edge_name.clone()),
                                                     range: [0.0, 1.0],
                                                 },
-                                                reverse: false,
+                                                reverse,
                                                 ease: true,
                                             },
                                             format!(

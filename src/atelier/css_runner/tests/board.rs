@@ -836,6 +836,7 @@ fn test_2d_interactive_rail_tools_workflow() {
     assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
     assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
     assert_eq!(state.project.template.seams.len(), seams_before + 1);
+    assert!(!state.project.template.seams.last().unwrap().reverse_b);
 
     // 7. Trim tool: click internal line on panel 0 -> removes it
     set_active_2d_tool(&mut state, "Trim");
@@ -852,6 +853,62 @@ fn test_2d_interactive_rail_tools_workflow() {
             .lines
             .is_empty()
     );
+}
+
+#[test]
+fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = selection_test_state(dir.path());
+    // Start the contour at the shared tip, so the two legs straddle its wrap.
+    let points = vec![
+        DVec2::new(0.15, 0.12),
+        DVec2::new(0.20, 0.00),
+        DVec2::new(0.30, 0.00),
+        DVec2::new(0.30, 0.25),
+        DVec2::new(0.00, 0.25),
+        DVec2::ZERO,
+        DVec2::new(0.10, 0.00),
+    ];
+    let fabric = state.project.template.panels[0].fabric.clone();
+    assert!(super::super::editing::commit_authoring_command(
+        &mut state,
+        Command::Polygon {
+            points: points.clone(),
+            tangents: vec![],
+            meshing: Default::default(),
+            fabric,
+            replace: true,
+        },
+        "Created open dart",
+    ));
+    set_active_2d_tool(&mut state, "Sew");
+    for order in [[6, 0], [0, 6]] {
+        for edge in order {
+            let mid = points[edge].midpoint(points[(edge + 1) % points.len()]);
+            let board = panel_to_board_pt(&state.project.template, 0, mid);
+            let (x, y) = board_to_screen_px(&state, board);
+            handle_runner_event(&mut state, &pointer_move_ev(x, y));
+            assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
+            assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
+        }
+        let garment = &state.scene.garment;
+        let seam = &garment.seams[0];
+        // In the open dart the largest gap is the 100 mm mouth. Folding
+        // symmetric stations together preserves both 130 mm legs exactly.
+        assert!((seam.max_gap(&garment.initial_state.x) - 0.10).abs() < 1e-10);
+        let folded = garment
+            .mesh
+            .uv
+            .iter()
+            .map(|p| glam::DVec3::new((p.x - 0.15).abs(), p.y, 0.0))
+            .collect::<Vec<_>>();
+        assert!(seam.max_gap(&folded) < 1e-10);
+        assert!(undo_redo_2d(&mut state, false));
+        assert!(state.scene.garment.seams.is_empty());
+    }
 }
 
 #[test]
