@@ -160,7 +160,10 @@ fn settings_controls_close_and_do_not_edit_the_board() {
     click!("#settings-toggle");
     for expected in [10, 16, 8] {
         click!("#measurement-precision");
-        assert_eq!(app.state().project.template.measurement_bits, expected);
+        assert_eq!(
+            app.state().project.template.measurement_precision(),
+            expected
+        );
         assert!(app.state().history.can_undo());
     }
 }

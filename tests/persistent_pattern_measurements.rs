@@ -144,7 +144,7 @@ fn save_reopen_retains_measurements_and_preexisting_drape_signature() {
     let mut project = FittingProject::load(&path).unwrap();
     let old_signature = project.mesh_signature.clone();
     project.template = set(&project.template, record()).template;
-    project.template.measurement_bits = 16;
+    project.template.measurement_bits = Some(16);
     // The old saved signature must still accept the changed metadata.
     let scene = project.compile().unwrap();
     assert_eq!(scene.state.x, state.x);
@@ -497,7 +497,7 @@ fn interior_attachment_follows_affine_panel_edits_and_survives_split_and_reload(
     .unwrap();
     let mut loaded: GarmentTemplate =
         serde_json::from_slice(&serde_json::to_vec(&split.template).unwrap()).unwrap();
-    assert_eq!(loaded.measurement_bits, 16);
+    assert_eq!(loaded.measurement_precision(), 16);
     let poly = loaded.panels[0].polygon.as_mut().unwrap();
     let [a, b] = poly.measurement_points(&poly.measurements[0]).unwrap();
     assert!(a.distance(local) < 1e-12);

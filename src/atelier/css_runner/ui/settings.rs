@@ -23,7 +23,7 @@ pub(in super::super) fn build_runner_settings(state: &CssRunnerState) -> Option<
                 </div>
                 <div class="settings-entry">
                     <span class="settings-label">"New measurement precision"</span>
-                    <button id="measurement-precision" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions,RunnerUiOp::CycleMeasurementBits)}>{format!("{} bits",state.project.template.measurement_bits)}</button>
+                    <button id="measurement-precision" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions,RunnerUiOp::CycleMeasurementBits)}>{format!("{} bits",state.project.template.measurement_precision())}</button>
                 </div>
                 <div class="settings-entry">
                     <span class="settings-label">"2D zoom speed"</span>

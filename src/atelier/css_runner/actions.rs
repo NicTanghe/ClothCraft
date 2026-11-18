@@ -449,7 +449,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         }
 
         RunnerUiOp::CycleMeasurementBits => {
-            let bits = match state.project.template.measurement_bits {
+            let bits = match state.project.template.measurement_precision() {
                 8 => 10,
                 10 => 16,
                 _ => 8,

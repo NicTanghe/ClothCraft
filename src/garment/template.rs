@@ -152,11 +152,8 @@ impl Panel {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GarmentTemplate {
-    #[serde(
-        default = "default_measurement_bits",
-        skip_serializing_if = "omit_hash_precision"
-    )]
-    pub measurement_bits: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measurement_bits: Option<u8>,
     pub format: String,
     pub version: u32,
     pub name: String,
@@ -230,13 +227,10 @@ fn unique_ids<'a>(ids: impl Iterator<Item = &'a str>, kind: &str) -> Result<(), 
     }
     Ok(())
 }
-fn omit_hash_precision(bits: &u8) -> bool {
-    *bits == 0
-}
-fn default_measurement_bits() -> u8 {
-    8
-}
 impl GarmentTemplate {
+    pub fn measurement_precision(&self) -> u8 {
+        self.measurement_bits.unwrap_or(8)
+    }
     pub fn load(path: &Path) -> Result<Self, String> {
         let template: Self =
             serde_json::from_str(&fs::read_to_string(path).map_err(|e| e.to_string())?)
@@ -253,7 +247,7 @@ impl GarmentTemplate {
         .map_err(|e| e.to_string())
     }
     pub fn compile(&self) -> Result<CompiledGarment, String> {
-        if !matches!(self.measurement_bits, 8 | 10 | 16) {
+        if !matches!(self.measurement_precision(), 8 | 10 | 16) {
             return Err("Measurement precision must be 8, 10 or 16 bits".into());
         }
         if !matches!(self.format.as_str(), "clothcraft-template")
@@ -582,7 +576,7 @@ impl GarmentTemplate {
     pub fn two_panel_demo() -> Self {
         let properties = FabricProperties::default();
         Self {
-            measurement_bits: default_measurement_bits(),
+            measurement_bits: Some(8),
             format: "clothcraft-template".into(),
             version: 1,
             name: "Two panels / nonmatching seam".into(),

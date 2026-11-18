@@ -781,7 +781,7 @@ pub fn same_physics(a: &GarmentTemplate, b: &GarmentTemplate) -> bool {
     let without_layout = |t: &GarmentTemplate| {
         let mut t = t.clone();
         t.mirror_links.clear();
-        t.measurement_bits = 8;
+        t.measurement_bits = None;
         t.fabric_appearance.clear();
         t.graphics.clear();
         t.trims.clear();
@@ -831,7 +831,7 @@ pub fn only_appearance_changed(a: &GarmentTemplate, b: &GarmentTemplate) -> bool
     }
     let strip = |source: &GarmentTemplate| {
         let mut t = source.clone();
-        t.measurement_bits = 8;
+        t.measurement_bits = None;
         t.fabric_appearance.clear();
         t.graphics.clear();
         t.trims.clear();
@@ -1491,7 +1491,7 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
     let mut selected = None;
     let mut new_point = None;
     match command {
-        Command::SetMeasurementBits(bits) => template.measurement_bits = bits,
+        Command::SetMeasurementBits(bits) => template.measurement_bits = Some(bits),
         Command::SetMeasurement { panel, measurement } => {
             let p = template
                 .panels

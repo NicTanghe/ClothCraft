@@ -212,7 +212,7 @@ pub(in super::super) fn measurement_pick(
             let (station, _) = poly.measurement_anchor_at_point(edge, local).ok()?;
             let (edge, t) = station.station()?;
             if !poly.curves.contains_key(edge) && !poly.lines.iter().any(|l| l.id == edge) {
-                MeasurementAnchor::fixed(edge.into(), t, template.measurement_bits).ok()?
+                MeasurementAnchor::fixed(edge.into(), t, template.measurement_precision()).ok()?
             } else {
                 station
             }

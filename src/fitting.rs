@@ -279,7 +279,7 @@ fn mesh_signature(template: &GarmentTemplate, g: &CompiledGarment) -> Result<Str
     }
     // Preserve the historical byte order and fingerprint. The precision field
     // is document metadata and is omitted only from this private hash input.
-    physical_template.measurement_bits = 0;
+    physical_template.measurement_bits = None;
     append(&serde_json::to_vec(&physical_template).map_err(|e| e.to_string())?);
     for p in &g.mesh.uv {
         append(&p.x.to_le_bytes());
