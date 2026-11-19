@@ -6,7 +6,7 @@ use clothcraft::garment::{
 use glam::{DVec2, DVec3};
 
 fn template() -> GarmentTemplate {
-    serde_json::from_str(include_str!("../examples/templates/two-panel.json")).unwrap()
+    serde_json::from_str(include_str!("fixtures/legacy-templates/two-panel.json")).unwrap()
 }
 
 fn svg(body: &str, root: &str) -> Result<Drawing, String> {

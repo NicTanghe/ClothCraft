@@ -1,0 +1,390 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1.0
+    upAxis = "Y"
+    customLayerData = {
+    dictionary clothcraft:document = {
+    string kind = "clothcraft"
+    int version = 1
+}
+}
+)
+
+def Xform "World"
+{
+    string format = "clothcraft-template"
+    string name = "tshirt / MakeHuman 1.75 m engineering fixture"
+    int version = 2
+    custom token clothcraft:kind = "object"
+    def Xform "Fabrics"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "fabrics"
+        def Xform "p_776f76656e2d7265666572656e6365"
+        {
+            string id = "woven-reference"
+            string name = "Uncalibrated woven reference"
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_776f76656e2d7265666572656e6365"
+            def Xform "Properties"
+            {
+                double bend_warp = 0.00008
+                double bend_weft = 0.00004
+                double compression_ratio = 0.15
+                double compression_transition = 0.005
+                double density = 0.2
+                double shear = 45.0
+                double thickness = 0.001
+                double warp = 350.0
+                double weft = 180.0
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "properties"
+            }
+        }
+    }
+    def Xform "Parts"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "panels"
+        def Xform "p_66726f6e74"
+        {
+            string fabric = "woven-reference"
+            double grain_degrees = 90.0
+            string id = "front"
+            string name = "tshirt front"
+            string[] pins = []
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_66726f6e74"
+            def Xform "pattern"
+            {
+                double height = 0.66
+                int nx = 1
+                int ny = 1
+                double width = 1.0
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "pattern"
+            }
+            def Xform "Placement"
+            {
+                double[] rotation_degrees = [0.0, 0.0, 0.0]
+                double[] translation = [-0.5, 1.5, 0.38]
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "placement"
+            }
+            def Xform "Polygon"
+            {
+                string[] edges = ["neck-left", "neck-bottom", "neck-right", "shoulder-right", "sleeve-top-right", "cuff-right", "sleeve-under-right", "side-right", "hem", "side-left", "sleeve-under-left", "cuff-left", "sleeve-top-left", "shoulder-left"]
+                double2[] points = [(0.42, 0.0), (0.46, 0.065), (0.54, 0.065), (0.58, 0.0), (0.72, 0.04), (0.98, 0.24), (0.84, 0.4), (0.72, 0.29), (0.78, 0.66), (0.22, 0.66), (0.28, 0.29), (0.16, 0.4), (0.02, 0.24), (0.28, 0.04)]
+                int subdivisions = 2
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "polygon"
+                def Xform "meshing"
+                {
+                    double anisotropy = 1.0
+                    double axis_degrees = 0.0
+                    int max_vertices = 20000
+                    double min_angle_degrees = 25.0
+                    double target_edge_m = 0.03
+                    custom token clothcraft:kind = "object"
+                    custom string clothcraft:key = "meshing"
+                }
+            }
+            def BasisCurves "Boundary"
+            {
+                custom token clothcraft:kind = "view"
+                point3f[] points = [(0.41999998688697815, 0.0, 0.0), (0.41999998688697815, 0.0, 0.0), (0.46000000834465027, 0.06499999761581421, 0.0), (0.46000000834465027, 0.06499999761581421, 0.0), (0.46000000834465027, 0.06499999761581421, 0.0), (0.46000000834465027, 0.06499999761581421, 0.0), (0.5400000214576721, 0.06499999761581421, 0.0), (0.5400000214576721, 0.06499999761581421, 0.0), (0.5400000214576721, 0.06499999761581421, 0.0), (0.5400000214576721, 0.06499999761581421, 0.0), (0.5799999833106995, 0.0, 0.0), (0.5799999833106995, 0.0, 0.0), (0.5799999833106995, 0.0, 0.0), (0.5799999833106995, 0.0, 0.0), (0.7200000286102295, 0.03999999910593033, 0.0), (0.7200000286102295, 0.03999999910593033, 0.0), (0.7200000286102295, 0.03999999910593033, 0.0), (0.7200000286102295, 0.03999999910593033, 0.0), (0.9800000190734863, 0.23999999463558197, 0.0), (0.9800000190734863, 0.23999999463558197, 0.0), (0.9800000190734863, 0.23999999463558197, 0.0), (0.9800000190734863, 0.23999999463558197, 0.0), (0.8399999737739563, 0.4000000059604645, 0.0), (0.8399999737739563, 0.4000000059604645, 0.0), (0.8399999737739563, 0.4000000059604645, 0.0), (0.8399999737739563, 0.4000000059604645, 0.0), (0.7200000286102295, 0.28999999165534973, 0.0), (0.7200000286102295, 0.28999999165534973, 0.0), (0.7200000286102295, 0.28999999165534973, 0.0), (0.7200000286102295, 0.28999999165534973, 0.0), (0.7799999713897705, 0.6600000262260437, 0.0), (0.7799999713897705, 0.6600000262260437, 0.0), (0.7799999713897705, 0.6600000262260437, 0.0), (0.7799999713897705, 0.6600000262260437, 0.0), (0.2199999988079071, 0.6600000262260437, 0.0), (0.2199999988079071, 0.6600000262260437, 0.0), (0.2199999988079071, 0.6600000262260437, 0.0), (0.2199999988079071, 0.6600000262260437, 0.0), (0.2800000011920929, 0.28999999165534973, 0.0), (0.2800000011920929, 0.28999999165534973, 0.0), (0.2800000011920929, 0.28999999165534973, 0.0), (0.2800000011920929, 0.28999999165534973, 0.0), (0.1599999964237213, 0.4000000059604645, 0.0), (0.1599999964237213, 0.4000000059604645, 0.0), (0.1599999964237213, 0.4000000059604645, 0.0), (0.1599999964237213, 0.4000000059604645, 0.0), (0.019999999552965164, 0.23999999463558197, 0.0), (0.019999999552965164, 0.23999999463558197, 0.0), (0.019999999552965164, 0.23999999463558197, 0.0), (0.019999999552965164, 0.23999999463558197, 0.0), (0.2800000011920929, 0.03999999910593033, 0.0), (0.2800000011920929, 0.03999999910593033, 0.0), (0.2800000011920929, 0.03999999910593033, 0.0), (0.2800000011920929, 0.03999999910593033, 0.0), (0.41999998688697815, 0.0, 0.0), (0.41999998688697815, 0.0, 0.0)]
+                int[] curveVertexCounts = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+                token basis = "bezier"
+                token type = "cubic"
+                token wrap = "nonperiodic"
+                custom double3[] clothcraft:controlPoints = [(0.42, 0.0, 0.0), (0.42, 0.0, 0.0), (0.46, 0.065, 0.0), (0.46, 0.065, 0.0), (0.46, 0.065, 0.0), (0.46, 0.065, 0.0), (0.54, 0.065, 0.0), (0.54, 0.065, 0.0), (0.54, 0.065, 0.0), (0.54, 0.065, 0.0), (0.58, 0.0, 0.0), (0.58, 0.0, 0.0), (0.58, 0.0, 0.0), (0.58, 0.0, 0.0), (0.72, 0.04, 0.0), (0.72, 0.04, 0.0), (0.72, 0.04, 0.0), (0.72, 0.04, 0.0), (0.98, 0.24, 0.0), (0.98, 0.24, 0.0), (0.98, 0.24, 0.0), (0.98, 0.24, 0.0), (0.84, 0.4, 0.0), (0.84, 0.4, 0.0), (0.84, 0.4, 0.0), (0.84, 0.4, 0.0), (0.72, 0.29, 0.0), (0.72, 0.29, 0.0), (0.72, 0.29, 0.0), (0.72, 0.29, 0.0), (0.78, 0.66, 0.0), (0.78, 0.66, 0.0), (0.78, 0.66, 0.0), (0.78, 0.66, 0.0), (0.22, 0.66, 0.0), (0.22, 0.66, 0.0), (0.22, 0.66, 0.0), (0.22, 0.66, 0.0), (0.28, 0.29, 0.0), (0.28, 0.29, 0.0), (0.28, 0.29, 0.0), (0.28, 0.29, 0.0), (0.16, 0.4, 0.0), (0.16, 0.4, 0.0), (0.16, 0.4, 0.0), (0.16, 0.4, 0.0), (0.02, 0.24, 0.0), (0.02, 0.24, 0.0), (0.02, 0.24, 0.0), (0.02, 0.24, 0.0), (0.28, 0.04, 0.0), (0.28, 0.04, 0.0), (0.28, 0.04, 0.0), (0.28, 0.04, 0.0), (0.42, 0.0, 0.0), (0.42, 0.0, 0.0)]
+                custom string[] clothcraft:boundaryIds = ["neck-left", "neck-bottom", "neck-right", "shoulder-right", "sleeve-top-right", "cuff-right", "sleeve-under-right", "side-right", "hem", "side-left", "sleeve-under-left", "cuff-left", "sleeve-top-left", "shoulder-left"]
+            }
+        }
+        def Xform "p_6261636b"
+        {
+            string fabric = "woven-reference"
+            double grain_degrees = 90.0
+            string id = "back"
+            string name = "tshirt back"
+            string[] pins = []
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_6261636b"
+            def Xform "pattern"
+            {
+                double height = 0.66
+                int nx = 1
+                int ny = 1
+                double width = 1.0
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "pattern"
+            }
+            def Xform "Placement"
+            {
+                double[] rotation_degrees = [0.0, 0.0, 0.0]
+                double[] translation = [-0.5, 1.5, -0.15]
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "placement"
+            }
+            def Xform "Polygon"
+            {
+                string[] edges = ["neck-left", "neck-bottom", "neck-right", "shoulder-right", "sleeve-top-right", "cuff-right", "sleeve-under-right", "side-right", "hem", "side-left", "sleeve-under-left", "cuff-left", "sleeve-top-left", "shoulder-left"]
+                double2[] points = [(0.42, 0.0), (0.46, 0.065), (0.54, 0.065), (0.58, 0.0), (0.72, 0.04), (0.98, 0.24), (0.84, 0.4), (0.72, 0.29), (0.78, 0.66), (0.22, 0.66), (0.28, 0.29), (0.16, 0.4), (0.02, 0.24), (0.28, 0.04)]
+                int subdivisions = 2
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "polygon"
+                def Xform "meshing"
+                {
+                    double anisotropy = 1.0
+                    double axis_degrees = 0.0
+                    int max_vertices = 20000
+                    double min_angle_degrees = 25.0
+                    double target_edge_m = 0.03
+                    custom token clothcraft:kind = "object"
+                    custom string clothcraft:key = "meshing"
+                }
+            }
+            def BasisCurves "Boundary"
+            {
+                custom token clothcraft:kind = "view"
+                point3f[] points = [(0.41999998688697815, 0.0, 0.0), (0.41999998688697815, 0.0, 0.0), (0.46000000834465027, 0.06499999761581421, 0.0), (0.46000000834465027, 0.06499999761581421, 0.0), (0.46000000834465027, 0.06499999761581421, 0.0), (0.46000000834465027, 0.06499999761581421, 0.0), (0.5400000214576721, 0.06499999761581421, 0.0), (0.5400000214576721, 0.06499999761581421, 0.0), (0.5400000214576721, 0.06499999761581421, 0.0), (0.5400000214576721, 0.06499999761581421, 0.0), (0.5799999833106995, 0.0, 0.0), (0.5799999833106995, 0.0, 0.0), (0.5799999833106995, 0.0, 0.0), (0.5799999833106995, 0.0, 0.0), (0.7200000286102295, 0.03999999910593033, 0.0), (0.7200000286102295, 0.03999999910593033, 0.0), (0.7200000286102295, 0.03999999910593033, 0.0), (0.7200000286102295, 0.03999999910593033, 0.0), (0.9800000190734863, 0.23999999463558197, 0.0), (0.9800000190734863, 0.23999999463558197, 0.0), (0.9800000190734863, 0.23999999463558197, 0.0), (0.9800000190734863, 0.23999999463558197, 0.0), (0.8399999737739563, 0.4000000059604645, 0.0), (0.8399999737739563, 0.4000000059604645, 0.0), (0.8399999737739563, 0.4000000059604645, 0.0), (0.8399999737739563, 0.4000000059604645, 0.0), (0.7200000286102295, 0.28999999165534973, 0.0), (0.7200000286102295, 0.28999999165534973, 0.0), (0.7200000286102295, 0.28999999165534973, 0.0), (0.7200000286102295, 0.28999999165534973, 0.0), (0.7799999713897705, 0.6600000262260437, 0.0), (0.7799999713897705, 0.6600000262260437, 0.0), (0.7799999713897705, 0.6600000262260437, 0.0), (0.7799999713897705, 0.6600000262260437, 0.0), (0.2199999988079071, 0.6600000262260437, 0.0), (0.2199999988079071, 0.6600000262260437, 0.0), (0.2199999988079071, 0.6600000262260437, 0.0), (0.2199999988079071, 0.6600000262260437, 0.0), (0.2800000011920929, 0.28999999165534973, 0.0), (0.2800000011920929, 0.28999999165534973, 0.0), (0.2800000011920929, 0.28999999165534973, 0.0), (0.2800000011920929, 0.28999999165534973, 0.0), (0.1599999964237213, 0.4000000059604645, 0.0), (0.1599999964237213, 0.4000000059604645, 0.0), (0.1599999964237213, 0.4000000059604645, 0.0), (0.1599999964237213, 0.4000000059604645, 0.0), (0.019999999552965164, 0.23999999463558197, 0.0), (0.019999999552965164, 0.23999999463558197, 0.0), (0.019999999552965164, 0.23999999463558197, 0.0), (0.019999999552965164, 0.23999999463558197, 0.0), (0.2800000011920929, 0.03999999910593033, 0.0), (0.2800000011920929, 0.03999999910593033, 0.0), (0.2800000011920929, 0.03999999910593033, 0.0), (0.2800000011920929, 0.03999999910593033, 0.0), (0.41999998688697815, 0.0, 0.0), (0.41999998688697815, 0.0, 0.0)]
+                int[] curveVertexCounts = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+                token basis = "bezier"
+                token type = "cubic"
+                token wrap = "nonperiodic"
+                custom double3[] clothcraft:controlPoints = [(0.42, 0.0, 0.0), (0.42, 0.0, 0.0), (0.46, 0.065, 0.0), (0.46, 0.065, 0.0), (0.46, 0.065, 0.0), (0.46, 0.065, 0.0), (0.54, 0.065, 0.0), (0.54, 0.065, 0.0), (0.54, 0.065, 0.0), (0.54, 0.065, 0.0), (0.58, 0.0, 0.0), (0.58, 0.0, 0.0), (0.58, 0.0, 0.0), (0.58, 0.0, 0.0), (0.72, 0.04, 0.0), (0.72, 0.04, 0.0), (0.72, 0.04, 0.0), (0.72, 0.04, 0.0), (0.98, 0.24, 0.0), (0.98, 0.24, 0.0), (0.98, 0.24, 0.0), (0.98, 0.24, 0.0), (0.84, 0.4, 0.0), (0.84, 0.4, 0.0), (0.84, 0.4, 0.0), (0.84, 0.4, 0.0), (0.72, 0.29, 0.0), (0.72, 0.29, 0.0), (0.72, 0.29, 0.0), (0.72, 0.29, 0.0), (0.78, 0.66, 0.0), (0.78, 0.66, 0.0), (0.78, 0.66, 0.0), (0.78, 0.66, 0.0), (0.22, 0.66, 0.0), (0.22, 0.66, 0.0), (0.22, 0.66, 0.0), (0.22, 0.66, 0.0), (0.28, 0.29, 0.0), (0.28, 0.29, 0.0), (0.28, 0.29, 0.0), (0.28, 0.29, 0.0), (0.16, 0.4, 0.0), (0.16, 0.4, 0.0), (0.16, 0.4, 0.0), (0.16, 0.4, 0.0), (0.02, 0.24, 0.0), (0.02, 0.24, 0.0), (0.02, 0.24, 0.0), (0.02, 0.24, 0.0), (0.28, 0.04, 0.0), (0.28, 0.04, 0.0), (0.28, 0.04, 0.0), (0.28, 0.04, 0.0), (0.42, 0.0, 0.0), (0.42, 0.0, 0.0)]
+                custom string[] clothcraft:boundaryIds = ["neck-left", "neck-bottom", "neck-right", "shoulder-right", "sleeve-top-right", "cuff-right", "sleeve-under-right", "side-right", "hem", "side-left", "sleeve-under-left", "cuff-left", "sleeve-top-left", "shoulder-left"]
+            }
+        }
+    }
+    def Xform "Seams"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "seams"
+        def Xform "p_73686f756c6465722d7269676874"
+        {
+            bool allow_ease = false
+            string id = "shoulder-right"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_73686f756c6465722d7269676874"
+            def Xform "a"
+            {
+                string edge = "shoulder-right"
+                string panel = "front"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string edge = "shoulder-right"
+                string panel = "back"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+        def Xform "p_736c656576652d746f702d7269676874"
+        {
+            bool allow_ease = false
+            string id = "sleeve-top-right"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_736c656576652d746f702d7269676874"
+            def Xform "a"
+            {
+                string edge = "sleeve-top-right"
+                string panel = "front"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string edge = "sleeve-top-right"
+                string panel = "back"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+        def Xform "p_736c656576652d756e6465722d7269676874"
+        {
+            bool allow_ease = false
+            string id = "sleeve-under-right"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_736c656576652d756e6465722d7269676874"
+            def Xform "a"
+            {
+                string edge = "sleeve-under-right"
+                string panel = "front"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string edge = "sleeve-under-right"
+                string panel = "back"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+        def Xform "p_736964652d7269676874"
+        {
+            bool allow_ease = false
+            string id = "side-right"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_736964652d7269676874"
+            def Xform "a"
+            {
+                string edge = "side-right"
+                string panel = "front"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string edge = "side-right"
+                string panel = "back"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+        def Xform "p_736964652d6c656674"
+        {
+            bool allow_ease = false
+            string id = "side-left"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_736964652d6c656674"
+            def Xform "a"
+            {
+                string edge = "side-left"
+                string panel = "front"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string edge = "side-left"
+                string panel = "back"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+        def Xform "p_736c656576652d756e6465722d6c656674"
+        {
+            bool allow_ease = false
+            string id = "sleeve-under-left"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_736c656576652d756e6465722d6c656674"
+            def Xform "a"
+            {
+                string edge = "sleeve-under-left"
+                string panel = "front"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string edge = "sleeve-under-left"
+                string panel = "back"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+        def Xform "p_736c656576652d746f702d6c656674"
+        {
+            bool allow_ease = false
+            string id = "sleeve-top-left"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_736c656576652d746f702d6c656674"
+            def Xform "a"
+            {
+                string edge = "sleeve-top-left"
+                string panel = "front"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string edge = "sleeve-top-left"
+                string panel = "back"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+        def Xform "p_73686f756c6465722d6c656674"
+        {
+            bool allow_ease = false
+            string id = "shoulder-left"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_73686f756c6465722d6c656674"
+            def Xform "a"
+            {
+                string edge = "shoulder-left"
+                string panel = "front"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string edge = "shoulder-left"
+                string panel = "back"
+                double[] range = [0.0, 1.0]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+    }
+}

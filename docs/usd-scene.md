@@ -46,7 +46,7 @@ and returns a complete USDA string. It performs no I/O, rendering or simulation.
 The example publishes the template's compiled initial arrangement:
 
 ```powershell
-cargo run --locked --no-default-features -j 2 --example usd_static_scene -- examples/templates/two-panel.json output/two-panel.usda
+cargo run --locked --no-default-features -j 2 --example usd_static_scene -- examples/templates/two-panel.usda output/two-panel.usda
 ```
 
 Create the output directory first. The example accepts a template JSON and an
@@ -149,7 +149,7 @@ uses Pixar's Python `pxr` API; no GPU or native window is created:
 # Install separately in an isolated Python environment; never required by CI.
 python -m pip install usd-core==26.11
 python scripts/check-usd-scene.py tests/fixtures/usd/independent-panel.usda
-python scripts/check-usd-scene.py output/two-panel.usda --template examples/templates/two-panel.json
+python scripts/check-usd-scene.py output/two-panel.usda --template tests/fixtures/legacy-templates/two-panel.json
 ```
 
 The first input is an independently authored, deliberately deformed panel. The

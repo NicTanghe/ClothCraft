@@ -111,7 +111,7 @@ fn bundled_mannequin_matches_independent_index_topology_count() {
 #[test]
 fn initialization_check_is_read_only_and_rejects_a_touching_avatar() {
     let template: GarmentTemplate =
-        serde_json::from_str(include_str!("../examples/templates/two-panel.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/legacy-templates/two-panel.json")).unwrap();
     let garment = Arc::new(template.compile().unwrap());
     let state = garment.initial_state.clone();
     let saved = serde_json::to_vec(&state).unwrap();

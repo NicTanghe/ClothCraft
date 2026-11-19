@@ -46,6 +46,8 @@ pub mod session_protocol;
 pub mod solver;
 pub mod solver_lab;
 pub mod template_catalog;
+/// Lossless JSON <-> USDA document mapping for templates and fitting projects.
+pub mod usd_document;
 /// CPU-only publication of static garment geometry as an OpenUSD scene.
 pub mod usd_scene;
 pub mod vbd;

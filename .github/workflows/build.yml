@@ -94,7 +94,7 @@ jobs:
         run: |
           suffix=""
           if [ "${{ runner.os }}" = "Windows" ]; then suffix=".exe"; fi
-          "target/release/cloth-template${suffix}" validate examples/templates/two-panel.json
+          "target/release/cloth-template${suffix}" validate examples/templates/two-panel.usda
 
       - name: Stage artifacts
         shell: bash

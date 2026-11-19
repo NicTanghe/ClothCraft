@@ -23,7 +23,7 @@ fn stroke() -> Vec<DVec2> {
         .collect()
 }
 fn source() -> GarmentTemplate {
-    serde_json::from_str(include_str!("../examples/templates/two-panel.json")).unwrap()
+    serde_json::from_str(include_str!("fixtures/legacy-templates/two-panel.json")).unwrap()
 }
 fn command(samples: Vec<DVec2>, source: &GarmentTemplate) -> Command {
     Command::Freehand {

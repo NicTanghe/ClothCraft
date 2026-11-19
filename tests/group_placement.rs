@@ -5,7 +5,7 @@ use clothcraft::{
 use glam::{DQuat, DVec3};
 
 fn template() -> GarmentTemplate {
-    serde_json::from_str(include_str!("../examples/templates/two-panel.json")).unwrap()
+    serde_json::from_str(include_str!("fixtures/legacy-templates/two-panel.json")).unwrap()
 }
 
 #[test]

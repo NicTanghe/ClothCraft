@@ -1,0 +1,261 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1.0
+    upAxis = "Y"
+    customLayerData = {
+    dictionary clothcraft:document = {
+    string kind = "clothcraft"
+    int version = 1
+}
+}
+)
+
+def Xform "World"
+{
+    string format = "clothcraft-template"
+    string name = "Partial M:N sewing / native editor fixture"
+    int version = 2
+    custom token clothcraft:kind = "object"
+    def Xform "Fabrics"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "fabrics"
+        def Xform "p_776f76656e2d7265666572656e6365"
+        {
+            string id = "woven-reference"
+            string name = "Uncalibrated woven reference"
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_776f76656e2d7265666572656e6365"
+            def Xform "Properties"
+            {
+                double bend_warp = 0.00008
+                double bend_weft = 0.00004
+                double compression_ratio = 0.15
+                double compression_transition = 0.005
+                double density = 0.2
+                double shear = 45.0
+                double thickness = 0.001
+                double warp = 350.0
+                double weft = 180.0
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "properties"
+            }
+        }
+        def Xform "p_6661627269635f31"
+        {
+            string id = "fabric_1"
+            string name = "Denim (approx.)"
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_6661627269635f31"
+            def Xform "Properties"
+            {
+                double bend_warp = 0.0004
+                double bend_weft = 0.00025
+                double compression_ratio = 0.15
+                double compression_transition = 0.005
+                double density = 0.296675
+                double shear = 300.0
+                double thickness = 0.0006096000000000001
+                double warp = 7549.625789983276
+                double weft = 3425.784831977357
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "properties"
+            }
+        }
+    }
+    def Xform "Parts"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "panels"
+        def Xform "p_70616e656c5f31"
+        {
+            string fabric = "woven-reference"
+            double grain_degrees = 90.0
+            string id = "panel_1"
+            double[] layout_2d = [0.3150958191581059, 0.048459238816192574]
+            double layout_rotation_degrees = 23.57470620191262
+            string name = "panel_1"
+            string[] pins = []
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_70616e656c5f31"
+            def Xform "pattern"
+            {
+                double height = 0.49000000000000005
+                int nx = 1
+                int ny = 1
+                double width = 0.41000000000000003
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "pattern"
+            }
+            def Xform "Placement"
+            {
+                double[] rotation_degrees = [0.0, 0.0, 0.0]
+                double[] translation = [-0.11256988599896431, 1.59, 0.45]
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "placement"
+            }
+            def Xform "Polygon"
+            {
+                string[] edges = ["edge_1", "edge_2", "edge_3", "edge_4"]
+                double2[] points = [(0.039999999999999994, 0.09), (0.34, 0.09), (0.34, 0.49000000000000005), (0.0, 0.49000000000000005)]
+                int subdivisions = 0
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "polygon"
+                def Xform "Curves"
+                {
+                    double2[] edge_1 = [(0.039999999999999994, 0.09), (0.24, 0.0)]
+                    double2[] edge_2 = [(0.41000000000000003, 0.14), (0.34, 0.49000000000000005)]
+                    custom token clothcraft:kind = "object"
+                    custom string clothcraft:key = "curves"
+                }
+                def Xform "meshing"
+                {
+                    double anisotropy = 1.0
+                    double axis_degrees = 0.0
+                    int max_vertices = 20000
+                    double min_angle_degrees = 25.0
+                    double target_edge_m = 0.025
+                    custom token clothcraft:kind = "object"
+                    custom string clothcraft:key = "meshing"
+                }
+            }
+            def BasisCurves "Boundary"
+            {
+                custom token clothcraft:kind = "view"
+                point3f[] points = [(0.03999999910593033, 0.09000000357627869, 0.0), (0.03999999910593033, 0.09000000357627869, 0.0), (0.23999999463558197, 0.0, 0.0), (0.3400000035762787, 0.09000000357627869, 0.0), (0.3400000035762787, 0.09000000357627869, 0.0), (0.4099999964237213, 0.14000000059604645, 0.0), (0.3400000035762787, 0.49000000953674316, 0.0), (0.3400000035762787, 0.49000000953674316, 0.0), (0.3400000035762787, 0.49000000953674316, 0.0), (0.3400000035762787, 0.49000000953674316, 0.0), (0.0, 0.49000000953674316, 0.0), (0.0, 0.49000000953674316, 0.0), (0.0, 0.49000000953674316, 0.0), (0.0, 0.49000000953674316, 0.0), (0.03999999910593033, 0.09000000357627869, 0.0), (0.03999999910593033, 0.09000000357627869, 0.0)]
+                int[] curveVertexCounts = [4, 4, 4, 4]
+                token basis = "bezier"
+                token type = "cubic"
+                token wrap = "nonperiodic"
+                custom double3[] clothcraft:controlPoints = [(0.039999999999999994, 0.09, 0.0), (0.039999999999999994, 0.09, 0.0), (0.24, 0.0, 0.0), (0.34, 0.09, 0.0), (0.34, 0.09, 0.0), (0.41000000000000003, 0.14, 0.0), (0.34, 0.49000000000000005, 0.0), (0.34, 0.49000000000000005, 0.0), (0.34, 0.49000000000000005, 0.0), (0.34, 0.49000000000000005, 0.0), (0.0, 0.49000000000000005, 0.0), (0.0, 0.49000000000000005, 0.0), (0.0, 0.49000000000000005, 0.0), (0.0, 0.49000000000000005, 0.0), (0.039999999999999994, 0.09, 0.0), (0.039999999999999994, 0.09, 0.0)]
+                custom string[] clothcraft:boundaryIds = ["edge_1", "edge_2", "edge_3", "edge_4"]
+            }
+        }
+        def Xform "p_70616e656c5f32"
+        {
+            string fabric = "fabric_1"
+            double grain_degrees = 90.0
+            string id = "panel_2"
+            double[] layout_2d = [0.875095819158106, 0.048459238816192574]
+            double layout_rotation_degrees = 23.57470620191262
+            string name = "panel_1 copy"
+            string[] pins = []
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_70616e656c5f32"
+            def Xform "pattern"
+            {
+                double height = 0.49000000000000005
+                int nx = 1
+                int ny = 1
+                double width = 0.41000000000000003
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "pattern"
+            }
+            def Xform "Placement"
+            {
+                double[] rotation_degrees = [33.78623881508954, 8.437871643883092, -35.63270632517398]
+                double[] translation = [0.6428245889496798, 1.6078108839885084, 0.6300619088853587]
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "placement"
+            }
+            def Xform "Polygon"
+            {
+                string[] edges = ["edge_1", "edge_2", "edge_3", "edge_4"]
+                double2[] points = [(0.039999999999999994, 0.09), (0.34, 0.09), (0.34, 0.49000000000000005), (0.0, 0.49000000000000005)]
+                int subdivisions = 0
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "polygon"
+                def Xform "Curves"
+                {
+                    double2[] edge_1 = [(0.039999999999999994, 0.09), (0.24, 0.0)]
+                    double2[] edge_2 = [(0.41000000000000003, 0.14), (0.34, 0.49000000000000005)]
+                    custom token clothcraft:kind = "object"
+                    custom string clothcraft:key = "curves"
+                }
+                def Xform "meshing"
+                {
+                    double anisotropy = 1.0
+                    double axis_degrees = 0.0
+                    int max_vertices = 20000
+                    double min_angle_degrees = 25.0
+                    double target_edge_m = 0.025
+                    custom token clothcraft:kind = "object"
+                    custom string clothcraft:key = "meshing"
+                }
+            }
+            def BasisCurves "Boundary"
+            {
+                custom token clothcraft:kind = "view"
+                point3f[] points = [(0.03999999910593033, 0.09000000357627869, 0.0), (0.03999999910593033, 0.09000000357627869, 0.0), (0.23999999463558197, 0.0, 0.0), (0.3400000035762787, 0.09000000357627869, 0.0), (0.3400000035762787, 0.09000000357627869, 0.0), (0.4099999964237213, 0.14000000059604645, 0.0), (0.3400000035762787, 0.49000000953674316, 0.0), (0.3400000035762787, 0.49000000953674316, 0.0), (0.3400000035762787, 0.49000000953674316, 0.0), (0.3400000035762787, 0.49000000953674316, 0.0), (0.0, 0.49000000953674316, 0.0), (0.0, 0.49000000953674316, 0.0), (0.0, 0.49000000953674316, 0.0), (0.0, 0.49000000953674316, 0.0), (0.03999999910593033, 0.09000000357627869, 0.0), (0.03999999910593033, 0.09000000357627869, 0.0)]
+                int[] curveVertexCounts = [4, 4, 4, 4]
+                token basis = "bezier"
+                token type = "cubic"
+                token wrap = "nonperiodic"
+                custom double3[] clothcraft:controlPoints = [(0.039999999999999994, 0.09, 0.0), (0.039999999999999994, 0.09, 0.0), (0.24, 0.0, 0.0), (0.34, 0.09, 0.0), (0.34, 0.09, 0.0), (0.41000000000000003, 0.14, 0.0), (0.34, 0.49000000000000005, 0.0), (0.34, 0.49000000000000005, 0.0), (0.34, 0.49000000000000005, 0.0), (0.34, 0.49000000000000005, 0.0), (0.0, 0.49000000000000005, 0.0), (0.0, 0.49000000000000005, 0.0), (0.0, 0.49000000000000005, 0.0), (0.0, 0.49000000000000005, 0.0), (0.039999999999999994, 0.09, 0.0), (0.039999999999999994, 0.09, 0.0)]
+                custom string[] clothcraft:boundaryIds = ["edge_1", "edge_2", "edge_3", "edge_4"]
+            }
+        }
+    }
+    def Xform "Seams"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "seams"
+        def Xform "p_7365616d5f31"
+        {
+            bool allow_ease = true
+            string id = "seam_1"
+            string[] notches = []
+            bool reverse_b = false
+            double stiffness = 50000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_7365616d5f31"
+            def Xform "a"
+            {
+                string edge = "edge_1"
+                string panel = "panel_1"
+                double[] range = [0.0, 0.9367994850516643]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "a_tail"
+            {
+                custom token clothcraft:kind = "array"
+                custom string clothcraft:key = "a_tail"
+                def Xform "i0"
+                {
+                    string edge = "edge_2"
+                    string panel = "panel_1"
+                    double[] range = [0.0, 1.0]
+                    string side = "top"
+                    custom token clothcraft:kind = "object"
+                    custom string clothcraft:key = "i0"
+                }
+            }
+            def Xform "b"
+            {
+                string edge = "edge_1"
+                string panel = "panel_2"
+                double[] range = [0.0, 0.9367994850516643]
+                string side = "top"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+            def Xform "b_tail"
+            {
+                custom token clothcraft:kind = "array"
+                custom string clothcraft:key = "b_tail"
+                def Xform "i0"
+                {
+                    string edge = "edge_2"
+                    string panel = "panel_2"
+                    double[] range = [0.0, 1.0]
+                    string side = "top"
+                    custom token clothcraft:kind = "object"
+                    custom string clothcraft:key = "i0"
+                }
+            }
+        }
+    }
+}

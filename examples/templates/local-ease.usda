@@ -1,0 +1,134 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1.0
+    upAxis = "Y"
+    customLayerData = {
+    dictionary clothcraft:document = {
+    string kind = "clothcraft"
+    int version = 1
+}
+}
+)
+
+def Xform "World"
+{
+    string format = "clothcraft-template"
+    string name = "Local ease / explicit notch correspondence"
+    int version = 1
+    custom token clothcraft:kind = "object"
+    def Xform "Fabrics"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "fabrics"
+        def Xform "p_776f76656e2d64656d6f"
+        {
+            string id = "woven-demo"
+            string name = "Uncalibrated woven reference"
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_776f76656e2d64656d6f"
+            def Xform "Properties"
+            {
+                double bend_warp = 0.00008
+                double bend_weft = 0.00004
+                double compression_ratio = 0.15
+                double compression_transition = 0.005
+                double density = 0.2
+                double shear = 45.0
+                double thickness = 0.001
+                double warp = 350.0
+                double weft = 180.0
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "properties"
+            }
+        }
+    }
+    def Xform "Parts"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "panels"
+        def Xform "p_6c656674"
+        {
+            string fabric = "woven-demo"
+            double grain_degrees = 0.0
+            string id = "left"
+            string name = "Left panel"
+            string[] pins = ["top_left", "top_right"]
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_6c656674"
+            def Xform "pattern"
+            {
+                double height = 0.6
+                int nx = 3
+                int ny = 4
+                double width = 0.4
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "pattern"
+            }
+            def Xform "Placement"
+            {
+                double[] rotation_degrees = [0.0, 0.0, 0.0]
+                double[] translation = [-0.4, 1.0, 0.0]
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "placement"
+            }
+        }
+        def Xform "p_7269676874"
+        {
+            string fabric = "woven-demo"
+            double grain_degrees = 45.0
+            string id = "right"
+            string name = "Right panel"
+            string[] pins = []
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_7269676874"
+            def Xform "pattern"
+            {
+                double height = 0.6
+                int nx = 4
+                int ny = 7
+                double width = 0.4
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "pattern"
+            }
+            def Xform "Placement"
+            {
+                double[] rotation_degrees = [8.0, 12.0, 0.0]
+                double[] translation = [0.08, 1.0, 0.03]
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "placement"
+            }
+        }
+    }
+    def Xform "Seams"
+    {
+        custom token clothcraft:kind = "array"
+        custom string clothcraft:key = "seams"
+        def Xform "p_63656e7472652d7365616d"
+        {
+            bool allow_ease = true
+            string id = "centre-seam"
+            double2[] notches = [(0.4, 0.6)]
+            bool reverse_b = true
+            double stiffness = 5000.0
+            custom token clothcraft:kind = "object"
+            custom string clothcraft:key = "p_63656e7472652d7365616d"
+            def Xform "a"
+            {
+                string panel = "left"
+                double[] range = [0.0, 1.0]
+                string side = "right"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "a"
+            }
+            def Xform "b"
+            {
+                string panel = "right"
+                double[] range = [0.0, 1.0]
+                string side = "left"
+                custom token clothcraft:kind = "object"
+                custom string clothcraft:key = "b"
+            }
+        }
+    }
+}
