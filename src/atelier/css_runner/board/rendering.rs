@@ -315,6 +315,62 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
         }
     };
 
+    // Draw the full projected coverage once, behind the pieces. Keeping it
+    // off the cached background lets Body toggle without repainting the grid.
+    if state.show_body_outline {
+        let (fill_color, outline_color) = if is_dark {
+            (
+                Color::rgba(214, 218, 224, 56),
+                Color::rgba(148, 163, 184, 150),
+            )
+        } else {
+            (
+                Color::rgba(156, 163, 175, 58),
+                Color::rgba(100, 116, 139, 150),
+            )
+        };
+        let outline_width = 1.2 * px;
+        if state.show_body_fill && !state.body_outline.contours.is_empty() {
+            nodes.push(BoardPath::new(
+                state.body_outline.fill_commands(outline_width * 0.5),
+                Some(fill_color),
+                None,
+                0.0,
+                "body-fill",
+            ));
+        }
+        if state.show_body_border && !state.body_outline.contours.is_empty() {
+            let commands = state
+                .body_outline
+                .contours
+                .iter()
+                .flat_map(|ring| polyline(ring, true))
+                .collect();
+            nodes.push(BoardPath::new(
+                commands,
+                None,
+                Some(outline_color),
+                outline_width,
+                "body-outline",
+            ));
+        }
+        if state.show_body_details && !state.body_outline.details.is_empty() {
+            let commands = state
+                .body_outline
+                .details
+                .iter()
+                .flat_map(|line| polyline(line, false))
+                .collect();
+            nodes.push(BoardPath::new(
+                commands,
+                None,
+                Some(outline_color),
+                0.85 * px,
+                "body-details",
+            ));
+        }
+    }
+
     let fillet_previews = active_fillet_previews(state);
     let corner_tool_active = state.active_2d_tool == "Corner";
     let sel_pts = effective_selected_points(state);

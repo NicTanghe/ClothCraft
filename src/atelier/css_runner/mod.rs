@@ -8,6 +8,7 @@
 mod actions;
 mod app;
 mod board;
+mod body_outline;
 mod documents;
 mod editing;
 pub mod imports;

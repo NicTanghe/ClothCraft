@@ -77,6 +77,12 @@ pub struct CssRunnerState {
     pub camera: Camera,
     pub theme: Theme,
     pub shading: clothcraft::usd_scene::ShadingMode,
+    pub show_body_outline: bool,
+    pub(super) body_outline: super::body_outline::BodyOutline,
+    pub(super) show_body_fill: bool,
+    pub(super) show_body_border: bool,
+    pub(super) show_body_details: bool,
+    pub(super) body_settings_open: bool,
     pub layout_mode: ViewLayoutMode,
     pub active_category: ObjectCategory,
     pub active_3d_tool: String,
@@ -134,6 +140,8 @@ impl CssRunnerState {
             &scene.state.x,
             Some(&scene.collider.surface),
         );
+        let body_outline =
+            super::body_outline::build(scene.collider.surface.as_ref(), &project.template);
 
         let board_2d_fit = fit_2d_board(&project.template);
         Self {
@@ -175,6 +183,12 @@ impl CssRunnerState {
             camera,
             theme: Theme::Dark,
             shading: clothcraft::usd_scene::ShadingMode::Smooth,
+            show_body_outline: true,
+            body_outline,
+            show_body_fill: true,
+            show_body_border: true,
+            show_body_details: true,
+            body_settings_open: false,
             layout_mode: ViewLayoutMode::Split,
             active_category: ObjectCategory::Pattern2D,
             active_3d_tool: "Gizmo".to_string(),

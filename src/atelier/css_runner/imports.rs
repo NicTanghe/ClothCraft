@@ -572,6 +572,10 @@ impl CssRunnerState {
         self.project = project;
         self.scene = scene;
         self.initial_scene = self.scene.clone();
+        self.body_outline = super::body_outline::build(
+            self.scene.collider.surface.as_ref(),
+            &self.project.template,
+        );
         self.staged_avatar = Some(asset);
         self.history = History::default();
         self.files.modified = true;
