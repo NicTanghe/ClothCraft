@@ -13,6 +13,7 @@ mod editing;
 pub mod imports;
 mod input;
 mod mesh_preparation;
+mod placement;
 mod state;
 mod ui;
 
