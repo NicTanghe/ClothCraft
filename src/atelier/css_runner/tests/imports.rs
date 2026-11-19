@@ -494,3 +494,142 @@ fn browser_import_buttons_are_wired_to_native_actions() {
         }
     }
 }
+
+/// Two-mesh FBX fixture: a body quad and a smaller helper triangle.
+fn two_mesh_fbx() -> String {
+    r#"; FBX 7.4.0 project file
+FBXHeaderExtension: {
+    FBXVersion: 7400
+}
+GlobalSettings: {
+    Properties70: {
+        P: "UnitScaleFactor", "double", "Number", "",100
+    }
+}
+Objects: {
+    Geometry: 100, "Geometry::Body", "Mesh" {
+        Vertices: *12 { a: 0,0,0,1,0,0,1,1,0,0,1,0 }
+        PolygonVertexIndex: *6 { a: 0,1,-3,0,2,-4 }
+    }
+    Geometry: 101, "Geometry::Helper", "Mesh" {
+        Vertices: *9 { a: 2,0,0,3,0,0,2,1,0 }
+        PolygonVertexIndex: *3 { a: 0,1,-3 }
+    }
+    Model: 200, "Model::Body", "Mesh" {
+    }
+    Model: 201, "Model::Helper", "Mesh" {
+    }
+}
+Connections: {
+    C: "OO", 100, 200
+    C: "OO", 101, 201
+    C: "OO", 200, 0
+    C: "OO", 201, 0
+}
+"#
+    .to_owned()
+}
+
+#[test]
+fn avatar_import_reviews_source_meshes_and_defaults_to_the_largest() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("two-meshes.fbx");
+    std::fs::write(&path, two_mesh_fbx()).unwrap();
+    let (mut app, _dialog_dir) = app_with_dialog(&path, ImportKind::Avatar);
+    let candidate = app
+        .state()
+        .import_dialog
+        .as_ref()
+        .unwrap()
+        .candidate
+        .as_ref()
+        .unwrap();
+    assert_eq!(candidate.meshes.len(), 2);
+    assert!(candidate.meshes[0].selected, "body has the most triangles");
+    assert!(
+        !candidate.meshes[1].selected,
+        "helper mesh is off by default"
+    );
+    let before = (candidate.vertices, candidate.triangles);
+    assert!(app.find_element_bounds_by_id("#import-mesh-0").is_some());
+    let helper = app.find_element_bounds_by_id("#import-mesh-1").unwrap();
+    assert!(cssimpler::renderer::dispatch_click(
+        app.scene(),
+        helper.x + helper.width * 0.5,
+        helper.y + helper.height * 0.5
+    ));
+    app.frame(FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 1,
+    });
+    let candidate = app
+        .state()
+        .import_dialog
+        .as_ref()
+        .unwrap()
+        .candidate
+        .as_ref()
+        .unwrap();
+    assert!(candidate.meshes[1].selected);
+    assert!(candidate.vertices > before.0);
+    assert_eq!(
+        app.state().import_dialog.as_ref().unwrap().summary,
+        format!(
+            "{} vertices · {} triangles",
+            candidate.vertices, candidate.triangles
+        )
+    );
+}
+
+/// Outward-wound cube around the T-shirt front panel's authored plane.
+const CUBE_OBJ: &str = "v -0.2 1.0 0.36
+v 0.2 1.0 0.36
+v 0.2 1.2 0.36
+v -0.2 1.2 0.36
+v -0.2 1.0 0.40
+v 0.2 1.0 0.40
+v 0.2 1.2 0.40
+v -0.2 1.2 0.40
+f 5 6 7
+f 5 7 8
+f 1 4 3
+f 1 3 2
+f 1 5 8
+f 1 8 4
+f 2 3 7
+f 2 7 6
+f 1 2 6
+f 1 6 5
+f 4 8 7
+f 4 7 3
+";
+
+#[test]
+fn avatar_import_reports_arrangement_conflicts_before_install() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = state_with(dir.path());
+    let cube = dir.path().join("cube.obj");
+    std::fs::write(&cube, CUBE_OBJ).unwrap();
+    state.open_import_path(ImportKind::Avatar, &cube);
+    let conflicts = state.import_dialog.as_ref().unwrap().conflicts.clone();
+    assert!(
+        conflicts
+            .iter()
+            .any(|conflict| conflict.contains("moved outward") && conflict.contains("front")),
+        "{conflicts:?}"
+    );
+    assert!(
+        conflicts
+            .iter()
+            .any(|conflict| conflict.contains("2D board")),
+        "{conflicts:?}"
+    );
+    state.apply_import();
+    assert!(state.status_message.contains("moved outward"));
+}

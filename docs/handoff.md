@@ -1,5 +1,32 @@
 # Repository handoff
 
+## Avatar import: multi-mesh colliders and arrangement preflight — 20 November 2026
+
+Fixes [#57](https://github.com/NicTanghe/ClothCraft/issues/57). Replacing the
+avatar with a multi-mesh FBX (Mixamo Y Bot has `Alpha_Surface` plus the invisible
+`Alpha_Joints` overlay) used to import every mesh as collider geometry with no
+review step, so a garment fitted to the visible body could hit helper geometry.
+The import modal now lists each source mesh with its counts, preselects the
+largest mesh as the collider and restages the canonical OBJ when the reviewer
+enables or disables meshes; the staged scene is recompiled so the reported
+conflicts track the selection.
+
+`avatar_import::Candidate::prepare` also compiles the candidate against the
+current project and runs the solver's initial-state check before installation.
+A panel reported by OGC is mapped back from its garment face and rigidly moved
+outward along Z in 1 cm steps (maximum 8 cm) until the state is separated, so
+the first Play after an avatar replacement actually starts; the confirmation and
+status report every moved panel. Authored pins or frozen panels are left alone
+and still report the conflict. The warning also states that `layout_2d` does not
+move cloth in 3D, which addresses the reported workflow where moving pieces on
+the 2D board could not clear the OGC `initial intersection between faces ...`
+rejection.
+
+Observed validation: the CPU-only suite passed 722 tests with one ignored
+preview and no failures, including fifteen `avatar_formats` tests; the eleven
+desktop import UI tests passed; CPU-only and desktop all-target Clippy with
+warnings denied, the desktop build and formatting passed. No GPU or window run.
+
 ## Saved user preferences — 20 November 2026
 
 The native runner now writes its Settings panel and workspace preferences to a
@@ -32,7 +59,7 @@ paths.
 
 Observed validation: the desktop library suite passed 195 tests with 8 ignored;
 strict desktop all-target Clippy and formatting passed. No GPU or native window
-run was performed.
+run was performed.))
 
 ## Static FBX and USD avatar import — 19 November 2026
 

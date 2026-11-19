@@ -46,7 +46,10 @@ const FIRST_SUPPORTED_VERSION: u32 = 7000;
 /// Geometry and loss report for one static FBX document.
 #[derive(Debug)]
 pub struct ImportedAvatar {
+    /// Every static mesh merged; the avatar importer selects which parts collide.
     pub mesh: SurfaceMesh,
+    /// Named per-`Geometry` meshes with model transforms applied, in document order.
+    pub parts: Vec<(String, SurfaceMesh)>,
     pub warnings: Vec<String>,
 }
 
@@ -894,8 +897,7 @@ fn flatten(document: &Document, limits: Limits) -> Result<ImportedAvatar, String
     }
 
     let mut cache: std::collections::HashMap<i64, DMat4> = std::collections::HashMap::new();
-    let mut vertices = Vec::new();
-    let mut triangles = Vec::new();
+    let mut parts: Vec<(String, SurfaceMesh)> = Vec::new();
     let mut dropped = 0usize;
     for geometry in &geometry {
         if geometry.vertices.len() > limits.vertices {
@@ -907,10 +909,7 @@ fn flatten(document: &Document, limits: Limits) -> Result<ImportedAvatar, String
             }
             _ => DMat4::IDENTITY,
         };
-        let base = vertices.len();
-        if base + geometry.vertices.len() > limits.vertices {
-            return Err("Avatar geometry exceeds the import limit".into());
-        }
+        let mut vertices = Vec::with_capacity(geometry.vertices.len());
         for &vertex in &geometry.vertices {
             let p = world.transform_point3(vertex) * settings.scale;
             let p = settings.basis * p;
@@ -922,6 +921,7 @@ fn flatten(document: &Document, limits: Limits) -> Result<ImportedAvatar, String
             }
             vertices.push(p);
         }
+        let mut triangles: Vec<[usize; 3]> = Vec::new();
         let mut polygon_start = 0usize;
         while polygon_start < geometry.polygon_indices.len() {
             let mut end = polygon_start;
@@ -969,7 +969,7 @@ fn flatten(document: &Document, limits: Limits) -> Result<ImportedAvatar, String
                 continue;
             }
             for k in 1..ring.len() - 1 {
-                let triangle = [base + ring[0], base + ring[k], base + ring[k + 1]];
+                let triangle = [ring[0], ring[k], ring[k + 1]];
                 let [a, b, c] = triangle.map(|index| vertices[index]);
                 if (b - a).cross(c - a).length_squared() < 1e-24 {
                     dropped += 1;
@@ -981,9 +981,42 @@ fn flatten(document: &Document, limits: Limits) -> Result<ImportedAvatar, String
                 return Err("Avatar geometry exceeds the import limit".into());
             }
         }
+        if triangles.is_empty() {
+            warnings.push(format!(
+                "Geometry {:?} has no non-degenerate triangles and was skipped.",
+                geometry.name
+            ));
+            continue;
+        }
+        if vertices.len() > limits.vertices || triangles.len() > limits.triangles {
+            return Err("Avatar geometry exceeds the import limit".into());
+        }
+        let model_name = geometry
+            .model
+            .and_then(|id| models.get(&id))
+            .map(|model| model.name.clone())
+            .unwrap_or_else(|| geometry.name.clone());
+        parts.push((
+            short_fbx_name(&model_name),
+            SurfaceMesh {
+                vertices,
+                triangles,
+            },
+        ));
     }
-    if triangles.is_empty() {
-        return Err("The FBX document contains no non-degenerate triangles".into());
+    if parts.is_empty() {
+        return Err("The FBX document contains no supported static mesh geometry".into());
+    }
+    let mut vertices = Vec::new();
+    let mut triangles = Vec::new();
+    for (_, part) in &parts {
+        let base = vertices.len();
+        vertices.extend_from_slice(&part.vertices);
+        triangles.extend(
+            part.triangles
+                .iter()
+                .map(|triangle| triangle.map(|index| base + index)),
+        );
     }
     if dropped > 0 {
         warnings.push(format!(
@@ -999,7 +1032,24 @@ fn flatten(document: &Document, limits: Limits) -> Result<ImportedAvatar, String
         "FBX import keeps static surface positions only: UVs, normals, materials, textures, blend shapes, skinning, animation, cameras and lights are not retained."
             .into(),
     );
-    Ok(ImportedAvatar { mesh, warnings })
+    Ok(ImportedAvatar {
+        mesh,
+        parts,
+        warnings,
+    })
+}
+
+/// Strip the FBX `Model::`/`Geometry::` prefix from a display name.
+fn short_fbx_name(name: &str) -> String {
+    // ASCII documents use `Model::Name`; binary documents separate the name
+    // from its class with `\0\u{1}`.
+    let name = name.rsplit("::").next().unwrap_or(name);
+    let name = name.split('\0').next().unwrap_or(name).trim();
+    if name.is_empty() {
+        "mesh".into()
+    } else {
+        name.to_owned()
+    }
 }
 
 struct Settings {

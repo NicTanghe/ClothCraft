@@ -64,7 +64,10 @@ const INVERTED_OP_PREFIX: &str = "!invert!";
 /// Geometry and loss report for one static USD stage.
 #[derive(Debug)]
 pub struct ImportedAvatar {
+    /// Every visible mesh merged; the avatar importer selects which prims collide.
     pub mesh: SurfaceMesh,
+    /// Named per-prim meshes with the composed transforms applied, in traversal order.
+    pub parts: Vec<(String, SurfaceMesh)>,
     pub warnings: Vec<String>,
 }
 
@@ -133,8 +136,7 @@ pub fn import(stage: &Stage, limits: Limits) -> Result<ImportedAvatar, String> {
         warnings,
         to_y_up,
         scale: meters_per_unit,
-        vertices: Vec::new(),
-        triangles: Vec::new(),
+        parts: Vec::new(),
         dropped_triangles: 0,
         skipped: Skipped::default(),
     };
@@ -163,8 +165,7 @@ struct Collector {
     warnings: Vec<String>,
     to_y_up: DMat4,
     scale: f64,
-    vertices: Vec<DVec3>,
-    triangles: Vec<[usize; 3]>,
+    parts: Vec<(String, SurfaceMesh)>,
     dropped_triangles: usize,
     skipped: Skipped,
 }
@@ -338,17 +339,17 @@ impl Collector {
             ));
         }
 
-        let base = self.vertices.len();
-        if base + points.len() > self.limits.vertices {
+        if points.len() > self.limits.vertices {
             return Err("Avatar geometry exceeds the import limit".into());
         }
+        let mut vertices = Vec::with_capacity(points.len());
         for point in &points {
             let p = world.transform_point3(*point);
             let p = self.to_y_up.transform_point3(p * self.scale);
             if !p.is_finite() {
                 return Err(format!("Mesh {path} has non-finite transformed points"));
             }
-            self.vertices.push(p);
+            vertices.push(p);
         }
         let mut cursor = 0usize;
         let mut local_triangles = Vec::new();
@@ -378,18 +379,31 @@ impl Collector {
                 local_triangles.push(triangle);
             }
         }
-        if self.triangles.len() + local_triangles.len() > self.limits.triangles {
+        if local_triangles.len() > self.limits.triangles {
             return Err("Avatar geometry exceeds the import limit".into());
         }
+        let mut triangles = Vec::with_capacity(local_triangles.len());
         for triangle in local_triangles {
-            let triangle = triangle.map(|i| base + i);
-            let [a, b, c] = triangle.map(|i| self.vertices[i]);
+            let [a, b, c] = triangle.map(|i| vertices[i]);
             if (b - a).cross(c - a).length_squared() < 1e-24 {
                 self.dropped_triangles += 1;
             } else {
-                self.triangles.push(triangle);
+                triangles.push(triangle);
             }
         }
+        if triangles.is_empty() {
+            self.warnings.push(format!(
+                "Mesh {path} has no non-degenerate triangles and was skipped."
+            ));
+            return Ok(());
+        }
+        self.parts.push((
+            path.trim_start_matches('/').to_owned(),
+            SurfaceMesh {
+                vertices,
+                triangles,
+            },
+        ));
         Ok(())
     }
 
@@ -430,19 +444,34 @@ impl Collector {
                 self.skipped.invisible.len()
             ));
         }
-        if self.vertices.is_empty() || self.triangles.is_empty() {
+        if self.parts.is_empty() {
             return Err("The USD stage contains no visible triangle mesh".into());
         }
+        let mut vertices = Vec::new();
+        let mut triangles = Vec::new();
+        for (_, part) in &self.parts {
+            let base = vertices.len();
+            vertices.extend_from_slice(&part.vertices);
+            triangles.extend(
+                part.triangles
+                    .iter()
+                    .map(|triangle| triangle.map(|index| base + index)),
+            );
+        }
         let mesh = SurfaceMesh {
-            vertices: self.vertices,
-            triangles: self.triangles,
+            vertices,
+            triangles,
         };
         mesh.validate()?;
         warnings.push(
             "USD import keeps static surface positions only: animation, skinning, UVs, materials, textures, normals, instancing and camera/light prims are not retained."
                 .into(),
         );
-        Ok(ImportedAvatar { mesh, warnings })
+        Ok(ImportedAvatar {
+            mesh,
+            parts: self.parts,
+            warnings,
+        })
     }
 }
 

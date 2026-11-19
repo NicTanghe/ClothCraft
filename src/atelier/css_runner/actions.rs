@@ -132,6 +132,7 @@ pub enum RunnerUiOp {
     ImportChoose,
     ImportRefresh,
     ImportToggleOutline(usize),
+    ImportToggleMesh(usize),
     ImportSetFabric(String),
     ImportToggleAck,
     ImportApply,
@@ -633,6 +634,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         }
         RunnerUiOp::ImportRefresh => state.refresh_import(),
         RunnerUiOp::ImportToggleOutline(index) => state.toggle_import_outline(index),
+        RunnerUiOp::ImportToggleMesh(index) => state.toggle_import_mesh(index),
         RunnerUiOp::ImportSetFabric(fabric) => state.set_import_fabric(fabric),
         RunnerUiOp::ImportToggleAck => state.toggle_import_acknowledged(),
         RunnerUiOp::ImportApply => state.apply_import(),

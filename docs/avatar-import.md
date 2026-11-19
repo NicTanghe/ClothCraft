@@ -55,6 +55,12 @@ Save/Discard/Cancel document-close flow; a modal must not bypass that protection
   subdivision mesh is read as its control cage and reported, and meshes with a
   non-default `purpose` are imported with a report because proxy/render helper
   geometry may then be included.
+- Multi-mesh sources are listed in the confirmation with each mesh's name,
+  vertex and triangle count (FBX `Geometry` objects and USD `Mesh` prims). The
+  mesh with the most triangles is selected by default as the collider; enable any additional
+  surface that should collide and leave helper meshes such as Mixamo's
+  `Alpha_Joints` off. Deselecting every mesh is rejected. OBJ and glTF/GLB
+  import as a single mesh.
 - Only surface positions and triangles are retained. Materials, textures, UVs,
   authored normals and object identities are lost. This is an avatar collider
   import, not a material-aware interchange workflow. Polygon faces use fan
@@ -72,6 +78,18 @@ template replacement and Save As. Save/recovery use the existing v1 portable
 asset writer, copying the OBJ into the project's adjacent `.assets` directory.
 Saved projects therefore survive temporary-directory cleanup and relocation.
 Keep the project JSON and its `.assets` directory together.
+
+Before installation the candidate scene is compiled against the current project
+and checked with the same initial-state validation the VBD/OGC solver uses.
+When a panel starts inside the new avatar - including a triangle crossing with
+no vertex inside, which is hidden behind the body - that panel is rigidly moved
+outward along Z in 1 cm steps, up to 8 cm, until the initial state is separated.
+The confirmation and the status line report which panels moved and by how much,
+together with a note that the 2D board layout does not move cloth in 3D.
+Authored pins or frozen panels are never moved automatically: those cases keep
+the arrangement, report the conflict and still require manual adjustment. A
+multi-mesh source is re-compiled when the reviewer toggles a mesh, so the check
+always reflects the current collider selection.
 
 Preparation and compilation are synchronous CPU operations; dense assets can
 pause the UI. The existing glTF resource limits apply to the expanded geometry:
@@ -124,3 +142,11 @@ warnings` passed. The desktop `cargo build --locked -j 2` and all-target desktop
 Clippy with warnings denied passed, and the nine
 `atelier::css_runner::tests::imports` UI tests passed through the production
 installer. `cargo fmt --all --check` passed. No GPU or native window ran.
+
+Local validation, 20 November 2026 (multi-mesh colliders and arrangement
+preflight): the CPU-only suite passed 722 tests with one ignored opt-in preview
+and no failures, including fifteen `avatar_formats` tests and the new
+multi-mesh/conflict regressions; the eleven
+`atelier::css_runner::tests::imports` desktop UI tests passed through the
+production installer. CPU-only and desktop all-target Clippy with warnings
+denied, the desktop build and `cargo fmt --all --check` passed.
