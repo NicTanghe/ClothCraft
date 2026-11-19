@@ -39,7 +39,7 @@ fn body_outline_uses_the_uncached_drawing_layer() {
     let state = selection_test_state(dir.path());
     assert!(state.show_body_outline);
     assert!(
-        state.body_outline.len() >= 3,
+        state.body_outline.iter().any(|ring| ring.len() >= 3),
         "a closed triangle avatar should expose its boundary"
     );
     let (paths, _) = render_runner_2d_paths(&state);
@@ -47,6 +47,17 @@ fn body_outline_uses_the_uncached_drawing_layer() {
         .iter()
         .find(|path| path.class.split_whitespace().any(|c| c == "body-outline"))
         .expect("body outline path");
+    assert!(
+        outline.path.paint().fill.is_some(),
+        "silhouette must be filled"
+    );
+    assert!(
+        outline
+            .path
+            .commands()
+            .iter()
+            .any(|command| matches!(command, cssimpler::core::PathCommand::Close))
+    );
     assert!(
         !outline.background,
         "silhouette stays on the uncached drawing layer"

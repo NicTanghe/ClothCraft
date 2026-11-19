@@ -1,81 +1,71 @@
-//! Basic gray body silhouette for the 2D pattern board.
+//! Filled front silhouette for the 2D pattern board.
 //!
-//! This is an exploratory projection, not a fitted 2D/3D mapping. Avatar world
-//! XY is placed using the first panel's board layout and 3D translation, so the
-//! outline moves and zooms with the board but does not claim to align with every
-//! panel's placement. Back faces are ignored; an edge between a front-facing and
-//! a back-facing projected triangle is treated as a silhouette segment.
+//! The prototype registers avatar world XY against the first panel's board
+//! layout and 3D translation. The projection is independent of the 3D camera.
 
 use clothcraft::avatar::SurfaceMesh;
 use clothcraft::garment::GarmentTemplate;
-use std::collections::HashMap;
+use i_overlay::{
+    core::fill_rule::FillRule, core::overlay_rule::OverlayRule, float::overlay::FloatOverlay,
+};
 
-/// Visible silhouette edges in board millimetres.
-pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> Vec<[(f64, f64); 2]> {
+/// Closed coverage contours in board millimetres. Holes have opposite winding
+/// to exterior contours so a single native path fills the entire silhouette.
+pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> Vec<Vec<(f64, f64)>> {
     let Some(panel) = template.panels.first() else {
         return Vec::new();
     };
-    // Fixed front projection: world X, and world Y flipped because board Y grows
-    // downward. Anchored to the first panel's board placement; no camera fitting
-    // and no panel-by-panel alignment.
     let anchor_world = panel.placement.translation;
-    let anchor_board = clothcraft::authoring::layout(template, 0) * 1000.0;
-    let projected: Vec<(f64, f64)> = surface
+    let anchor_board = clothcraft::authoring::layout(template, 0);
+    let projected: Vec<[f64; 2]> = surface
         .vertices
         .iter()
         .map(|p| {
-            (
-                anchor_board.x + (p.x - anchor_world.x) * 1000.0,
-                anchor_board.y - (p.y - anchor_world.y) * 1000.0,
-            )
+            [
+                anchor_board.x + (p.x - anchor_world.x),
+                anchor_board.y - (p.y - anchor_world.y),
+            ]
         })
         .collect();
 
-    // Edge -> up to two adjacent triangle orientations. A sign change is a
-    // silhouette; a single use is an open boundary. More than two uses are
-    // non-manifold and ignored rather than guessed at.
-    let mut edges: HashMap<(usize, usize), [Option<i8>; 2]> = HashMap::new();
-    for triangle in &surface.triangles {
-        let [ia, ib, ic] = *triangle;
-        let (Some(a), Some(b), Some(c)) = (projected.get(ia), projected.get(ib), projected.get(ic))
+    let mut triangles = Vec::with_capacity(surface.triangles.len());
+    for &[ia, ib, ic] in &surface.triangles {
+        let (Some(&a), Some(&b), Some(&c)) =
+            (projected.get(ia), projected.get(ib), projected.get(ic))
         else {
             continue;
         };
-        let area = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
-        if !area.is_finite() || area.abs() < 1e-9 {
+        let area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        if !area.is_finite()
+            || area == 0.0
+            || [a, b, c]
+                .into_iter()
+                .flatten()
+                .any(|v| !((1000.0 * v) as f32).is_finite())
+        {
             continue;
         }
-        let sign = if area > 0.0 { 1 } else { -1 };
-        for (i, j) in [(ia, ib), (ib, ic), (ic, ia)] {
-            let key = (i.min(j), i.max(j));
-            let slot = edges.entry(key).or_insert([None, None]);
-            if slot[0].is_none() {
-                slot[0] = Some(sign);
-            } else if slot[1].is_none() {
-                slot[1] = Some(sign);
-            }
-        }
+        // Give every projected face the same winding so overlaps add coverage
+        // even when the adjacent or occluding face points the other way.
+        triangles.push(if area > 0.0 {
+            vec![a, b, c]
+        } else {
+            vec![a, c, b]
+        });
     }
-
-    let mut segments = Vec::new();
-    for ((i, j), signs) in edges {
-        let visible = match signs {
-            [Some(_), None] => true,
-            [Some(a), Some(b)] => a != b,
-            _ => false,
-        };
-        if visible && let (Some(a), Some(b)) = (projected.get(i), projected.get(j)) {
-            segments.push([*a, *b]);
-        }
+    if triangles.is_empty() {
+        return Vec::new();
     }
-    // Stable output keeps the headless board tests deterministic.
-    segments.sort_by(|a, b| {
-        (a[0].0, a[0].1, a[1].0, a[1].1)
-            .partial_cmp(&(b[0].0, b[0].1, b[1].0, b[1].1))
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    segments.truncate(20_000);
-    segments
+    FloatOverlay::with_subj(&triangles)
+        .overlay(OverlayRule::Subject, FillRule::NonZero)
+        .into_iter()
+        .flatten()
+        .map(|ring| {
+            ring.into_iter()
+                .map(|[x, y]| (x * 1000.0, y * 1000.0))
+                .collect()
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -83,26 +73,54 @@ mod tests {
     use super::*;
     use glam::DVec3;
 
-    fn template() -> GarmentTemplate {
-        GarmentTemplate::two_panel_demo()
-    }
-
     #[test]
-    fn front_and_back_faces_produce_the_outer_silhouette() {
-        // Two triangles sharing an edge, folded so one faces the viewer and one
-        // faces away. The shared edge is a silhouette; the other four are open.
+    fn coverage_preserves_the_hole_and_unions_reversed_overlapping_faces() {
+        // Four quads surround a 2x2 hole inside a 4x4 square. The last
+        // triangle lies over one face, at a different depth and winding.
+        let mut vertices = [
+            [0., 0.],
+            [4., 0.],
+            [4., 4.],
+            [0., 4.],
+            [1., 1.],
+            [3., 1.],
+            [3., 3.],
+            [1., 3.],
+        ]
+        .map(|[x, y]| DVec3::new(x, y, 0.))
+        .to_vec();
+        vertices.extend([
+            vertices[0] + DVec3::Z,
+            vertices[5] + DVec3::Z,
+            vertices[1] + DVec3::Z,
+        ]);
         let surface = SurfaceMesh {
-            vertices: vec![
-                DVec3::new(0., 0., 0.),
-                DVec3::new(1., 0., 0.),
-                DVec3::new(0., 1., 0.),
-                DVec3::new(1., 1., -1.),
+            vertices,
+            triangles: vec![
+                [0, 1, 5],
+                [0, 5, 4],
+                [1, 2, 6],
+                [1, 6, 5],
+                [2, 3, 7],
+                [2, 7, 6],
+                [3, 0, 4],
+                [3, 4, 7],
+                [8, 9, 10],
             ],
-            triangles: vec![[0, 1, 2], [1, 0, 3]],
         };
-        let segments = build(&surface, &template());
-        assert_eq!(segments.len(), 5);
-        assert!(segments.iter().all(|[a, b]| a != b));
+        let contours = build(&surface, &GarmentTemplate::two_panel_demo());
+        assert_eq!(contours.len(), 2);
+        let area = |ring: &[(f64, f64)]| {
+            ring.iter()
+                .zip(ring.iter().cycle().skip(1))
+                .map(|(&(ax, ay), &(bx, by))| ax * by - ay * bx)
+                .sum::<f64>()
+                / 2.0
+        };
+        let a = area(&contours[0]);
+        let b = area(&contours[1]);
+        assert!(a * b < 0.0, "hole winding must oppose exterior winding");
+        assert!(((a + b).abs() / 1e6 - 12.0).abs() < 1e-6);
     }
 
     #[test]
@@ -111,8 +129,8 @@ mod tests {
             vertices: vec![],
             triangles: vec![],
         };
-        assert!(build(&surface, &template()).is_empty());
-        let mut template = template();
+        assert!(build(&surface, &GarmentTemplate::two_panel_demo()).is_empty());
+        let mut template = GarmentTemplate::two_panel_demo();
         template.panels.clear();
         assert!(build(&surface, &template).is_empty());
     }

@@ -6,8 +6,9 @@ The 2D pattern board can show a gray avatar silhouette behind the pieces, with a
 **Body** toggle in the board header. This is a deliberately small prototype:
 avatar world X/Y is projected orthographically, Y is flipped for the board's
 downward axis, and the result is anchored to the first panel's board layout and
-3D translation. Edges between front-facing and back-facing projected triangles
-form the outline; open edges are included, non-manifold edges are ignored.
+3D translation. The projected triangles form one coverage shape with a
+translucent light-gray fill and a subtle outline. The fill preserves gaps
+and keeps the same opacity where projected faces overlap.
 
 Limits: this is not fitted to individual panels, does not use the 3D camera, and
 is recomputed only when the state is created or a static avatar is imported.

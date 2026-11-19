@@ -315,25 +315,29 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
         }
     };
 
-    // Basic gray avatar silhouette: front projection in board millimetres,
-    // anchored by the first panel. See body_outline.rs for the limits.
+    // Draw the full projected coverage once, behind the pieces. Keeping it
+    // off the cached background lets Body toggle without repainting the grid.
     if state.show_body_outline && !state.body_outline.is_empty() {
-        let outline_color = if is_dark {
-            Some(Color::rgba(148, 163, 184, 150))
+        let (fill_color, outline_color) = if is_dark {
+            (
+                Color::rgba(214, 218, 224, 56),
+                Color::rgba(148, 163, 184, 150),
+            )
         } else {
-            Some(Color::rgba(100, 116, 139, 150))
+            (
+                Color::rgba(156, 163, 175, 58),
+                Color::rgba(100, 116, 139, 150),
+            )
         };
-        let mut commands = Vec::new();
-        for [a, b] in &state.body_outline {
-            commands.extend(polyline(&[*a, *b], false));
-        }
-        // Keep the silhouette on the uncached drawing layer, inserted before
-        // the panels. Marking it as cached background would invalidate the grid
-        // raster on every UI rebuild.
+        let commands = state
+            .body_outline
+            .iter()
+            .flat_map(|ring| polyline(ring, true))
+            .collect();
         nodes.push(BoardPath::new(
             commands,
-            None,
-            outline_color,
+            Some(fill_color),
+            Some(outline_color),
             1.2 * px,
             "body-outline",
         ));

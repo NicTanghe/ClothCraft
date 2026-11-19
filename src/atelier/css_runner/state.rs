@@ -78,7 +78,7 @@ pub struct CssRunnerState {
     pub theme: Theme,
     pub shading: clothcraft::usd_scene::ShadingMode,
     pub show_body_outline: bool,
-    pub body_outline: Vec<[(f64, f64); 2]>,
+    pub body_outline: Vec<Vec<(f64, f64)>>,
     pub layout_mode: ViewLayoutMode,
     pub active_category: ObjectCategory,
     pub active_3d_tool: String,
