@@ -1360,12 +1360,9 @@ mod tests {
                 .collect();
             assert!(!outline.is_empty());
             let mut max = 0.0f64;
-            for control in boundary.points.chunks_exact(4) {
+            for control in boundary.points.as_chunks::<4>().0 {
                 for step in 0..=32 {
-                    let p = cubic_at(
-                        [control[0], control[1], control[2], control[3]],
-                        step as f64 / 32.0,
-                    );
+                    let p = cubic_at(*control, step as f64 / 32.0);
                     let distance = outline
                         .iter()
                         .map(|&(a, b)| point_segment_distance(p, view.points[a], view.points[b]))
