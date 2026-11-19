@@ -23,7 +23,7 @@ fn bundled_catalog_has_unique_ids_provenance_and_finite_previews() {
 }
 #[test]
 fn external_templates_are_validated_and_never_inherit_bundled_license() {
-    let bytes = include_bytes!("../examples/templates/two-panel.json");
+    let bytes = include_bytes!("fixtures/legacy-templates/two-panel.json");
     let selection = Selection::external(bytes, "user-pattern.json".into()).unwrap();
     assert!(selection.license.contains("Unverified"));
     assert_eq!(selection.source, "user-pattern.json");

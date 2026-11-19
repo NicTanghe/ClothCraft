@@ -79,7 +79,7 @@ New tests cover analytical constant/linear gap integration on different meshes; 
 Actually executed command, release binary without desktop:
 
 ```powershell
-.\target\release\cloth-template.exe simulate examples/templates/two-panel.json --steps 30 --threads 2 --output output/template-simulation
+.\target\release\cloth-template.exe simulate examples/templates/two-panel.usda --steps 30 --threads 2 --output output/template-simulation
 ```
 
 | Measurement | Result |

@@ -239,7 +239,7 @@ Rotation validation, 14 October 2026: all 78 CPU tests and the 41-action native 
 
 During simulation, **Properties → Simulation → Diagnostics** displays maximum seam gap and positive axial extension (95% of rest area and maximum). Large gap means assembly is incomplete; persistent excessive extension may indicate incompatible sewing, material choice or insufficient convergence. The Simulation tab allows up to 128 iterations. The default is now 16; adaptive initialization and the larger solve budget address artificial gravity stretch without changing mass or gravity.
 
-Measured outcomes and example captures: [board validation](board-validation.md). The reusable [curved-panels fixture](../examples/templates/curved-panels.json) is a saved result from the native drawing workflow.
+Measured outcomes and example captures: [board validation](board-validation.md). The reusable [curved-panels fixture](../examples/templates/curved-panels.usda) is a saved result from the native drawing workflow.
 
 ## Numeric editing and view controls
 

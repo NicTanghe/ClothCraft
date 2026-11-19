@@ -7,7 +7,7 @@ use clothcraft::{
 use std::{
     fs::{self, File},
     io::{BufWriter, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 #[derive(Parser)]
@@ -42,6 +42,11 @@ enum Command {
         #[arg(long, default_value = "output/template-bake")]
         output: PathBuf,
     },
+    /// Re-save a template as USD. JSON templates are import-only.
+    Convert {
+        input: PathBuf,
+        output: PathBuf,
+    },
     Simulate {
         template: PathBuf,
         #[arg(long, default_value = "output/template-simulation")]
@@ -60,10 +65,14 @@ enum Command {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Args::parse().command {
         Command::Example { output } => {
+            if !clothcraft::document::is_usd_path(&output) {
+                return Err("Templates are saved as USD; use a .usda path".into());
+            }
             let t = GarmentTemplate::two_panel_demo();
             t.compile()?;
+            let text = clothcraft::usd_document::template_to_usda(&t)?;
             let mut file = File::create_new(output)?;
-            file.write_all(serde_json::to_string_pretty(&t)?.as_bytes())?;
+            file.write_all(text.as_bytes())?;
         }
         Command::Validate { template } => {
             let t = GarmentTemplate::load(&template)?;
@@ -83,15 +92,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Command::AuditSewing { template, project } => {
             // The regular loader compiles first and would hide all but the first
             // sewing error. Geometry validation remains inside the audit.
-            let json = fs::read_to_string(template)?;
             let template: GarmentTemplate = if project {
-                let project: clothcraft::fitting::FittingProject = serde_json::from_str(&json)?;
+                let project = load_uncompiled_project(&template)?;
                 if project.version != 1 {
                     return Err("Unsupported fitting project version".into());
                 }
                 project.template
             } else {
-                serde_json::from_str(&json)?
+                load_uncompiled_template(&template)?
             };
             let report = clothcraft::garment::seam::audit::report(&template)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
@@ -104,6 +112,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let g = t.compile()?;
             export::write_artifacts(&t, &g, &g.initial_state, &output)?;
             println!("CPU artifacts written to {}", output.display());
+        }
+        Command::Convert { input, output } => {
+            let template = GarmentTemplate::load(&input)?;
+            template.save(&output)?;
+            println!(
+                "Converted {} to {} ({} panels)",
+                input.display(),
+                output.display(),
+                template.panels.len()
+            );
         }
         Command::Simulate {
             template,
@@ -188,4 +206,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+fn load_uncompiled_template(path: &Path) -> Result<GarmentTemplate, String> {
+    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    if clothcraft::document::is_usd_path(path) {
+        clothcraft::usd_document::template_from_usda(&text)
+    } else {
+        serde_json::from_str(&text).map_err(|error| error.to_string())
+    }
+}
+
+fn load_uncompiled_project(path: &Path) -> Result<clothcraft::fitting::FittingProject, String> {
+    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    if clothcraft::document::is_usd_path(path) {
+        clothcraft::usd_document::project_from_usda(&text)
+    } else {
+        serde_json::from_str(&text).map_err(|error| error.to_string())
+    }
 }

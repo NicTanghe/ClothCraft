@@ -6,7 +6,7 @@ not the distance between draped surfaces. This is a construction diagnostic,
 not a fit-quality score or a guarantee that a garment will settle.
 
 ```powershell
-cargo run --locked --no-default-features -j 2 --bin cloth-template -- audit-sewing examples/templates/two-panel.json
+cargo run --locked --no-default-features -j 2 --bin cloth-template -- audit-sewing examples/templates/two-panel.usda
 ```
 
 The default input is **GarmentTemplate JSON**, such as the exported

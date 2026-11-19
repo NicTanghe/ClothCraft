@@ -61,7 +61,7 @@ squash merge `0d5384acc55413d44a60bb2901b3d433c4e0d89f`.
 All three logs record `rustc 1.99.1 (58cf8f9c3 2026-10-13)` and
 `cargo 1.99.1 (5f94df478 2026-08-27)`. Each passed **326 CPU tests**
 (sum of the successful test-harness counts), linked the release desktop/CLI
-binaries, validated `examples/templates/two-panel.json`, and uploaded its
+binaries, validated `examples/templates/two-panel.usda`, and uploaded its
 artifacts. The template reported 2 panels, 60 vertices, 80 triangles and no
 warnings on each platform. These observations come from the completed job
 logs, not from intended workflow commands or an unrelated earlier revision.

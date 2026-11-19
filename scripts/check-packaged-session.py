@@ -13,6 +13,115 @@ import threading
 PROTOCOL = "clothcraft.authoring"
 MAX_REPLY = 16 * 1024 * 1024
 
+# Protocol fixture, not a shipped default: the packaged templates are USD.
+PROTOCOL_TEMPLATE = r"""{
+  "format": "clothcraft-template",
+  "version": 1,
+  "name": "Two panels / nonmatching seam",
+  "fabrics": [
+    {
+      "id": "woven-demo",
+      "name": "Uncalibrated woven reference",
+      "properties": {
+        "warp": 350.0,
+        "weft": 180.0,
+        "shear": 45.0,
+        "compression_ratio": 0.15,
+        "compression_transition": 0.005,
+        "bend_warp": 0.00008,
+        "bend_weft": 0.00004,
+        "density": 0.2,
+        "thickness": 0.001
+      }
+    }
+  ],
+  "panels": [
+    {
+      "id": "left",
+      "name": "Left panel",
+      "pattern": {
+        "width": 0.4,
+        "height": 0.6,
+        "nx": 3,
+        "ny": 4
+      },
+      "fabric": "woven-demo",
+      "grain_degrees": 0.0,
+      "placement": {
+        "translation": [
+          -0.4,
+          1.0,
+          0.0
+        ],
+        "rotation_degrees": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pins": [
+        "top_left",
+        "top_right"
+      ]
+    },
+    {
+      "id": "right",
+      "name": "Right panel",
+      "pattern": {
+        "width": 0.4,
+        "height": 0.6,
+        "nx": 4,
+        "ny": 7
+      },
+      "fabric": "woven-demo",
+      "grain_degrees": 45.0,
+      "placement": {
+        "translation": [
+          0.08,
+          1.0,
+          0.03
+        ],
+        "rotation_degrees": [
+          8.0,
+          12.0,
+          0.0
+        ]
+      },
+      "pins": []
+    }
+  ],
+  "seams": [
+    {
+      "id": "centre-seam",
+      "a": {
+        "panel": "left",
+        "side": "right",
+        "range": [
+          0.0,
+          1.0
+        ]
+      },
+      "b": {
+        "panel": "right",
+        "side": "left",
+        "range": [
+          0.0,
+          1.0
+        ]
+      },
+      "reverse_b": true,
+      "notches": [
+        [
+          0.5,
+          0.5
+        ]
+      ],
+      "stiffness": 5000.0,
+      "allow_ease": false
+    }
+  ]
+}"""
+
 
 def require(condition, message):
     if not condition:
@@ -135,7 +244,7 @@ def check_package(package):
         executable = root / ("cloth-session.exe" if os.name == "nt" else "cloth-session")
         require(executable.is_file(), "Artifact is missing cloth-session")
         command = [str(executable)]
-        template = json.loads((root / "examples/templates/two-panel.json").read_text(encoding="utf-8"))
+        template = json.loads(PROTOCOL_TEMPLATE)
         with client(command, root) as c:
             s = open_template(c, template)
             original_ids = [p["id"] for p in s["template"]["panels"]]

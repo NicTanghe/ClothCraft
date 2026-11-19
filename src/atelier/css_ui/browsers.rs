@@ -186,7 +186,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 4,
         license: "MIT",
-        source: "ClothCraft / examples/templates/tshirt.json",
+        source: "ClothCraft / examples/templates/tshirt.usda",
     },
     BundledTemplateEntry {
         id: "dress",
@@ -195,7 +195,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 4,
         license: "MIT",
-        source: "ClothCraft / examples/templates/dress.json",
+        source: "ClothCraft / examples/templates/dress.usda",
     },
     BundledTemplateEntry {
         id: "apron",
@@ -204,7 +204,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 3,
         seam_count: 4,
         license: "MIT",
-        source: "ClothCraft / examples/templates/apron.json",
+        source: "ClothCraft / examples/templates/apron.usda",
     },
     BundledTemplateEntry {
         id: "two-panel",
@@ -213,7 +213,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 1,
         license: "MIT",
-        source: "ClothCraft / examples/templates/two-panel.json",
+        source: "ClothCraft / examples/templates/two-panel.usda",
     },
     BundledTemplateEntry {
         id: "local-ease",
@@ -222,7 +222,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 1,
         license: "MIT",
-        source: "ClothCraft / examples/templates/local-ease.json",
+        source: "ClothCraft / examples/templates/local-ease.usda",
     },
     BundledTemplateEntry {
         id: "curved-panels",
@@ -231,7 +231,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 2,
         license: "MIT",
-        source: "ClothCraft / examples/templates/curved-panels.json",
+        source: "ClothCraft / examples/templates/curved-panels.usda",
     },
     BundledTemplateEntry {
         id: "partial-chain",
@@ -240,7 +240,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 2,
         license: "MIT",
-        source: "ClothCraft / examples/templates/partial-chain.json",
+        source: "ClothCraft / examples/templates/partial-chain.usda",
     },
 ];
 

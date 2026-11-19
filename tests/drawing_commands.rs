@@ -105,7 +105,7 @@ fn serde_round_trip(template: &GarmentTemplate) -> GarmentTemplate {
 
 fn file_round_trip(template: &GarmentTemplate, tag: &str) -> GarmentTemplate {
     let path = std::env::temp_dir().join(format!(
-        "clothcraft-drawing-{tag}-{}.json",
+        "clothcraft-drawing-{tag}-{}.usda",
         std::process::id()
     ));
     template.save(&path).unwrap();
@@ -197,7 +197,7 @@ fn millimetres_convert_to_metres_exactly() {
 fn existing_fixtures_keep_their_content_and_gain_no_targets() {
     let mut checked = 0;
     let mut byte_drift = Vec::new();
-    for entry in std::fs::read_dir("examples/templates").unwrap() {
+    for entry in std::fs::read_dir("tests/fixtures/legacy-templates").unwrap() {
         let path = entry.unwrap().path();
         if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
             continue;
@@ -240,8 +240,8 @@ fn existing_fixtures_keep_their_content_and_gain_no_targets() {
     assert_eq!(
         byte_drift,
         vec![
-            "examples/templates/curved-panels.json".to_string(),
-            "examples/templates/local-ease.json".to_string()
+            "tests/fixtures/legacy-templates/curved-panels.json".to_string(),
+            "tests/fixtures/legacy-templates/local-ease.json".to_string()
         ],
         "unexpected fixture byte drift"
     );
@@ -395,7 +395,7 @@ fn split_preserves_area_and_perimeter() {
 #[test]
 fn editing_an_anchor_keeps_implicit_piece_positions() {
     let mut before = GarmentTemplate::load(std::path::Path::new(
-        "examples/templates/curved-panels.json",
+        "examples/templates/curved-panels.usda",
     ))
     .unwrap();
     before.seams.clear();
@@ -433,7 +433,7 @@ fn editing_an_anchor_keeps_implicit_piece_positions() {
 #[test]
 fn splitting_keeps_the_material_frame_and_implicit_board_layout() {
     let mut before = GarmentTemplate::load(std::path::Path::new(
-        "examples/templates/curved-panels.json",
+        "examples/templates/curved-panels.usda",
     ))
     .unwrap();
     before.seams.clear();
