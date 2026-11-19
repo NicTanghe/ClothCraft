@@ -224,12 +224,12 @@ display mesh shaded only. Because the stroke follows the authored cage, no
 ribbon quads, lifts or normals are published, accepted solver steps do not
 re-author overlay geometry, and the stage never contains a `/ClothWire` mesh.
 
-The stroke is a solid 2 px band in the previous overlay colour. It is centred on
-each edge, so at a silhouette it covers both the surface and the background
-behind it. The toggle is view-only state: it is not saved in the document, never
-feeds physics, and reaches the viewport through a shared flag that wakes the
-on-demand viewport when it changes. This is a diagnostic overlay, not a measured
-performance feature.
+The stroke is a solid band whose colour and width come from the Settings panel
+(default 2 px, Ink); it is centred on each edge, so at a silhouette it covers
+both the surface and the background behind it. The toggle is view-only state: it
+is not saved in the document, never feeds physics, and reaches the viewport
+through a shared settings value that wakes the on-demand viewport when it
+changes. This is a diagnostic overlay, not a measured performance feature.
 
 The native preview also includes a static display mesh for the collision surface:
 the loaded mannequin in the fitting workspace and a tessellated analytic sphere

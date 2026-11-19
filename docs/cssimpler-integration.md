@@ -166,29 +166,41 @@ The fitting runner's implementation is grouped by state/actions, editing, board,
 input and UI category. See [the module map](css-runner-structure.md) when locating
 code; its public `atelier::css_runner` entry points remain available.
 
-## Settings and 2D zoom speed
+## Settings, 2D zoom speed and wireframe style
 
 The fitting editor has **Settings** immediately after **Export** in the top bar.
-Its only entry is **2D zoom speed**, for mouse-wheel and trackpad zoom. The default
-is 1.5× the earlier sensitivity (one positive wheel line changes zoom by 4.5%
-instead of 3%). The −/+ controls adjust it in 0.25 increments between 0.25× and
-4×; Reset restores 1.5×. Changes apply immediately to the current editor instance.
-This initial setting is session-local: it is not written into garment documents
-or retained between launches. Toolbar/keyboard zoom steps and 3D zoom retain
-their existing behavior.
+It holds **2D zoom speed** and **3D wireframe**.
+
+**2D zoom speed** covers mouse-wheel and trackpad zoom. The default is 1.5× the
+earlier sensitivity (one positive wheel line changes zoom by 4.5% instead of
+3%). The −/+ controls adjust it in 0.25 increments between 0.25× and 4×; Reset
+restores 1.5×.
+
+**3D wireframe** sets the cloth overlay's colour and thickness. The colour
+button cycles five presets (Ink, White, Cyan, Amber, Red) and starts on Ink, the
+colour the former ribbon overlay used. The −/+ controls change the stroke width
+by 1 px between 1 and 8 px, defaulting to 2 px; Reset restores the default colour
+and width. These controls change the stroke only — the separate 3D header icon
+still shows and hides the wireframe, and turning it on keeps the chosen style.
+
+Both settings apply immediately to the current editor instance and are
+session-local: they are not written into garment documents or retained between
+launches. Toolbar/keyboard zoom steps and 3D zoom retain their existing
+behavior.
 
 Close, Escape or a click outside dismisses the panel. Board pointer/wheel input
 and editor keyboard shortcuts are blocked while it is open; settings do not
 create history entries or mark the document modified. Opening the panel also
 closes the solver menu/palette and clears pending edge double-click tracking.
-The closed panel builds no menu nodes; the feature retains just an open flag and
-a numeric speed value in runner state, with existing per-instance operation
-queues handling its controls.
+The closed panel builds no menu nodes; the feature retains just an open flag, a
+numeric speed value, and the wireframe colour index and width in runner state,
+with existing per-instance operation queues handling its controls.
 
 Headless settings tests click the real controls at 1600×980 and 1280×800, check
 Close/Escape/outside-click dismissal, ensure modal input does not edit the board,
 and verify line/pixel scroll equivalence, cursor anchoring, speed/zoom bounds,
-Reset and unchanged 3D zoom. The complete desktop suite passes 775 tests (27
-opt-in checks ignored); CPU-only passes 658 (one ignored). Strict desktop/CPU
-Clippy, build, formatting and all eight factory tests pass. No native-window or
-GPU acceptance was run for this settings change.
+Reset and unchanged 3D zoom. They also verify that the wireframe colour and
+width controls reach the shared viewport settings, clamp at both limits and
+survive the overlay toggle. Strict desktop/CPU Clippy, build, formatting and all
+eight factory tests pass. No native-window or GPU acceptance was run for these
+settings changes.

@@ -10,7 +10,6 @@ use clothcraft::garment::presets::GarmentKind;
 use clothcraft::gpu_avbd::ContactMethod;
 use clothcraft::vbd::VbdMetrics;
 use cssimpler::renderer::FrameInfo;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 #[test]
@@ -803,6 +802,8 @@ fn viewport_wireframe_toggle_strokes_only_garment_panels() {
         frame_index: 0,
     });
 
+    let shared = || *toggle.lock().unwrap_or_else(|e| e.into_inner());
+
     // The display stage carries the garment panels and the collider, and no
     // longer a ribbon wireframe mesh: the stroke lives in the GPU renderer.
     let usda = std::fs::read_to_string(output.join("runner_preview.usda")).expect("read stage");
@@ -811,7 +812,9 @@ fn viewport_wireframe_toggle_strokes_only_garment_panels() {
     assert!(!usda.contains("ClothWire"));
 
     assert!(!app.state().wireframe);
-    assert!(!toggle.load(Ordering::Relaxed));
+    assert!(!shared().enabled);
+    assert_eq!(shared().colour, 0);
+    assert_eq!(shared().width_px, 2.0);
     let ui = super::super::build_runner_ui(app.state());
     assert_eq!(
         find_title(&ui, "wireframe-toggle"),
@@ -833,7 +836,7 @@ fn viewport_wireframe_toggle_strokes_only_garment_panels() {
         frame_index: 1,
     });
     assert!(app.state().wireframe);
-    assert!(toggle.load(Ordering::Relaxed));
+    assert!(shared().enabled);
     let ui = super::super::build_runner_ui(app.state());
     assert_eq!(
         find_title(&ui, "wireframe-toggle"),
@@ -854,7 +857,7 @@ fn viewport_wireframe_toggle_strokes_only_garment_panels() {
         frame_index: 2,
     });
     assert!(!app.state().wireframe);
-    assert!(!toggle.load(Ordering::Relaxed));
+    assert!(!shared().enabled);
 }
 
 fn find_title<'a>(node: &'a cssimpler::core::Node, id: &str) -> Option<&'a str> {

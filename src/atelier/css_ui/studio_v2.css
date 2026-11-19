@@ -1842,6 +1842,7 @@ button {
 .settings-controls { display: flex; align-items: center; gap: 6px; }
 .settings-hint { font-size: 10px; color: var(--text-muted); }
 .settings-body-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.settings-value { font-size: 12px; min-width: 46px; text-align: center; }
 
 /* Adjustable numbers share native typing and vertical scrubbing. */
 .cad-number-input {

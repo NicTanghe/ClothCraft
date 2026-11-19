@@ -1,5 +1,6 @@
 //! Editor state and simulation/selection state helpers.
 
+use super::super::viewport_wireframe::WireframeSettings;
 use super::super::worker::{self, Latest, Work};
 use super::super::{DocumentFiles, perf};
 use super::actions::RunnerAction;
@@ -19,7 +20,7 @@ use clothcraft::vbd::{VbdMetrics, VbdSettings};
 use cssimpler::ActionQueue;
 use cssimpler::frame_drag::FrameAlignedDrag;
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
 
 pub(super) const DEFAULT_2D_ZOOM_SPEED: f64 = 1.5;
@@ -42,9 +43,13 @@ pub struct CssRunnerState {
     pub(super) frame_drag: FrameAlignedDrag,
     pub(super) input_dirty: bool,
     pub wireframe: bool,
+    /// Stroke colour index into `viewport_wireframe::COLOURS`.
+    pub wireframe_colour: usize,
+    /// Stroke width in physical pixels.
+    pub wireframe_width_px: f32,
     /// Shared with the GPU viewport, which applies the stroke on its next frame.
-    pub viewport_wireframe: Arc<AtomicBool>,
-    /// Wakes the on-demand viewport when the wireframe toggle changes.
+    pub viewport_wireframe: Arc<Mutex<WireframeSettings>>,
+    /// Wakes the on-demand viewport when the wireframe toggle or style changes.
     pub viewport_redraw: Arc<Mutex<Option<cssimpler::renderer::gpu::GpuRedrawHandle>>>,
     pub(super) board_background: RefCell<Option<super::board::rendering::BoardBackgroundCache>>,
     pub(super) native_number_drag: bool,
@@ -154,7 +159,9 @@ impl CssRunnerState {
             frame_drag: FrameAlignedDrag::new(),
             input_dirty: false,
             wireframe: false,
-            viewport_wireframe: Arc::new(AtomicBool::new(false)),
+            wireframe_colour: super::super::viewport_wireframe::DEFAULT_COLOUR,
+            wireframe_width_px: super::super::viewport_wireframe::DEFAULT_WIDTH_PX,
+            viewport_wireframe: Arc::new(Mutex::new(WireframeSettings::default())),
             viewport_redraw: Arc::new(Mutex::new(None)),
             board_background: RefCell::new(None),
             native_number_drag: false,
@@ -329,13 +336,31 @@ impl CssRunnerState {
         }
     }
 
-    /// Apply the cloth-only wireframe toggle to the native viewport.
+    /// Current wireframe toggle, colour and width, clamped to supported ranges.
+    pub fn wireframe_settings(&self) -> WireframeSettings {
+        WireframeSettings {
+            enabled: self.wireframe,
+            colour: self.wireframe_colour,
+            width_px: self.wireframe_width_px,
+        }
+        .normalized()
+    }
+
+    /// Apply the cloth-only wireframe toggle, colour and width to the viewport.
     ///
     /// The stroke lives in the GPU renderer, so the panel positions and the
-    /// stage stay untouched; the viewport applies the flag on its next frame.
+    /// stage stay untouched; the viewport applies the settings on its next
+    /// frame.
     pub fn sync_usd_wireframe(&mut self) {
-        self.viewport_wireframe
-            .store(self.wireframe, Ordering::Relaxed);
+        let settings = self.wireframe_settings();
+        *self
+            .viewport_wireframe
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = settings;
+        self.request_viewport_redraw();
+    }
+
+    fn request_viewport_redraw(&self) {
         if let Some(handle) = self
             .viewport_redraw
             .lock()
