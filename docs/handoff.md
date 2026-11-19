@@ -7,8 +7,8 @@ The 2D pattern board can show a gray avatar silhouette behind the pieces, with a
 avatar world X/Y is projected orthographically, Y is flipped for the board's
 downward axis, and the result is anchored to the first panel's board layout and
 3D translation. The projected triangles form one coverage shape with a
-translucent light-gray fill and a subtle outline. The fill preserves gaps
-and keeps the same opacity where projected faces overlap. Interior mesh contour
+translucent light-gray fill and a subtle outline. The fill extends to the
+outer edge of the outline and keeps the same opacity where projected faces overlap. Interior mesh contour
 lines restore details such as the eyes. **Settings → Body reference** can
 collapse and contains independent **Body**, **Fill**, **Outline** and
 **Details** controls. The master Body toggle, also in the board header,

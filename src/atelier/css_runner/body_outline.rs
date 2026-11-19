@@ -3,16 +3,22 @@
 //! The prototype registers avatar world XY against the first panel's board
 //! layout and 3D translation. The projection is independent of the 3D camera.
 
+use super::board::native::polyline;
 use clothcraft::avatar::SurfaceMesh;
 use clothcraft::garment::GarmentTemplate;
+use cssimpler::core::PathCommand;
 use i_overlay::{
     core::fill_rule::FillRule,
     core::overlay_rule::OverlayRule,
     float::{clip::FloatClip, overlay::FloatOverlay},
+    mesh::float::{
+        outline::offset::OutlineOffset,
+        style::{LineJoin, OutlineStyle},
+    },
     string::clip::ClipRule,
 };
 
-use std::collections::BTreeMap;
+use std::{cell::RefCell, collections::BTreeMap};
 
 #[derive(Default)]
 pub(super) struct BodyOutline {
@@ -20,6 +26,37 @@ pub(super) struct BodyOutline {
     pub contours: Vec<Vec<(f64, f64)>>,
     /// Open feature lines strictly inside the outline.
     pub details: Vec<Vec<(f64, f64)>>,
+    expanded_fill: RefCell<Option<(f64, Vec<PathCommand>)>>,
+}
+
+impl BodyOutline {
+    pub fn fill_commands(&self, radius_mm: f64) -> Vec<PathCommand> {
+        let mut cached = self.expanded_fill.borrow_mut();
+        if let Some((radius, commands)) = &*cached
+            && *radius == radius_mm
+        {
+            return commands.clone();
+        }
+        let contours: Vec<Vec<[f64; 2]>> = self
+            .contours
+            .iter()
+            .map(|ring| ring.iter().map(|&(x, y)| [x, y]).collect())
+            .collect();
+        // Match the centered, round outline stroke. Offset the coverage as
+        // one shape so translucent edges never get a second coat of fill.
+        let style = OutlineStyle::new(radius_mm).line_join(LineJoin::Round(0.2));
+        let expanded = contours.outline(&style);
+        let commands: Vec<_> = expanded
+            .iter()
+            .flatten()
+            .flat_map(|ring| {
+                let points: Vec<_> = ring.iter().map(|&[x, y]| (x, y)).collect();
+                polyline(&points, true)
+            })
+            .collect();
+        *cached = Some((radius_mm, commands.clone()));
+        commands
+    }
 }
 
 pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> BodyOutline {
@@ -97,6 +134,7 @@ pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> BodyOu
     BodyOutline {
         contours: contours.into_iter().flatten().map(millimetres).collect(),
         details: details.into_iter().map(millimetres).collect(),
+        expanded_fill: Default::default(),
     }
 }
 

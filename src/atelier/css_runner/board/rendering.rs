@@ -329,9 +329,17 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
                 Color::rgba(100, 116, 139, 150),
             )
         };
-        if (state.show_body_fill || state.show_body_border)
-            && !state.body_outline.contours.is_empty()
-        {
+        let outline_width = 1.2 * px;
+        if state.show_body_fill && !state.body_outline.contours.is_empty() {
+            nodes.push(BoardPath::new(
+                state.body_outline.fill_commands(outline_width * 0.5),
+                Some(fill_color),
+                None,
+                0.0,
+                "body-fill",
+            ));
+        }
+        if state.show_body_border && !state.body_outline.contours.is_empty() {
             let commands = state
                 .body_outline
                 .contours
@@ -340,9 +348,9 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
                 .collect();
             nodes.push(BoardPath::new(
                 commands,
-                state.show_body_fill.then_some(fill_color),
-                state.show_body_border.then_some(outline_color),
-                1.2 * px,
+                None,
+                Some(outline_color),
+                outline_width,
                 "body-outline",
             ));
         }

@@ -51,25 +51,30 @@ fn body_outline_uses_the_uncached_drawing_layer() {
         "a closed triangle avatar should expose its boundary"
     );
     let (paths, _) = render_runner_2d_paths(&state);
+    let fill = paths.iter().find(|path| path.class == "body-fill").unwrap();
     let outline = paths
         .iter()
-        .find(|path| path.class.split_whitespace().any(|c| c == "body-outline"))
-        .expect("body outline path");
+        .find(|path| path.class == "body-outline")
+        .unwrap();
+    assert!(fill.path.paint().fill.is_some());
     assert!(
-        outline.path.paint().fill.is_some(),
-        "silhouette must be filled"
+        !fill.background && !outline.background,
+        "body layers stay off the cached grid"
     );
-    assert!(
-        outline
-            .path
-            .commands()
-            .iter()
-            .any(|command| matches!(command, cssimpler::core::PathCommand::Close))
-    );
-    assert!(
-        !outline.background,
-        "silhouette stays on the uncached drawing layer"
-    );
+    let filled = fill.path.geometry().bounds().unwrap();
+    let center = outline.path.geometry().bounds().unwrap();
+    let half_width = outline.path.paint().stroke_width * 0.5;
+    for extension in [
+        center.min_x - filled.min_x,
+        center.min_y - filled.min_y,
+        filled.max_x - center.max_x,
+        filled.max_y - center.max_y,
+    ] {
+        assert!(
+            (extension - half_width).abs() < 0.02 * half_width,
+            "{extension} vs {half_width}"
+        );
+    }
 }
 
 #[test]
@@ -105,17 +110,16 @@ fn body_settings_control_all_layers_independently() {
     };
     let layers = |app: &OutlineApp| {
         let (paths, _) = render_runner_2d_paths(app.state());
-        let coverage = paths.iter().find(|p| p.class == "body-outline");
-        let fill = coverage.is_some_and(|p| p.path.paint().fill.is_some());
-        let outline = coverage.is_some_and(|p| p.path.paint().stroke.is_some());
+        let fill = paths.iter().position(|p| p.class == "body-fill");
+        let outline = paths.iter().position(|p| p.class == "body-outline");
         let details = paths.iter().position(|p| p.class == "body-details");
-        if let (Some(coverage), Some(details)) = (
-            paths.iter().position(|p| p.class == "body-outline"),
-            details,
-        ) {
-            assert!(coverage < details, "detail lines must overlay the fill");
+        if let (Some(fill), Some(outline)) = (fill, outline) {
+            assert!(fill < outline, "outline must overlay the fill");
         }
-        (fill, outline, details.is_some())
+        if let (Some(fill), Some(details)) = (fill, details) {
+            assert!(fill < details, "detail lines must overlay the fill");
+        }
+        (fill.is_some(), outline.is_some(), details.is_some())
     };
 
     assert_eq!(layers(&app), (true, true, true));
