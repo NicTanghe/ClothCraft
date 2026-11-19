@@ -36,38 +36,74 @@ The layer declares:
 defaultPrim = "World"
 metersPerUnit = 1
 upAxis = "Y"
-customLayerData = { "clothcraft:document" = { version = 1, kind = "clothcraft" } }
+customLayerData = { dictionary "clothcraft:document" = { version = 1, kind = "clothcraft" } }
 ```
+
+The namespaced metadata key is quoted. A bare colon is legal in a namespaced
+property name but not in a bare USDA dictionary key; Pixar OpenUSD and Houdini
+reject `dictionary clothcraft:document = {`. The writer quotes the key even
+though `openusd` 0.8's text writer emits it unquoted, so the file opens in
+`usdcat`, `usdview` and Houdini as well as in ClothCraft.
 
 Loading rejects a different `metersPerUnit`, a different up axis, an unsupported
 document version, and a missing envelope. Values are never scaled.
 
-## Part curves
+## Derived panel scene
 
-For every polygon panel the writer also authors a derived view:
+So that a DCC or `usdview` shows the garment without ClothCraft, every panel prim
+also carries a derived scene next to the lossless document attributes:
 
 ```text
-/World/Parts/<hex panel id>/Boundary   (BasisCurves)
+/World/Parts/<hex panel id>            Xform: placement
+    Fill                               Mesh: compiled rest triangulation
+    Boundary                           BasisCurves: cubic Bézier boundary
 ```
 
-- `basis = "bezier"`, `type = "cubic"`, `wrap = "nonperiodic"`;
-- `curveVertexCounts = [4, 4, ...]`, one 4-point curve per named edge;
-- `points` is the standard `point3f[]` interop copy;
-- `custom double3[] clothcraft:controlPoints` is the exact f64 copy;
-- `custom string[] clothcraft:boundaryIds` matches curve order.
+- **Placement.** The panel prim has `matrix4d xformOp:transform` and
+  `uniform token[] xformOpOrder = ["xformOp:transform"]`. The matrix is the
+  authored `Placement` exactly: panel-local `(u, -v, 0)` is rotated by
+  `R = Rx Ry Rz` and translated, which is the pre-simulation arrangement. The
+  matrix is rowwise (USD's row-vector convention), with the translation in the
+  last row. `rotation_degrees` and `translation` remain document attributes on
+  the `Placement` child prim.
+- **Fill.** `/Fill` is a `Mesh` of the compiled rest triangulation from
+  `PolygonPattern::build` or `Pattern::build`. `points` is `point3f[]` in
+  panel-local metres, `faceVertexCounts` is all triangles, `faceVertexIndices`
+  are panel-local transient indices, and smooth `normal3f[]` normals use
+  `vertex` interpolation. `primvars:st` is the standard `texCoord2f[]` copy of
+  the material coordinates, while `custom double2[] clothcraft:restUV` keeps
+  them exactly. `custom string clothcraft:panelId` repeats the semantic panel
+  ID. `subdivisionScheme = "none"`, `orientation = "rightHanded"` and
+  `doubleSided = true` are explicit. This is display geometry, not a new
+  triangulation path.
+- **Boundary.** `/Boundary` is a `BasisCurves` with
+  `basis = "bezier"`, `type = "cubic"`, `wrap = "nonperiodic"` and
+  `curveVertexCounts = [4, 4, ...]`, one 4-point curve per named edge. For v1
+  rectangular panels the four derived sides use `top`, `right`, `bottom`,
+  `left`. `points` is the standard `point3f[]` interop copy,
+  `custom double3[] clothcraft:controlPoints` is the exact f64 copy in the same
+  panel-local frame, and `custom string[] clothcraft:boundaryIds` matches curve
+  order.
 
-The view is derived on save and ignored on load. The template attributes remain
+The views are derived on save and skipped on load; they also carry
+`custom token clothcraft:kind = "view"`. The template attributes remain
 authoritative, and `PolygonPattern::build` is still the only curve-to-mesh
-converter.
+converter. Loading ignores `xformOp:transform` and `xformOpOrder` so a
+round trip does not grow document fields.
+
+Holes, internal lines, notches, allowances and measurements are not yet
+authored as USD curve or marker views; the `Fill` mesh includes the triangulated
+holes, and the remaining draft data stays in the template attributes.
 
 ## Limitations
 
 - No registered custom schema: attributes are namespaced by convention. A typed
   schema, unit prompts and incremental stage authoring are follow-up work in #51.
-- `BasisCurves` are written but not rendered by the viewport and not read back as
-  geometry; holes and internal lines currently exist only as template attributes.
+- The derived `Fill` and `Boundary` views are display-only; the viewport still
+  consumes the compiled mesh and does not read views back as geometry.
 - The whole fitting project, including the f64 drape state, is serialized; there
-  is no transient session layer yet.
+  is no transient session layer yet. The derived panel scene uses the template
+  placement, not the cached draped state.
 - Only USDA text is written. `.usd` is written as text; USDC/USDZ are not
   supported.
 - No size or depth limit is applied by this reader yet; documents come from local
@@ -78,8 +114,10 @@ converter.
 
 ```powershell
 cargo test --locked --no-default-features -j 2 --lib usd_document
+usdcat examples/templates/tshirt.usda
 ```
 
 The tests cover template and project round trips (including f64 control points
-and drape state), JSON/USD file dispatch, foreign unit rejection and unknown
-version rejection.
+and drape state), row-vector placement equivalence, one `Fill`/`Boundary` view
+per panel, quoted metadata keys, JSON/USD file dispatch, foreign unit rejection
+and unknown version rejection. `usdcat` is the independent OpenUSD syntax check.

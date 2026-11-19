@@ -2,31 +2,41 @@
 //!
 //! The USD file is not a render snapshot: it is the editable document. Every
 //! serde field becomes a USD attribute, a child prim, or an item in an array
-//! container, and the reader rebuilds the exact same JSON tree. Part boundaries
-//! are additionally authored as standard `BasisCurves` prims so other tools see
-//! the pattern geometry; those views are derived on save and skipped on load.
+//! container, and the reader rebuilds the exact same JSON tree.
+//!
+//! Every panel is additionally authored as a derived, human-viewable scene so a
+//! DCC or `usdview` shows the garment without ClothCraft:
+//! - the panel prim carries the authored placement as `xformOp:transform`, so
+//!   panel-local geometry appears in its pre-simulation arrangement;
+//! - `/World/Parts/<hex id>/Fill` is a `Mesh` of the compiled rest triangulation
+//!   in panel-local `(u, -v, 0)` metres;
+//! - `/World/Parts/<hex id>/Boundary` is a cubic `BasisCurves` with one 4-point
+//!   Bézier segment per named edge (or per v1 rectangle side).
+//! These views are derived on save and skipped on load; the template attributes
+//! remain the only source of truth. `double3[] clothcraft:controlPoints` keeps
+//! the exact f64 controls in the same panel-local frame as the interop points.
 //!
 //! Conventions:
 //! - layer metadata: `metersPerUnit = 1`, `upAxis = "Y"`, `defaultPrim = "World"`,
-//!   and a `clothcraft:document` dictionary carrying the format version;
+//!   and a `clothcraft:document` dictionary carrying the format version. The key
+//!   is quoted because a namespaced colon is not a legal bare USDA dictionary
+//!   key, even though `openusd` 0.8's text writer emits it unquoted;
 //! - objects become `Xform` prims, scalar fields become attributes, arrays of
 //!   scalars become typed arrays, arrays of objects become child prims;
 //! - every child prim carries `clothcraft:kind` (`object`, `array`, or `view`)
-//!   and `clothcraft:key` (the original JSON field or map key);
-//! - boundary views under `/World/Parts/<hex id>/Boundary` are `BasisCurves`
-//!   with `basis = "bezier"`, `type = "cubic"`, `wrap = "nonperiodic"` and one
-//!   4-point curve per named edge. A `double3[] clothcraft:controlPoints`
-//!   attribute stores the same controls exactly. Load ignores these views.
+//!   and `clothcraft:key` (the original JSON field or map key).
 
 use std::collections::{BTreeSet, HashMap};
 
-use openusd::gf::{Vec2d, Vec3d, Vec3f};
-use openusd::sdf::{ChildrenKey, Data, FieldKey, Path, SpecType, Specifier, Value};
+use glam::{DMat3, DQuat, DVec2, DVec3, EulerRot};
+use openusd::gf::{Matrix4d, Vec2d, Vec3d, Vec3f};
+use openusd::sdf::{ChildrenKey, Data, FieldKey, Path, SpecType, Specifier, Value, Variability};
 use openusd::usda::TextWriter;
 use serde_json::{Map, Number, Value as Json};
 
 use crate::fitting::FittingProject;
-use crate::garment::GarmentTemplate;
+use crate::garment::template::{Panel, Placement};
+use crate::garment::{CompiledGarment, GarmentTemplate};
 
 const DOCUMENT_KEY: &str = "clothcraft:document";
 const DOCUMENT_VERSION: i32 = 1;
@@ -34,19 +44,37 @@ const KIND_ATTR: &str = "clothcraft:kind";
 const KEY_ATTR: &str = "clothcraft:key";
 const NULLS_ATTR: &str = "clothcraft:nulls";
 
-/// One derived `BasisCurves` prim written next to the document data.
+/// Attributes authored for display only; the document reader ignores them.
+const DERIVED_ATTRIBUTES: [&str; 2] = ["xformOpOrder", "xformOp:transform"];
+
+/// One derived cubic `BasisCurves` boundary written next to the document data.
 struct CurveView {
-    path: String,
     points: Vec<[f64; 3]>,
     counts: Vec<i32>,
     ids: Vec<String>,
 }
 
+/// One derived, human-viewable panel.
+struct PanelView {
+    /// Document prim path, `/World/Parts/<hex id>`.
+    path: String,
+    /// Original semantic panel ID, kept for DCC inspection.
+    id: String,
+    /// Row-vector USD transform from panel-local `(u, -v, 0)` to the authored
+    /// pre-simulation placement.
+    transform: Matrix4d,
+    points: Vec<[f64; 3]>,
+    triangles: Vec<[usize; 3]>,
+    uvs: Vec<[f64; 2]>,
+    boundary: Option<CurveView>,
+}
+
 /// Serialize a garment template as a complete USDA document.
 pub fn template_to_usda(template: &GarmentTemplate) -> Result<String, String> {
+    let compiled = template.compile()?;
     let json = serde_json::to_value(template)
         .map_err(|e| format!("Cannot encode template as JSON values: {e}"))?;
-    to_usda(&json, &template_views(template))
+    to_usda(&json, &panel_views(template, &compiled))
 }
 
 /// Read a garment template from a USDA document produced by [`template_to_usda`].
@@ -57,9 +85,10 @@ pub fn template_from_usda(text: &str) -> Result<GarmentTemplate, String> {
 
 /// Serialize a fitting project (template, session settings and cached drape).
 pub fn project_to_usda(project: &FittingProject) -> Result<String, String> {
+    let compiled = project.template.compile()?;
     let json = serde_json::to_value(project)
         .map_err(|e| format!("Cannot encode project as JSON values: {e}"))?;
-    to_usda(&json, &template_views(&project.template))
+    to_usda(&json, &panel_views(&project.template, &compiled))
 }
 
 /// Read a fitting project from a USDA document produced by [`project_to_usda`].
@@ -68,7 +97,7 @@ pub fn project_from_usda(text: &str) -> Result<FittingProject, String> {
     serde_json::from_value(json).map_err(|e| format!("Cannot decode project document: {e}"))
 }
 
-fn to_usda(json: &Json, views: &[CurveView]) -> Result<String, String> {
+fn to_usda(json: &Json, views: &[PanelView]) -> Result<String, String> {
     let Json::Object(root) = json else {
         return Err("Document root must be an object".into());
     };
@@ -92,7 +121,34 @@ fn to_usda(json: &Json, views: &[CurveView]) -> Result<String, String> {
     data.create_spec(sdf_path("/World")?, SpecType::Prim);
     write_body(&mut data, "/World", root, "object", None)?;
     write_views(&mut data, views)?;
-    TextWriter::write_to_string(&data).map_err(|e| format!("Cannot write USDA: {e}"))
+    let text = TextWriter::write_to_string(&data).map_err(|e| format!("Cannot write USDA: {e}"))?;
+    Ok(quote_namespaced_dictionary_keys(&text))
+}
+
+/// Quote dictionary keys such as `clothcraft:document`.
+///
+/// USDA dictionary keys are identifiers or quoted strings. A colon is legal in
+/// a namespaced property name but not in a bare dictionary key, and `openusd`
+/// 0.8's `TextWriter` mistakenly treats it as bare. Pixar's parser (and Houdini)
+/// then rejects `dictionary clothcraft:document = {` with `Expected =`. Rewrite
+/// exactly those metadata entries, leaving every other line untouched.
+fn quote_namespaced_dictionary_keys(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for line in text.split_inclusive('\n') {
+        let (body, newline) = match line.strip_suffix('\n') {
+            Some(body) => (body, "\n"),
+            None => (line, ""),
+        };
+        let trimmed = body.trim_start();
+        let indent = &body[..body.len() - trimmed.len()];
+        let quoted = trimmed
+            .strip_prefix("dictionary ")
+            .and_then(|rest| rest.split_once(" = "))
+            .filter(|(key, _)| !key.starts_with('"') && key.contains(':'))
+            .map(|(key, tail)| format!("{indent}dictionary \"{key}\" = {tail}{newline}"));
+        out.push_str(quoted.as_deref().unwrap_or(line));
+    }
+    out
 }
 
 fn from_usda(text: &str) -> Result<Json, String> {
@@ -152,44 +208,127 @@ fn token_value(value: Option<&Value>) -> Option<&str> {
     }
 }
 
-fn template_views(template: &GarmentTemplate) -> Vec<CurveView> {
-    let mut views = Vec::new();
-    for panel in &template.panels {
-        let Some(polygon) = &panel.polygon else {
-            continue;
-        };
-        let count = polygon.points.len();
-        if count < 3 || polygon.edges.len() != count {
-            continue;
+fn panel_views(template: &GarmentTemplate, garment: &CompiledGarment) -> Vec<PanelView> {
+    template
+        .panels
+        .iter()
+        .zip(&garment.panels)
+        .map(|(panel, range)| {
+            let points: Vec<[f64; 3]> = garment.mesh.uv[range.vertices.clone()]
+                .iter()
+                .map(|p| local_point(*p))
+                .collect();
+            let triangles: Vec<[usize; 3]> = garment.mesh.triangles[range.triangles.clone()]
+                .iter()
+                .map(|triangle| triangle.vertices.map(|v| v - range.vertices.start))
+                .collect();
+            let uvs = garment.mesh.uv[range.vertices.clone()]
+                .iter()
+                .map(|p| [p.x, p.y])
+                .collect();
+            PanelView {
+                path: format!("/World/Parts/{}", prim_id(&panel.id)),
+                id: panel.id.clone(),
+                transform: placement_matrix(&panel.placement),
+                points,
+                triangles,
+                uvs,
+                boundary: panel_boundary(panel),
+            }
+        })
+        .collect()
+}
+
+/// Panel-local 3D point for material `(u, v)`: v is displayed downward, while
+/// the scene is Y-up, so the local frame is `(u, -v, 0)`.
+fn local_point(p: DVec2) -> [f64; 3] {
+    [p.x, -p.y, 0.0]
+}
+
+/// Row-vector USD transform equivalent to [`Placement::transform`].
+///
+/// `Placement` rotates `(u, -v, 0)` with a column-vector glam quaternion
+/// `Rx * Ry * Rz` and then translates. USD stores rowwise matrices and applies
+/// row vectors, so the rotation block is the transpose of the glam matrix and
+/// the translation lives in the last row.
+fn placement_matrix(placement: &Placement) -> Matrix4d {
+    let radians = placement.rotation_degrees * (std::f64::consts::PI / 180.0);
+    let rotation = DMat3::from_quat(DQuat::from_euler(
+        EulerRot::XYZ,
+        radians.x,
+        radians.y,
+        radians.z,
+    ));
+    let mut matrix = Matrix4d::IDENTITY;
+    for row in 0..3 {
+        for column in 0..3 {
+            matrix[(row, column)] = rotation.col(row)[column];
         }
-        let mut points = Vec::with_capacity(count * 4);
-        let mut counts = Vec::with_capacity(count);
-        let mut ids = Vec::with_capacity(count);
-        for i in 0..count {
-            let start = polygon.points[i];
-            let end = polygon.points[(i + 1) % count];
-            let [c1, c2] = polygon
-                .curves
-                .get(&polygon.edges[i])
-                .copied()
-                .unwrap_or([start, end]);
-            points.extend([
-                [start.x, start.y, 0.0],
-                [c1.x, c1.y, 0.0],
-                [c2.x, c2.y, 0.0],
-                [end.x, end.y, 0.0],
-            ]);
-            counts.push(4);
-            ids.push(polygon.edges[i].clone());
-        }
-        views.push(CurveView {
-            path: format!("/World/Parts/{}/Boundary", prim_id(&panel.id)),
-            points,
-            counts,
-            ids,
-        });
     }
-    views
+    matrix[(3, 0)] = placement.translation.x;
+    matrix[(3, 1)] = placement.translation.y;
+    matrix[(3, 2)] = placement.translation.z;
+    matrix
+}
+
+fn panel_boundary(panel: &Panel) -> Option<CurveView> {
+    let mut points = Vec::new();
+    let mut counts = Vec::new();
+    let mut ids = Vec::new();
+    match &panel.polygon {
+        Some(polygon) => {
+            let count = polygon.points.len();
+            if count < 3 || polygon.edges.len() != count {
+                return None;
+            }
+            for i in 0..count {
+                let start = polygon.points[i];
+                let end = polygon.points[(i + 1) % count];
+                let [c1, c2] = polygon
+                    .curves
+                    .get(&polygon.edges[i])
+                    .copied()
+                    .unwrap_or([start, end]);
+                points.extend([
+                    local_point(start),
+                    local_point(c1),
+                    local_point(c2),
+                    local_point(end),
+                ]);
+                counts.push(4);
+                ids.push(polygon.edges[i].clone());
+            }
+        }
+        None => {
+            // Rectangular v1 panels have no named edges. Their four sides still
+            // get a useful, derived outline; the names match the seam sides.
+            let width = panel.pattern.width;
+            let height = panel.pattern.height;
+            let corners = [
+                DVec2::new(0.0, 0.0),
+                DVec2::new(width, 0.0),
+                DVec2::new(width, height),
+                DVec2::new(0.0, height),
+            ];
+            for (i, name) in ["top", "right", "bottom", "left"].iter().enumerate() {
+                let start = corners[i];
+                let end = corners[(i + 1) % 4];
+                points.extend([
+                    local_point(start),
+                    local_point(start.lerp(end, 1.0 / 3.0)),
+                    local_point(start.lerp(end, 2.0 / 3.0)),
+                    local_point(end),
+                ]);
+                counts.push(4);
+                ids.push((*name).to_string());
+            }
+        }
+    }
+    Some(CurveView {
+        points,
+        counts,
+        ids,
+    })
 }
 
 fn prim_id(value: &str) -> String {
@@ -369,104 +508,338 @@ fn add_attribute(
     Ok(())
 }
 
-fn write_views(data: &mut Data, views: &[CurveView]) -> Result<(), String> {
-    for view in views {
-        let (panel_path, _) = view
-            .path
-            .rsplit_once('/')
-            .ok_or_else(|| format!("Invalid view path {}", view.path))?;
-        ensure_prim(data, "/World/Parts")?;
-        ensure_prim(data, panel_path)?;
-        ensure_prim(data, &view.path)?;
-        {
-            let spec = data
-                .spec_mut(&sdf_path(&view.path)?)
-                .ok_or_else(|| format!("Missing curve view {}", view.path))?;
-            spec.add(FieldKey::TypeName, Value::Token("BasisCurves".into()));
+fn add_uniform_attribute(
+    data: &mut Data,
+    prim_path: &str,
+    name: &str,
+    type_name: &str,
+    value: Value,
+) -> Result<(), String> {
+    add_attribute(data, prim_path, name, type_name, value)?;
+    let spec = data
+        .spec_mut(&sdf_path(&format!("{prim_path}.{name}"))?)
+        .ok_or_else(|| format!("Missing attribute {prim_path}.{name}"))?;
+    spec.add(
+        FieldKey::Variability,
+        Value::Variability(Variability::Uniform),
+    );
+    Ok(())
+}
+
+/// Set attribute metadata such as `interpolation` on a primvar or normals.
+fn set_attribute_metadata(
+    data: &mut Data,
+    prim_path: &str,
+    name: &str,
+    key: &str,
+    value: &str,
+) -> Result<(), String> {
+    let spec = data
+        .spec_mut(&sdf_path(&format!("{prim_path}.{name}"))?)
+        .ok_or_else(|| format!("Missing attribute {prim_path}.{name}"))?;
+    spec.add(key, Value::Token(value.into()));
+    Ok(())
+}
+
+/// Append document-authoring attributes that were not part of the JSON body.
+fn append_property_children(data: &mut Data, path: &str, names: &[&str]) -> Result<(), String> {
+    let spec = data
+        .spec_mut(&sdf_path(path)?)
+        .ok_or_else(|| format!("Missing prim {path}"))?;
+    let mut children = child_names(spec, "propertyChildren");
+    for name in names {
+        if !children.iter().any(|child| child == name) {
+            children.push((*name).to_string());
         }
-        add_attribute(
-            data,
-            &view.path,
-            "points",
-            "point3f[]",
-            Value::Vec3fVec(
-                view.points
-                    .iter()
-                    .map(|[x, y, z]| Vec3f {
-                        x: *x as f32,
-                        y: *y as f32,
-                        z: *z as f32,
-                    })
-                    .collect(),
-            ),
-        )?;
-        add_attribute(
-            data,
-            &view.path,
-            "curveVertexCounts",
-            "int[]",
-            Value::IntVec(view.counts.clone()),
-        )?;
-        add_attribute(
-            data,
-            &view.path,
-            "basis",
-            "token",
-            Value::Token("bezier".into()),
-        )?;
-        add_attribute(
-            data,
-            &view.path,
-            "type",
-            "token",
-            Value::Token("cubic".into()),
-        )?;
-        add_attribute(
-            data,
-            &view.path,
-            "wrap",
-            "token",
-            Value::Token("nonperiodic".into()),
-        )?;
-        add_attribute(
-            data,
-            &view.path,
-            "clothcraft:controlPoints",
-            "double3[]",
-            Value::Vec3dVec(
-                view.points
-                    .iter()
-                    .map(|[x, y, z]| Vec3d {
-                        x: *x,
-                        y: *y,
-                        z: *z,
-                    })
-                    .collect(),
-            ),
-        )?;
-        add_attribute(
-            data,
-            &view.path,
-            "clothcraft:boundaryIds",
-            "string[]",
-            Value::StringVec(view.ids.clone()),
-        )?;
-        set_property_children(
-            data,
-            &view.path,
-            &[
-                KIND_ATTR,
-                "points",
-                "curveVertexCounts",
-                "basis",
-                "type",
-                "wrap",
-                "clothcraft:controlPoints",
-                "clothcraft:boundaryIds",
-            ],
-        )?;
+    }
+    spec.add(
+        ChildrenKey::PropertyChildren,
+        Value::TokenVec(children.into_iter().map(|child| child.into()).collect()),
+    );
+    Ok(())
+}
+
+fn write_views(data: &mut Data, views: &[PanelView]) -> Result<(), String> {
+    if views.is_empty() {
+        return Ok(());
+    }
+    ensure_prim(data, "/World/Parts")?;
+    for view in views {
+        ensure_prim(data, &view.path)?;
+        write_panel_transform(data, &view.path, view.transform)?;
+        write_fill(data, view)?;
+        if let Some(boundary) = &view.boundary {
+            write_boundary(data, &view.path, boundary)?;
+        }
     }
     Ok(())
+}
+
+/// The authored placement is both document data (`Placement`) and a standard
+/// Xform op. The last row is the row-vector translation.
+fn write_panel_transform(
+    data: &mut Data,
+    panel_path: &str,
+    transform: Matrix4d,
+) -> Result<(), String> {
+    add_attribute(
+        data,
+        panel_path,
+        "xformOp:transform",
+        "matrix4d",
+        Value::Matrix4d(transform),
+    )?;
+    add_uniform_attribute(
+        data,
+        panel_path,
+        "xformOpOrder",
+        "token[]",
+        Value::TokenVec(vec!["xformOp:transform".into()]),
+    )?;
+    append_property_children(data, panel_path, &["xformOp:transform", "xformOpOrder"])
+}
+
+fn write_fill(data: &mut Data, view: &PanelView) -> Result<(), String> {
+    let path = format!("{}/Fill", view.path);
+    ensure_prim(data, &path)?;
+    {
+        let spec = data
+            .spec_mut(&sdf_path(&path)?)
+            .ok_or_else(|| format!("Missing fill view {path}"))?;
+        spec.add(FieldKey::TypeName, Value::Token("Mesh".into()));
+    }
+    let mut triangles = Vec::with_capacity(view.triangles.len() * 3);
+    for triangle in &view.triangles {
+        for &index in triangle {
+            triangles.push(
+                i32::try_from(index).map_err(|_| {
+                    format!("Panel {} vertex index exceeds USD int range", view.path)
+                })?,
+            );
+        }
+    }
+    let counts = vec![3; view.triangles.len()];
+    let normals = crate::usd_scene::smooth_vertex_normals(
+        &view
+            .points
+            .iter()
+            .map(|[x, y, z]| DVec3::new(*x, *y, *z))
+            .collect::<Vec<_>>(),
+        &view.triangles,
+    );
+    add_uniform_attribute(
+        data,
+        &path,
+        "subdivisionScheme",
+        "token",
+        Value::Token("none".into()),
+    )?;
+    add_uniform_attribute(
+        data,
+        &path,
+        "orientation",
+        "token",
+        Value::Token("rightHanded".into()),
+    )?;
+    add_uniform_attribute(data, &path, "doubleSided", "bool", Value::Bool(true))?;
+    add_attribute(
+        data,
+        &path,
+        "points",
+        "point3f[]",
+        Value::Vec3fVec(
+            view.points
+                .iter()
+                .map(|[x, y, z]| Vec3f {
+                    x: *x as f32,
+                    y: *y as f32,
+                    z: *z as f32,
+                })
+                .collect(),
+        ),
+    )?;
+    add_attribute(
+        data,
+        &path,
+        "faceVertexCounts",
+        "int[]",
+        Value::IntVec(counts),
+    )?;
+    add_attribute(
+        data,
+        &path,
+        "faceVertexIndices",
+        "int[]",
+        Value::IntVec(triangles),
+    )?;
+    add_attribute(
+        data,
+        &path,
+        "normals",
+        "normal3f[]",
+        Value::Vec3fVec(
+            normals
+                .iter()
+                .map(|n| Vec3f {
+                    x: n.x as f32,
+                    y: n.y as f32,
+                    z: n.z as f32,
+                })
+                .collect(),
+        ),
+    )?;
+    set_attribute_metadata(data, &path, "normals", "interpolation", "vertex")?;
+    add_attribute(
+        data,
+        &path,
+        "primvars:st",
+        "texCoord2f[]",
+        Value::Vec2fVec(
+            view.uvs
+                .iter()
+                .map(|[u, v]| openusd::gf::Vec2f {
+                    x: *u as f32,
+                    y: *v as f32,
+                })
+                .collect(),
+        ),
+    )?;
+    set_attribute_metadata(data, &path, "primvars:st", "interpolation", "vertex")?;
+    add_attribute(
+        data,
+        &path,
+        "clothcraft:restUV",
+        "double2[]",
+        Value::Vec2dVec(
+            view.uvs
+                .iter()
+                .map(|[u, v]| Vec2d { x: *u, y: *v })
+                .collect(),
+        ),
+    )?;
+    add_attribute(
+        data,
+        &path,
+        "clothcraft:panelId",
+        "string",
+        Value::String(view.id.clone()),
+    )?;
+    add_attribute(
+        data,
+        &path,
+        "primvars:displayColor",
+        "color3f[]",
+        Value::Vec3fVec(vec![Vec3f {
+            x: 0.62,
+            y: 0.68,
+            z: 0.78,
+        }]),
+    )?;
+    set_attribute_metadata(
+        data,
+        &path,
+        "primvars:displayColor",
+        "interpolation",
+        "constant",
+    )?;
+    set_property_children(
+        data,
+        &path,
+        &[
+            KIND_ATTR,
+            "subdivisionScheme",
+            "orientation",
+            "doubleSided",
+            "points",
+            "faceVertexCounts",
+            "faceVertexIndices",
+            "normals",
+            "primvars:st",
+            "clothcraft:restUV",
+            "clothcraft:panelId",
+            "primvars:displayColor",
+        ],
+    )
+}
+
+fn write_boundary(data: &mut Data, panel_path: &str, view: &CurveView) -> Result<(), String> {
+    let path = format!("{panel_path}/Boundary");
+    ensure_prim(data, &path)?;
+    {
+        let spec = data
+            .spec_mut(&sdf_path(&path)?)
+            .ok_or_else(|| format!("Missing boundary view {path}"))?;
+        spec.add(FieldKey::TypeName, Value::Token("BasisCurves".into()));
+    }
+    add_attribute(
+        data,
+        &path,
+        "points",
+        "point3f[]",
+        Value::Vec3fVec(
+            view.points
+                .iter()
+                .map(|[x, y, z]| Vec3f {
+                    x: *x as f32,
+                    y: *y as f32,
+                    z: *z as f32,
+                })
+                .collect(),
+        ),
+    )?;
+    add_attribute(
+        data,
+        &path,
+        "curveVertexCounts",
+        "int[]",
+        Value::IntVec(view.counts.clone()),
+    )?;
+    add_uniform_attribute(data, &path, "basis", "token", Value::Token("bezier".into()))?;
+    add_uniform_attribute(data, &path, "type", "token", Value::Token("cubic".into()))?;
+    add_uniform_attribute(
+        data,
+        &path,
+        "wrap",
+        "token",
+        Value::Token("nonperiodic".into()),
+    )?;
+    add_attribute(
+        data,
+        &path,
+        "clothcraft:controlPoints",
+        "double3[]",
+        Value::Vec3dVec(
+            view.points
+                .iter()
+                .map(|[x, y, z]| Vec3d {
+                    x: *x,
+                    y: *y,
+                    z: *z,
+                })
+                .collect(),
+        ),
+    )?;
+    add_attribute(
+        data,
+        &path,
+        "clothcraft:boundaryIds",
+        "string[]",
+        Value::StringVec(view.ids.clone()),
+    )?;
+    set_property_children(
+        data,
+        &path,
+        &[
+            KIND_ATTR,
+            "points",
+            "curveVertexCounts",
+            "basis",
+            "type",
+            "wrap",
+            "clothcraft:controlPoints",
+            "clothcraft:boundaryIds",
+        ],
+    )
 }
 
 fn ensure_prim(data: &mut Data, path: &str) -> Result<(), String> {
@@ -723,6 +1096,9 @@ fn read_body(data: &Data, path: &str) -> Result<Json, String> {
         if name == KIND_ATTR || name == KEY_ATTR || name == NULLS_ATTR {
             continue;
         }
+        if DERIVED_ATTRIBUTES.contains(&name.as_str()) {
+            continue;
+        }
         let attr_path = sdf_path(&format!("{path}.{name}"))?;
         let attribute = data
             .spec(&attr_path)
@@ -906,14 +1282,82 @@ mod tests {
             let usda = template_to_usda(&template).expect("writes usda");
             assert!(usda.contains("metersPerUnit = 1"), "{name}: units");
             assert!(usda.contains("upAxis = \"Y\""), "{name}: up axis");
-            if template.panels.iter().any(|panel| panel.polygon.is_some()) {
-                assert!(usda.contains("BasisCurves"), "{name}: curve view");
-            }
+            assert!(
+                usda.contains("dictionary \"clothcraft:document\""),
+                "{name}: namespaced metadata key is quoted"
+            );
+            assert!(
+                !usda.contains("dictionary clothcraft:document"),
+                "{name}: no invalid bare namespaced key"
+            );
+            assert_eq!(
+                usda.matches("def Mesh \"Fill\"").count(),
+                template.panels.len(),
+                "{name}: one fill mesh per panel"
+            );
+            assert_eq!(
+                usda.matches("def BasisCurves \"Boundary\"").count(),
+                template.panels.len(),
+                "{name}: one boundary view per panel"
+            );
+            assert!(usda.contains("xformOp:transform"), "{name}: placement");
             let back = template_from_usda(&usda).expect("reads usda");
             assert_eq!(
                 serde_json::to_value(&template).unwrap(),
                 serde_json::to_value(&back).unwrap(),
                 "{name}: round trip"
+            );
+        }
+    }
+
+    #[test]
+    fn panel_views_are_local_fills_at_the_panel_ranges() {
+        let template = fixture("curved-panels");
+        let garment = template.compile().expect("compiles");
+        let views = panel_views(&template, &garment);
+        assert_eq!(views.len(), template.panels.len());
+        for (view, range) in views.iter().zip(&garment.panels) {
+            assert_eq!(view.points.len(), range.vertices.len());
+            assert_eq!(view.uvs.len(), view.points.len());
+            assert!(!view.triangles.is_empty());
+            for triangle in &view.triangles {
+                for index in triangle {
+                    assert!(*index < view.points.len());
+                }
+            }
+            for (point, uv) in view.points.iter().zip(&view.uvs) {
+                assert_eq!(point[0], uv[0]);
+                assert_eq!(point[1], -uv[1]);
+                assert_eq!(point[2], 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn placement_matrix_matches_the_compiled_transform() {
+        use crate::garment::template::Placement;
+        use glam::DVec3;
+
+        let placement = Placement {
+            translation: DVec3::new(0.12, 1.59, -0.45),
+            rotation_degrees: DVec3::new(17.0, -35.0, 63.0),
+        };
+        let matrix = placement_matrix(&placement);
+        for p in [
+            DVec3::ZERO,
+            DVec3::new(0.4, -0.3, 0.0),
+            DVec3::new(-0.1, 0.9, 0.0),
+        ] {
+            let expected = placement.transform(p);
+            let got = matrix.transform_point(Vec3f {
+                x: p.x as f32,
+                y: p.y as f32,
+                z: p.z as f32,
+            });
+            let got = DVec3::new(f64::from(got.x), f64::from(got.y), f64::from(got.z));
+            assert!(
+                (got - expected).length() < 1e-5,
+                "local {p:?}: expected {expected:?}, got {got:?}"
             );
         }
     }
