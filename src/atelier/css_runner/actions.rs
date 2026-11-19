@@ -105,6 +105,10 @@ pub enum RunnerUiOp {
     CycleMeasurementBits,
     ToggleSettings,
     CloseSettings,
+    ToggleBodySettings,
+    ToggleBodyFill,
+    ToggleBodyBorder,
+    ToggleBodyDetails,
     Adjust2dZoomSpeed(f64),
     Reset2dZoomSpeed,
     SetCornerMode(bool),
@@ -289,7 +293,7 @@ pub(super) fn apply_runner_action(
         RunnerAction::ToggleBodyOutline => {
             state.show_body_outline = !state.show_body_outline;
             state.status_message = format!(
-                "Body outline: {}",
+                "Body reference: {}",
                 if state.show_body_outline { "ON" } else { "OFF" }
             );
         }
@@ -504,6 +508,10 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             }
         }
         RunnerUiOp::CloseSettings => state.settings_open = false,
+        RunnerUiOp::ToggleBodySettings => state.body_settings_open = !state.body_settings_open,
+        RunnerUiOp::ToggleBodyFill => state.show_body_fill = !state.show_body_fill,
+        RunnerUiOp::ToggleBodyBorder => state.show_body_border = !state.show_body_border,
+        RunnerUiOp::ToggleBodyDetails => state.show_body_details = !state.show_body_details,
         RunnerUiOp::Adjust2dZoomSpeed(delta) => {
             if delta.is_finite() {
                 state.board_2d_zoom_speed =

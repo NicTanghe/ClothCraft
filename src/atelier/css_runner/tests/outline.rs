@@ -3,7 +3,7 @@
 use super::super::app::create_runner_app;
 use super::super::board::rendering::render_runner_2d_paths;
 use super::super::state::CssRunnerState;
-use super::support::{count_class, selection_test_state};
+use super::support::selection_test_state;
 use clothcraft::css_ui::load_studio_stylesheet;
 use cssimpler::renderer::FrameInfo;
 use std::time::Duration;
@@ -39,7 +39,15 @@ fn body_outline_uses_the_uncached_drawing_layer() {
     let state = selection_test_state(dir.path());
     assert!(state.show_body_outline);
     assert!(
-        state.body_outline.iter().any(|ring| ring.len() >= 3),
+        state.body_outline.details.is_empty(),
+        "a single triangle has no interior details"
+    );
+    assert!(
+        state
+            .body_outline
+            .contours
+            .iter()
+            .any(|ring| ring.len() >= 3),
         "a closed triangle avatar should expose its boundary"
     );
     let (paths, _) = render_runner_2d_paths(&state);
@@ -65,48 +73,77 @@ fn body_outline_uses_the_uncached_drawing_layer() {
 }
 
 #[test]
-fn body_outline_toggle_hides_and_shows_the_overlay() {
+fn body_settings_control_all_layers_independently() {
+    use clothcraft::avatar::SurfaceMesh;
+
     let _guard = super::super::super::worker::WORKER_TEST_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     let dir = tempfile::tempdir().unwrap();
-    let mut app = app(selection_test_state(dir.path()));
-    assert_eq!(
-        count_class(&render_runner_2d_paths(app.state()).0, "body-outline"),
-        1
+    let mut state = selection_test_state(dir.path());
+    let avatar =
+        SurfaceMesh::load_obj(std::path::Path::new("assets/makehuman/mannequin.obj")).unwrap();
+    state.body_outline = super::super::body_outline::build(&avatar, &state.project.template);
+    assert!(
+        !state.body_outline.details.is_empty(),
+        "bundled mannequin should retain feature lines"
     );
-    let toggle = app
-        .find_element_bounds_by_id("#body-outline-toggle")
-        .unwrap();
-    assert!(cssimpler::renderer::dispatch_click(
-        app.scene(),
-        toggle.x + toggle.width * 0.5,
-        toggle.y + toggle.height * 0.5
-    ));
-    app.frame(FrameInfo {
-        delta: Duration::from_millis(16),
-        frame_index: 1,
-    });
-    assert!(!app.state().show_body_outline);
-    assert_eq!(
-        count_class(&render_runner_2d_paths(app.state()).0, "body-outline"),
-        0
+    let mut app = app(state);
+    let mut frame = 0;
+    let mut click = |app: &mut OutlineApp, id: &str| {
+        let rect = app.find_element_bounds_by_id(id).unwrap();
+        assert!(cssimpler::renderer::dispatch_click(
+            app.scene(),
+            rect.x + rect.width * 0.5,
+            rect.y + rect.height * 0.5
+        ));
+        frame += 1;
+        app.frame(FrameInfo {
+            delta: Duration::ZERO,
+            frame_index: frame,
+        });
+    };
+    let layers = |app: &OutlineApp| {
+        let (paths, _) = render_runner_2d_paths(app.state());
+        let coverage = paths.iter().find(|p| p.class == "body-outline");
+        let fill = coverage.is_some_and(|p| p.path.paint().fill.is_some());
+        let outline = coverage.is_some_and(|p| p.path.paint().stroke.is_some());
+        let details = paths.iter().position(|p| p.class == "body-details");
+        if let (Some(coverage), Some(details)) = (
+            paths.iter().position(|p| p.class == "body-outline"),
+            details,
+        ) {
+            assert!(coverage < details, "detail lines must overlay the fill");
+        }
+        (fill, outline, details.is_some())
+    };
+
+    assert_eq!(layers(&app), (true, true, true));
+    click(&mut app, "#settings-toggle");
+    assert!(
+        app.find_element_bounds_by_id("#settings-body-fill")
+            .is_none()
     );
-    let toggle = app
-        .find_element_bounds_by_id("#body-outline-toggle")
-        .unwrap();
-    assert!(cssimpler::renderer::dispatch_click(
-        app.scene(),
-        toggle.x + toggle.width * 0.5,
-        toggle.y + toggle.height * 0.5
-    ));
-    app.frame(FrameInfo {
-        delta: Duration::from_millis(16),
-        frame_index: 2,
-    });
-    assert!(app.state().show_body_outline);
-    assert_eq!(
-        count_class(&render_runner_2d_paths(app.state()).0, "body-outline"),
-        1
+    click(&mut app, "#settings-body-section");
+    click(&mut app, "#settings-body-fill");
+    assert_eq!(layers(&app), (false, true, true));
+    click(&mut app, "#settings-body-outline");
+    assert_eq!(layers(&app), (false, false, true));
+    click(&mut app, "#settings-body-fill");
+    click(&mut app, "#settings-body-details");
+    assert_eq!(layers(&app), (true, false, false));
+    click(&mut app, "#settings-body-visible");
+    assert_eq!(layers(&app), (false, false, false));
+    click(&mut app, "#settings-body-visible");
+    assert_eq!(layers(&app), (true, false, false));
+    click(&mut app, "#settings-body-section");
+    assert!(
+        app.find_element_bounds_by_id("#settings-body-details")
+            .is_none()
     );
+    click(&mut app, "#settings-close");
+    click(&mut app, "#body-outline-toggle");
+    assert_eq!(layers(&app), (false, false, false));
+    click(&mut app, "#body-outline-toggle");
+    assert_eq!(layers(&app), (true, false, false));
 }

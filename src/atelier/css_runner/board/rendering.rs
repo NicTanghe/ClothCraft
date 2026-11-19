@@ -317,7 +317,7 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
 
     // Draw the full projected coverage once, behind the pieces. Keeping it
     // off the cached background lets Body toggle without repainting the grid.
-    if state.show_body_outline && !state.body_outline.is_empty() {
+    if state.show_body_outline {
         let (fill_color, outline_color) = if is_dark {
             (
                 Color::rgba(214, 218, 224, 56),
@@ -329,18 +329,38 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
                 Color::rgba(100, 116, 139, 150),
             )
         };
-        let commands = state
-            .body_outline
-            .iter()
-            .flat_map(|ring| polyline(ring, true))
-            .collect();
-        nodes.push(BoardPath::new(
-            commands,
-            Some(fill_color),
-            Some(outline_color),
-            1.2 * px,
-            "body-outline",
-        ));
+        if (state.show_body_fill || state.show_body_border)
+            && !state.body_outline.contours.is_empty()
+        {
+            let commands = state
+                .body_outline
+                .contours
+                .iter()
+                .flat_map(|ring| polyline(ring, true))
+                .collect();
+            nodes.push(BoardPath::new(
+                commands,
+                state.show_body_fill.then_some(fill_color),
+                state.show_body_border.then_some(outline_color),
+                1.2 * px,
+                "body-outline",
+            ));
+        }
+        if state.show_body_details && !state.body_outline.details.is_empty() {
+            let commands = state
+                .body_outline
+                .details
+                .iter()
+                .flat_map(|line| polyline(line, false))
+                .collect();
+            nodes.push(BoardPath::new(
+                commands,
+                None,
+                Some(outline_color),
+                0.85 * px,
+                "body-details",
+            ));
+        }
     }
 
     let fillet_previews = active_fillet_previews(state);

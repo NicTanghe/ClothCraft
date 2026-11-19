@@ -8,7 +8,11 @@ avatar world X/Y is projected orthographically, Y is flipped for the board's
 downward axis, and the result is anchored to the first panel's board layout and
 3D translation. The projected triangles form one coverage shape with a
 translucent light-gray fill and a subtle outline. The fill preserves gaps
-and keeps the same opacity where projected faces overlap.
+and keeps the same opacity where projected faces overlap. Interior mesh contour
+lines restore details such as the eyes. **Settings → Body reference** can
+collapse and contains independent **Body**, **Fill**, **Outline** and
+**Details** controls. The master Body toggle, also in the board header,
+keeps the individual layer choices for the session.
 
 Limits: this is not fitted to individual panels, does not use the 3D camera, and
 is recomputed only when the state is created or a static avatar is imported.

@@ -6,14 +6,25 @@
 use clothcraft::avatar::SurfaceMesh;
 use clothcraft::garment::GarmentTemplate;
 use i_overlay::{
-    core::fill_rule::FillRule, core::overlay_rule::OverlayRule, float::overlay::FloatOverlay,
+    core::fill_rule::FillRule,
+    core::overlay_rule::OverlayRule,
+    float::{clip::FloatClip, overlay::FloatOverlay},
+    string::clip::ClipRule,
 };
 
-/// Closed coverage contours in board millimetres. Holes have opposite winding
-/// to exterior contours so a single native path fills the entire silhouette.
-pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> Vec<Vec<(f64, f64)>> {
+use std::collections::BTreeMap;
+
+#[derive(Default)]
+pub(super) struct BodyOutline {
+    /// Closed coverage in board millimetres. Holes have opposite winding.
+    pub contours: Vec<Vec<(f64, f64)>>,
+    /// Open feature lines strictly inside the outline.
+    pub details: Vec<Vec<(f64, f64)>>,
+}
+
+pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> BodyOutline {
     let Some(panel) = template.panels.first() else {
-        return Vec::new();
+        return BodyOutline::default();
     };
     let anchor_world = panel.placement.translation;
     let anchor_board = clothcraft::authoring::layout(template, 0);
@@ -29,6 +40,7 @@ pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> Vec<Ve
         .collect();
 
     let mut triangles = Vec::with_capacity(surface.triangles.len());
+    let mut edges = BTreeMap::<(usize, usize), [usize; 2]>::new();
     for &[ia, ib, ic] in &surface.triangles {
         let (Some(&a), Some(&b), Some(&c)) =
             (projected.get(ia), projected.get(ib), projected.get(ic))
@@ -45,6 +57,9 @@ pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> Vec<Ve
         {
             continue;
         }
+        for (i, j) in [(ia, ib), (ib, ic), (ic, ia)] {
+            edges.entry((i.min(j), i.max(j))).or_default()[usize::from(area > 0.0)] += 1;
+        }
         // Give every projected face the same winding so overlaps add coverage
         // even when the adjacent or occluding face points the other way.
         triangles.push(if area > 0.0 {
@@ -54,18 +69,35 @@ pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> Vec<Ve
         });
     }
     if triangles.is_empty() {
-        return Vec::new();
+        return BodyOutline::default();
     }
-    FloatOverlay::with_subj(&triangles)
-        .overlay(OverlayRule::Subject, FillRule::NonZero)
+    let contours =
+        FloatOverlay::with_subj(&triangles).overlay(OverlayRule::Subject, FillRule::NonZero);
+    // Keep the mesh's open edges and facing transitions, as in the original
+    // line drawing. Clip away coverage boundaries and any lines outside it
+    // so Details can be toggled independently of Outline.
+    let feature_edges: Vec<_> = edges
         .into_iter()
-        .flatten()
-        .map(|ring| {
-            ring.into_iter()
-                .map(|[x, y]| (x * 1000.0, y * 1000.0))
-                .collect()
-        })
-        .collect()
+        .filter(|(_, facing)| matches!(facing, [1, 0] | [0, 1] | [1, 1]))
+        .map(|((i, j), _)| vec![projected[i], projected[j]])
+        .collect();
+    let details = feature_edges.clip_by(
+        &contours,
+        FillRule::NonZero,
+        ClipRule {
+            invert: false,
+            boundary_included: false,
+        },
+    );
+    let millimetres = |path: Vec<[f64; 2]>| {
+        path.into_iter()
+            .map(|[x, y]| (x * 1000.0, y * 1000.0))
+            .collect()
+    };
+    BodyOutline {
+        contours: contours.into_iter().flatten().map(millimetres).collect(),
+        details: details.into_iter().map(millimetres).collect(),
+    }
 }
 
 #[cfg(test)]
@@ -108,7 +140,7 @@ mod tests {
                 [8, 9, 10],
             ],
         };
-        let contours = build(&surface, &GarmentTemplate::two_panel_demo());
+        let contours = build(&surface, &GarmentTemplate::two_panel_demo()).contours;
         assert_eq!(contours.len(), 2);
         let area = |ring: &[(f64, f64)]| {
             ring.iter()
@@ -129,9 +161,13 @@ mod tests {
             vertices: vec![],
             triangles: vec![],
         };
-        assert!(build(&surface, &GarmentTemplate::two_panel_demo()).is_empty());
+        assert!(
+            build(&surface, &GarmentTemplate::two_panel_demo())
+                .contours
+                .is_empty()
+        );
         let mut template = GarmentTemplate::two_panel_demo();
         template.panels.clear();
-        assert!(build(&surface, &template).is_empty());
+        assert!(build(&surface, &template).contours.is_empty());
     }
 }
