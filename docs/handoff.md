@@ -1,5 +1,25 @@
 # Repository handoff
 
+## Seam-aware boundary splitting — 18 November 2026
+
+Ported from [erythrofr/ClothCraft#244](https://github.com/erythrofr/ClothCraft/pull/244).
+Splitting a named contour boundary now migrates the seams that reference it:
+references move to the piece that contains their range, a seam that crosses the
+new point becomes two seams, and the boundary on the other side is split at the
+seam's paired position. The change is transactional and fails closed for seams
+with tails/notches, target-length boundaries and linked mirror pairs (which
+still require unlinking before topology changes; the old PR's mirrored-pair
+synchronization is deliberately not ported).
+
+`src/authoring/seam_split.rs` owns the seam migration; `authoring::split_boundary_polygon`
+is the shared polygon split used by the command and by partner boundaries.
+`tests/seam_split.rs` covers a sewn rectangle pair, an unrelated boundary split,
+linked-pair refusal and midpoint splits across the shipped presets.
+
+Observed validation: the full desktop suite passed, including 162 library tests
+with 8 ignored and the five new `seam_split` integration tests; strict all-target
+Clippy, formatting and the CPU-only check passed. No GPU or window run was performed.
+
 ## Basic gray body silhouette on the 2D board — 18 November 2026 (experimental)
 
 The 2D pattern board can show a gray avatar silhouette behind the pieces, with a
