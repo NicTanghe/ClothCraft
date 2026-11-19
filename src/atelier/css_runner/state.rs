@@ -1,5 +1,6 @@
 //! Editor state and simulation/selection state helpers.
 
+use super::super::viewport_wireframe::WireframeSettings;
 use super::super::worker::{self, Latest, Work};
 use super::super::{DocumentFiles, perf};
 use super::actions::RunnerAction;
@@ -42,6 +43,14 @@ pub struct CssRunnerState {
     pub(super) frame_drag: FrameAlignedDrag,
     pub(super) input_dirty: bool,
     pub wireframe: bool,
+    /// Stroke colour index into `viewport_wireframe::COLOURS`.
+    pub wireframe_colour: usize,
+    /// Stroke width in physical pixels.
+    pub wireframe_width_px: f32,
+    /// Shared with the GPU viewport, which applies the stroke on its next frame.
+    pub viewport_wireframe: Arc<Mutex<WireframeSettings>>,
+    /// Wakes the on-demand viewport when the wireframe toggle or style changes.
+    pub viewport_redraw: Arc<Mutex<Option<cssimpler::renderer::gpu::GpuRedrawHandle>>>,
     pub(super) board_background: RefCell<Option<super::board::rendering::BoardBackgroundCache>>,
     pub(super) native_number_drag: bool,
     pub(super) number_drag: Arc<Mutex<super::input::number::NumberDragState>>,
@@ -77,6 +86,12 @@ pub struct CssRunnerState {
     pub camera: Camera,
     pub theme: Theme,
     pub shading: clothcraft::usd_scene::ShadingMode,
+    pub show_body_outline: bool,
+    pub(super) body_outline: super::body_outline::BodyOutline,
+    pub(super) show_body_fill: bool,
+    pub(super) show_body_border: bool,
+    pub(super) show_body_details: bool,
+    pub(super) body_settings_open: bool,
     pub layout_mode: ViewLayoutMode,
     pub active_category: ObjectCategory,
     pub active_3d_tool: String,
@@ -134,6 +149,8 @@ impl CssRunnerState {
             &scene.state.x,
             Some(&scene.collider.surface),
         );
+        let body_outline =
+            super::body_outline::build(scene.collider.surface.as_ref(), &project.template);
 
         let board_2d_fit = fit_2d_board(&project.template);
         Self {
@@ -142,6 +159,10 @@ impl CssRunnerState {
             frame_drag: FrameAlignedDrag::new(),
             input_dirty: false,
             wireframe: false,
+            wireframe_colour: super::super::viewport_wireframe::DEFAULT_COLOUR,
+            wireframe_width_px: super::super::viewport_wireframe::DEFAULT_WIDTH_PX,
+            viewport_wireframe: Arc::new(Mutex::new(WireframeSettings::default())),
+            viewport_redraw: Arc::new(Mutex::new(None)),
             board_background: RefCell::new(None),
             native_number_drag: false,
             number_drag: Arc::new(Mutex::new(Default::default())),
@@ -175,6 +196,12 @@ impl CssRunnerState {
             camera,
             theme: Theme::Dark,
             shading: clothcraft::usd_scene::ShadingMode::Smooth,
+            show_body_outline: true,
+            body_outline,
+            show_body_fill: true,
+            show_body_border: true,
+            show_body_details: true,
+            body_settings_open: false,
             layout_mode: ViewLayoutMode::Split,
             active_category: ObjectCategory::Pattern2D,
             active_3d_tool: "Gizmo".to_string(),
@@ -307,22 +334,40 @@ impl CssRunnerState {
         {
             self.status_message = format!("USD update error: {error}");
         }
-        if self.wireframe {
-            self.sync_usd_wireframe();
-        }
     }
 
-    /// Refresh or hide the cloth-only wireframe overlay.
+    /// Current wireframe toggle, colour and width, clamped to supported ranges.
+    pub fn wireframe_settings(&self) -> WireframeSettings {
+        WireframeSettings {
+            enabled: self.wireframe,
+            colour: self.wireframe_colour,
+            width_px: self.wireframe_width_px,
+        }
+        .normalized()
+    }
+
+    /// Apply the cloth-only wireframe toggle, colour and width to the viewport.
+    ///
+    /// The stroke lives in the GPU renderer, so the panel positions and the
+    /// stage stay untouched; the viewport applies the settings on its next
+    /// frame.
     pub fn sync_usd_wireframe(&mut self) {
-        if let Some(scene) = &self.usd_scene
-            && let Err(error) = clothcraft::usd_scene::update_viewport_wireframe(
-                scene,
-                &self.scene.garment,
-                &self.scene.state,
-                self.wireframe,
-            )
+        let settings = self.wireframe_settings();
+        *self
+            .viewport_wireframe
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = settings;
+        self.request_viewport_redraw();
+    }
+
+    fn request_viewport_redraw(&self) {
+        if let Some(handle) = self
+            .viewport_redraw
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
         {
-            self.status_message = format!("USD wireframe error: {error}");
+            handle.request_redraw();
         }
     }
 

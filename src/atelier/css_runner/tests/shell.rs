@@ -776,9 +776,7 @@ fn viewport_shading_toggle_rewrites_usd_normals() {
 }
 
 #[test]
-fn viewport_wireframe_toggle_authors_only_the_cloth_overlay() {
-    use cssimpler::renderer::gpu::openusd::{gf, tf};
-
+fn viewport_wireframe_toggle_strokes_only_garment_panels() {
     let _guard = worker::WORKER_TEST_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -788,13 +786,15 @@ fn viewport_wireframe_toggle_authors_only_the_cloth_overlay() {
     std::fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").expect("write avatar");
     let project = FittingProject::basic(GarmentKind::Tshirt, 1, avatar);
     let scene = project.compile().expect("compile scene");
+    let output = dir.path().join("wireframe_out");
     let files = DocumentFiles {
-        output: dir.path().join("wireframe_out"),
+        output: output.clone(),
         source: None,
         modified: false,
     };
     let (tx, latest) = worker::start_cpu().expect("start cpu worker");
     let state = CssRunnerState::new(project, scene, files, tx, latest);
+    let toggle = state.viewport_wireframe.clone();
     let mut app = create_runner_app(state, &stylesheet);
     app.set_viewport(cssimpler::renderer::ViewportSize::new(1600, 980));
     app.frame(FrameInfo {
@@ -802,34 +802,19 @@ fn viewport_wireframe_toggle_authors_only_the_cloth_overlay() {
         frame_index: 0,
     });
 
-    let read_points = |state: &CssRunnerState, path: &str| -> Vec<gf::Vec3f> {
-        state
-            .usd_scene
-            .as_ref()
-            .unwrap()
-            .stage()
-            .attribute(format!("{path}.points"))
-            .unwrap()
-            .get::<Vec<gf::Vec3f>>()
-            .unwrap()
-            .unwrap()
-    };
-    let read_visibility = |state: &CssRunnerState| -> String {
-        let token = state
-            .usd_scene
-            .as_ref()
-            .unwrap()
-            .stage()
-            .attribute("/ClothWire.visibility")
-            .unwrap()
-            .get::<tf::Token>()
-            .unwrap()
-            .unwrap();
-        token.as_ref().to_owned()
-    };
+    let shared = || *toggle.lock().unwrap_or_else(|e| e.into_inner());
+
+    // The display stage carries the garment panels and the collider, and no
+    // longer a ribbon wireframe mesh: the stroke lives in the GPU renderer.
+    let usda = std::fs::read_to_string(output.join("runner_preview.usda")).expect("read stage");
+    assert!(usda.contains("def Scope \"Garment\""));
+    assert!(usda.contains("def Mesh \"Collider\""));
+    assert!(!usda.contains("ClothWire"));
 
     assert!(!app.state().wireframe);
-    assert_eq!(read_visibility(app.state()), "invisible");
+    assert!(!shared().enabled);
+    assert_eq!(shared().colour, 0);
+    assert_eq!(shared().width_px, 2.0);
     let ui = super::super::build_runner_ui(app.state());
     assert_eq!(
         find_title(&ui, "wireframe-toggle"),
@@ -839,9 +824,6 @@ fn viewport_wireframe_toggle_authors_only_the_cloth_overlay() {
         find_title(&ui, "shading-toggle"),
         Some("Smooth shading — click for flat shading")
     );
-    let cloth_points = read_points(app.state(), "/ClothWire");
-    let collider_points = read_points(app.state(), "/Collider");
-    assert!(!cloth_points.is_empty(), "cloth wireframe has edges");
 
     let button = app.find_element_bounds_by_id("#wireframe-toggle").unwrap();
     assert!(cssimpler::renderer::dispatch_click(
@@ -854,22 +836,16 @@ fn viewport_wireframe_toggle_authors_only_the_cloth_overlay() {
         frame_index: 1,
     });
     assert!(app.state().wireframe);
-    assert_eq!(read_visibility(app.state()), "inherited");
+    assert!(shared().enabled);
     let ui = super::super::build_runner_ui(app.state());
     assert_eq!(
         find_title(&ui, "wireframe-toggle"),
         Some("Hide cloth wireframe")
     );
-    let visible_points = read_points(app.state(), "/ClothWire");
-    assert_eq!(visible_points.len(), cloth_points.len());
 
-    // A cloth update reaches the overlay; the avatar/collision mesh is untouched.
-    let panel = &app.state().scene.garment.panels[0];
-    let vertex = app.state().scene.garment.mesh.triangles[panel.triangles.start].vertices[0];
-    app.state_mut().scene.state.x[vertex] += glam::DVec3::new(0.02, 0.0, 0.0);
-    app.state_mut().sync_usd_points();
-    assert_ne!(read_points(app.state(), "/ClothWire"), visible_points);
-    assert_eq!(read_points(app.state(), "/Collider"), collider_points);
+    // Toggling the stroke must not re-author overlay geometry into the stage.
+    let usda = std::fs::read_to_string(output.join("runner_preview.usda")).expect("read stage");
+    assert!(!usda.contains("ClothWire"));
 
     assert!(cssimpler::renderer::dispatch_click(
         app.scene(),
@@ -881,7 +857,7 @@ fn viewport_wireframe_toggle_authors_only_the_cloth_overlay() {
         frame_index: 2,
     });
     assert!(!app.state().wireframe);
-    assert_eq!(read_visibility(app.state()), "invisible");
+    assert!(!shared().enabled);
 }
 
 fn find_title<'a>(node: &'a cssimpler::core::Node, id: &str) -> Option<&'a str> {

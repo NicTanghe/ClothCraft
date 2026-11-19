@@ -1,5 +1,6 @@
 //! Queued UI actions, operation dispatch and frame updates.
 
+use super::super::viewport_wireframe;
 use super::board::interaction::set_active_2d_tool;
 use super::board::types::ToolDraft2d;
 use super::editing::{
@@ -50,6 +51,7 @@ pub enum RunnerAction {
     TabMaterial,
     TabEnv,
     CamReset,
+    ToggleBodyOutline,
     PieceNext,
     ToolSelect,
     ToolSew,
@@ -104,6 +106,10 @@ pub enum RunnerUiOp {
     CycleMeasurementBits,
     ToggleSettings,
     CloseSettings,
+    ToggleBodySettings,
+    ToggleBodyFill,
+    ToggleBodyBorder,
+    ToggleBodyDetails,
     Adjust2dZoomSpeed(f64),
     Reset2dZoomSpeed,
     SetCornerMode(bool),
@@ -111,6 +117,9 @@ pub enum RunnerUiOp {
     SetShadingMode(clothcraft::usd_scene::ShadingMode),
     ToggleShading,
     ToggleWireframe,
+    CycleWireframeColour,
+    AdjustWireframeWidth(f32),
+    ResetWireframeStyle,
     AdjustCornerRadiusMm(f64),
     AdjustCornerTension(f64),
     ApplyCornerRoundSelected,
@@ -284,6 +293,13 @@ pub(super) fn apply_runner_action(
             );
             state.sync_usd_camera();
             state.status_message = "Reset 3D camera".to_string();
+        }
+        RunnerAction::ToggleBodyOutline => {
+            state.show_body_outline = !state.show_body_outline;
+            state.status_message = format!(
+                "Body reference: {}",
+                if state.show_body_outline { "ON" } else { "OFF" }
+            );
         }
         RunnerAction::PieceNext => {
             let count = state.project.template.panels.len().max(1);
@@ -496,6 +512,10 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             }
         }
         RunnerUiOp::CloseSettings => state.settings_open = false,
+        RunnerUiOp::ToggleBodySettings => state.body_settings_open = !state.body_settings_open,
+        RunnerUiOp::ToggleBodyFill => state.show_body_fill = !state.show_body_fill,
+        RunnerUiOp::ToggleBodyBorder => state.show_body_border = !state.show_body_border,
+        RunnerUiOp::ToggleBodyDetails => state.show_body_details = !state.show_body_details,
         RunnerUiOp::Adjust2dZoomSpeed(delta) => {
             if delta.is_finite() {
                 state.board_2d_zoom_speed =
@@ -543,6 +563,30 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                 "Cloth wireframe: {}",
                 if state.wireframe { "on" } else { "off" }
             );
+        }
+        RunnerUiOp::CycleWireframeColour => {
+            state.wireframe_colour =
+                (state.wireframe_colour + 1) % viewport_wireframe::COLOURS.len();
+            state.sync_usd_wireframe();
+            let (name, _) = viewport_wireframe::COLOURS[state.wireframe_colour];
+            state.status_message = format!("Wireframe colour: {name}");
+        }
+        RunnerUiOp::AdjustWireframeWidth(delta) => {
+            if delta.is_finite() {
+                state.wireframe_width_px = (state.wireframe_width_px + delta).clamp(
+                    viewport_wireframe::MIN_WIDTH_PX,
+                    viewport_wireframe::MAX_WIDTH_PX,
+                );
+                state.sync_usd_wireframe();
+                state.status_message =
+                    format!("Wireframe width: {:.0} px", state.wireframe_width_px);
+            }
+        }
+        RunnerUiOp::ResetWireframeStyle => {
+            state.wireframe_colour = viewport_wireframe::DEFAULT_COLOUR;
+            state.wireframe_width_px = viewport_wireframe::DEFAULT_WIDTH_PX;
+            state.sync_usd_wireframe();
+            state.status_message = "Wireframe style reset".into();
         }
         RunnerUiOp::AdjustCornerRadiusMm(delta) => {
             state.corner_radius_mm = (state.corner_radius_mm + delta).clamp(1.0, 250.0);

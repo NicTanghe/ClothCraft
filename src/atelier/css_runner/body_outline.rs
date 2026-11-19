@@ -1,0 +1,211 @@
+//! Filled front silhouette for the 2D pattern board.
+//!
+//! The prototype registers avatar world XY against the first panel's board
+//! layout and 3D translation. The projection is independent of the 3D camera.
+
+use super::board::native::polyline;
+use clothcraft::avatar::SurfaceMesh;
+use clothcraft::garment::GarmentTemplate;
+use cssimpler::core::PathCommand;
+use i_overlay::{
+    core::fill_rule::FillRule,
+    core::overlay_rule::OverlayRule,
+    float::{clip::FloatClip, overlay::FloatOverlay},
+    mesh::float::{
+        outline::offset::OutlineOffset,
+        style::{LineJoin, OutlineStyle},
+    },
+    string::clip::ClipRule,
+};
+
+use std::{cell::RefCell, collections::BTreeMap};
+
+#[derive(Default)]
+pub(super) struct BodyOutline {
+    /// Closed coverage in board millimetres. Holes have opposite winding.
+    pub contours: Vec<Vec<(f64, f64)>>,
+    /// Open feature lines strictly inside the outline.
+    pub details: Vec<Vec<(f64, f64)>>,
+    expanded_fill: RefCell<Option<(f64, Vec<PathCommand>)>>,
+}
+
+impl BodyOutline {
+    pub fn fill_commands(&self, radius_mm: f64) -> Vec<PathCommand> {
+        let mut cached = self.expanded_fill.borrow_mut();
+        if let Some((radius, commands)) = &*cached
+            && *radius == radius_mm
+        {
+            return commands.clone();
+        }
+        let contours: Vec<Vec<[f64; 2]>> = self
+            .contours
+            .iter()
+            .map(|ring| ring.iter().map(|&(x, y)| [x, y]).collect())
+            .collect();
+        // Match the centered, round outline stroke. Offset the coverage as
+        // one shape so translucent edges never get a second coat of fill.
+        let style = OutlineStyle::new(radius_mm).line_join(LineJoin::Round(0.2));
+        let expanded = contours.outline(&style);
+        let commands: Vec<_> = expanded
+            .iter()
+            .flatten()
+            .flat_map(|ring| {
+                let points: Vec<_> = ring.iter().map(|&[x, y]| (x, y)).collect();
+                polyline(&points, true)
+            })
+            .collect();
+        *cached = Some((radius_mm, commands.clone()));
+        commands
+    }
+}
+
+pub(super) fn build(surface: &SurfaceMesh, template: &GarmentTemplate) -> BodyOutline {
+    let Some(panel) = template.panels.first() else {
+        return BodyOutline::default();
+    };
+    let anchor_world = panel.placement.translation;
+    let anchor_board = clothcraft::authoring::layout(template, 0);
+    let projected: Vec<[f64; 2]> = surface
+        .vertices
+        .iter()
+        .map(|p| {
+            [
+                anchor_board.x + (p.x - anchor_world.x),
+                anchor_board.y - (p.y - anchor_world.y),
+            ]
+        })
+        .collect();
+
+    let mut triangles = Vec::with_capacity(surface.triangles.len());
+    let mut edges = BTreeMap::<(usize, usize), [usize; 2]>::new();
+    for &[ia, ib, ic] in &surface.triangles {
+        let (Some(&a), Some(&b), Some(&c)) =
+            (projected.get(ia), projected.get(ib), projected.get(ic))
+        else {
+            continue;
+        };
+        let area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        if !area.is_finite()
+            || area == 0.0
+            || [a, b, c]
+                .into_iter()
+                .flatten()
+                .any(|v| !((1000.0 * v) as f32).is_finite())
+        {
+            continue;
+        }
+        for (i, j) in [(ia, ib), (ib, ic), (ic, ia)] {
+            edges.entry((i.min(j), i.max(j))).or_default()[usize::from(area > 0.0)] += 1;
+        }
+        // Give every projected face the same winding so overlaps add coverage
+        // even when the adjacent or occluding face points the other way.
+        triangles.push(if area > 0.0 {
+            vec![a, b, c]
+        } else {
+            vec![a, c, b]
+        });
+    }
+    if triangles.is_empty() {
+        return BodyOutline::default();
+    }
+    let contours =
+        FloatOverlay::with_subj(&triangles).overlay(OverlayRule::Subject, FillRule::NonZero);
+    // Keep the mesh's open edges and facing transitions, as in the original
+    // line drawing. Clip away coverage boundaries and any lines outside it
+    // so Details can be toggled independently of Outline.
+    let feature_edges: Vec<_> = edges
+        .into_iter()
+        .filter(|(_, facing)| matches!(facing, [1, 0] | [0, 1] | [1, 1]))
+        .map(|((i, j), _)| vec![projected[i], projected[j]])
+        .collect();
+    let details = feature_edges.clip_by(
+        &contours,
+        FillRule::NonZero,
+        ClipRule {
+            invert: false,
+            boundary_included: false,
+        },
+    );
+    let millimetres = |path: Vec<[f64; 2]>| {
+        path.into_iter()
+            .map(|[x, y]| (x * 1000.0, y * 1000.0))
+            .collect()
+    };
+    BodyOutline {
+        contours: contours.into_iter().flatten().map(millimetres).collect(),
+        details: details.into_iter().map(millimetres).collect(),
+        expanded_fill: Default::default(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use glam::DVec3;
+
+    #[test]
+    fn coverage_preserves_the_hole_and_unions_reversed_overlapping_faces() {
+        // Four quads surround a 2x2 hole inside a 4x4 square. The last
+        // triangle lies over one face, at a different depth and winding.
+        let mut vertices = [
+            [0., 0.],
+            [4., 0.],
+            [4., 4.],
+            [0., 4.],
+            [1., 1.],
+            [3., 1.],
+            [3., 3.],
+            [1., 3.],
+        ]
+        .map(|[x, y]| DVec3::new(x, y, 0.))
+        .to_vec();
+        vertices.extend([
+            vertices[0] + DVec3::Z,
+            vertices[5] + DVec3::Z,
+            vertices[1] + DVec3::Z,
+        ]);
+        let surface = SurfaceMesh {
+            vertices,
+            triangles: vec![
+                [0, 1, 5],
+                [0, 5, 4],
+                [1, 2, 6],
+                [1, 6, 5],
+                [2, 3, 7],
+                [2, 7, 6],
+                [3, 0, 4],
+                [3, 4, 7],
+                [8, 9, 10],
+            ],
+        };
+        let contours = build(&surface, &GarmentTemplate::two_panel_demo()).contours;
+        assert_eq!(contours.len(), 2);
+        let area = |ring: &[(f64, f64)]| {
+            ring.iter()
+                .zip(ring.iter().cycle().skip(1))
+                .map(|(&(ax, ay), &(bx, by))| ax * by - ay * bx)
+                .sum::<f64>()
+                / 2.0
+        };
+        let a = area(&contours[0]);
+        let b = area(&contours[1]);
+        assert!(a * b < 0.0, "hole winding must oppose exterior winding");
+        assert!(((a + b).abs() / 1e6 - 12.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn empty_surface_and_empty_template_are_safe() {
+        let surface = SurfaceMesh {
+            vertices: vec![],
+            triangles: vec![],
+        };
+        assert!(
+            build(&surface, &GarmentTemplate::two_panel_demo())
+                .contours
+                .is_empty()
+        );
+        let mut template = GarmentTemplate::two_panel_demo();
+        template.panels.clear();
+        assert!(build(&surface, &template).contours.is_empty());
+    }
+}

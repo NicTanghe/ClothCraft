@@ -1,6 +1,6 @@
 //! Native application creation and runner entry point.
 
-use super::super::{DocumentFiles, RunOptions, perf, usd_smoke, worker};
+use super::super::{DocumentFiles, RunOptions, perf, usd_smoke, viewport_wireframe, worker};
 use super::actions::update_runner;
 use super::input::handle_runner_event;
 use super::state::CssRunnerState;
@@ -31,12 +31,6 @@ pub fn create_runner_app<'a>(
     let usda = clothcraft::usd_scene::garment_stage_usda(&state.scene.garment, &state.scene.state)
         .unwrap_or_default();
     let usda = clothcraft::usd_scene::append_viewport_surface(usda, &state.scene.collider.surface);
-    let usda = clothcraft::usd_scene::append_viewport_wireframe(
-        usda,
-        &state.scene.garment,
-        &state.scene.state,
-        state.wireframe,
-    );
     let _ = std::fs::write(&preview_path, usda);
 
     let usd_scene = cssimpler::renderer::gpu::usd::UsdScene::open(&preview_path)
@@ -49,6 +43,9 @@ pub fn create_runner_app<'a>(
     let smoke = state.smoke;
     let smoke_done = state.smoke_done.clone();
     let smoke_output = state.files.output.join("ui.png");
+    // Clone the viewport handles before `state` moves into the application.
+    let wireframe = state.viewport_wireframe.clone();
+    let redraw_slot = state.viewport_redraw.clone();
     let app = App::new(
         state,
         stylesheet,
@@ -64,26 +61,30 @@ pub fn create_runner_app<'a>(
     let cam_mode = cssimpler::renderer::gpu::usd::UsdCameraMode::Authored(
         clothcraft::usd_scene::VIEWPORT_CAMERA_PATH.into(),
     );
-    if smoke {
-        app.with_gpu_viewport(
-            "runner-viewport-3d-scene",
-            Default::default(),
-            move |init| {
-                let redraw = init.redraw.clone();
-                let renderer =
-                    cssimpler::renderer::gpu::usd::UsdRenderer::new(init, usd_scene, cam_mode)?;
+    app.with_gpu_viewport(
+        "runner-viewport-3d-scene",
+        Default::default(),
+        move |init| {
+            let redraw = init.redraw.clone();
+            *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
+            let renderer =
+                cssimpler::renderer::gpu::usd::UsdRenderer::new(init, usd_scene, cam_mode)?;
+            if smoke {
                 Ok(Box::new(usd_smoke::SmokeViewport {
                     renderer,
                     output: smoke_output,
                     done: smoke_done,
                     redraw,
                     frames: 0,
+                    sync: viewport_wireframe::WireframeSync::new(wireframe),
                 }))
-            },
-        )
-    } else {
-        app.with_usd_viewport("runner-viewport-3d-scene", usd_scene, cam_mode)
-    }
+            } else {
+                Ok(Box::new(viewport_wireframe::RunnerViewport::new(
+                    renderer, wireframe,
+                )))
+            }
+        },
+    )
 }
 
 pub(super) fn init_gpu_device() -> Result<(wgpu::Device, wgpu::Queue), String> {

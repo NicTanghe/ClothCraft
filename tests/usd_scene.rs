@@ -1,8 +1,8 @@
 use clothcraft::{
     garment::GarmentTemplate,
     usd_scene::{
-        ShadingMode, append_viewport_surface, append_viewport_wireframe, display_normals,
-        flat_corner_normals, garment_stage_usda, smooth_vertex_normals,
+        ShadingMode, append_viewport_surface, display_normals, flat_corner_normals,
+        garment_stage_usda, smooth_vertex_normals,
     },
 };
 use glam::DVec3;
@@ -217,24 +217,18 @@ fn collision_display_surface_publishes_smooth_normals() {
 }
 
 #[test]
-fn wireframe_overlay_covers_cloth_edges_only() {
+fn display_stage_has_no_ribbon_wireframe_mesh() {
+    // The cloth wireframe is now a renderer-side stroke on the garment panel
+    // meshes, so the display stage must not carry a separate `/ClothWire` mesh.
     let garment = tiny();
-    let hidden = append_viewport_wireframe(String::new(), &garment, &garment.initial_state, false);
-    assert!(hidden.contains("def Mesh \"ClothWire\""));
-    assert!(hidden.contains("visibility = \"invisible\""));
-    // Two 1x1 panels have five unique edges each: ten quads, forty points,
-    // twenty triangles, and no collider or avatar geometry.
-    let points = hidden
-        .lines()
-        .find(|line| line.trim_start().starts_with("point3f[] points ="))
-        .unwrap();
-    assert_eq!(points.matches('(').count(), 40);
-    let counts = hidden
-        .lines()
-        .find(|line| line.trim_start().starts_with("int[] faceVertexCounts ="))
-        .unwrap();
-    assert_eq!(counts.matches('3').count(), 20);
-
-    let visible = append_viewport_wireframe(String::new(), &garment, &garment.initial_state, true);
-    assert!(visible.contains("visibility = \"inherited\""));
+    let usda = garment_stage_usda(&garment, &garment.initial_state).unwrap();
+    assert!(usda.contains("def Scope \"Garment\""));
+    assert!(!usda.contains("ClothWire"));
+    let surface = clothcraft::avatar::SurfaceMesh {
+        vertices: vec![DVec3::ZERO, DVec3::X, DVec3::Y],
+        triangles: vec![[0, 1, 2]],
+    };
+    let usda = append_viewport_surface(usda, &surface);
+    assert!(usda.contains("def Mesh \"Collider\""));
+    assert!(!usda.contains("ClothWire"));
 }
