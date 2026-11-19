@@ -94,7 +94,7 @@ pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Nod
                                 onclick_shared={queue_action(&state.actions, RunnerAction::ImportDxf)}>"DXF"</button>
                             <button id="import-svg" class="btn-action" title="Import SVG pattern outlines"
                                 onclick_shared={queue_action(&state.actions, RunnerAction::ImportSvg)}>"SVG"</button>
-                            <button id="import-avatar" class="btn-action" title="Replace the static avatar from OBJ, glTF or GLB"
+                            <button id="import-avatar" class="btn-action" title="Replace the static avatar from OBJ, glTF, GLB, FBX or USD"
                                 onclick_shared={queue_action(&state.actions, RunnerAction::ImportAvatar)}>"Avatar"</button>
                         </div>
                     </div>

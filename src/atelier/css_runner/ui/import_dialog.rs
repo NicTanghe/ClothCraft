@@ -53,7 +53,9 @@ fn source_row(state: &CssRunnerState, dialog: &ImportDialog) -> Node {
     let filter = match dialog.kind {
         ImportKind::Dxf => "Generic ASCII DXF · closed outlines only",
         ImportKind::Svg => "Physical SVG · closed outlines only · positive Y down",
-        ImportKind::Avatar => "Static OBJ / glTF / GLB · metres · Y-up",
+        ImportKind::Avatar => {
+            "Static OBJ / glTF / GLB / FBX / USD · declared units · Y-up after conversion"
+        }
     };
     ui! {
         <div class="import-section">

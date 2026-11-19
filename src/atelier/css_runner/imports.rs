@@ -432,7 +432,10 @@ impl CssRunnerState {
                 .pick_file(),
             ImportKind::Avatar => rfd::FileDialog::new()
                 .set_title("Import static avatar")
-                .add_filter("Static avatar", &["obj", "gltf", "glb"])
+                .add_filter(
+                    "Static avatar",
+                    &["obj", "gltf", "glb", "fbx", "usd", "usda", "usdc", "usdz"],
+                )
                 .pick_file(),
         };
         match path {

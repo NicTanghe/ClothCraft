@@ -12,6 +12,10 @@ Rust dependencies are resolved by `Cargo.lock` and retain their respective upstr
 
 Research and public manual references are recorded in `docs/research.md`, `docs/research-patterns.md`, `docs/ogc.md` and `docs/manual-study.md`. Citations do not imply that upstream implementations, assets or trademarks are included or licensed by this project.
 
+## Avatar interchange dependencies
+
+Static USD avatar import uses the [`openusd`](https://crates.io/crates/openusd) crate (MIT) for USDA/USDC/USDZ container decoding and composition, and FBX zlib arrays use [`flate2`](https://crates.io/crates/flate2) (MIT or Apache-2.0). Both are ordinary Cargo dependencies pinned by `Cargo.lock`; neither is vendored. The FBX node/property reader and the USD import policy layer in `src/fbx_avatar.rs` and `src/usd_avatar.rs` are original code written from public format documentation, not copied from an SDK.
+
 ## ClothCraft source
 
 ClothCraft source is distributed under the MIT license; see [LICENSE](LICENSE).

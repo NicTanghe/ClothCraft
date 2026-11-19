@@ -16,7 +16,7 @@ Historical status: ready. Technical dependencies: EXO-CORE-001.
 **Acceptance ideas**
 
 - Describe actual supported import and export directions in the workspace and README using the existing SVG, DXF and avatar import contracts.
-- Clearly distinguish generic DXF outlines, physically scaled SVG subsets and static OBJ/glTF/GLB avatars from unsupported industrial dialects, animated assets and GLB export.
+- Clearly distinguish generic DXF outlines, physically scaled SVG subsets and static OBJ/glTF/GLB/FBX/USD avatars from unsupported industrial dialects, animated assets and mesh export.
 - Do not change importers, solvers or docs/interoperability.md while the markings contribution is pending. Validate the rendered text against actual menu handlers and documentation.
 
 **Evidence**

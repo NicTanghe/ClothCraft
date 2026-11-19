@@ -117,7 +117,7 @@ fn preparation_failure_and_cancel_do_not_change_document_or_source() {
     std::fs::write(&invalid, "v -1e308 0 0\nv 1e308 0 0\nv 0 1e308 0\nf 1 2 3").unwrap();
     assert!(Candidate::load(&invalid).is_err());
     assert!(Candidate::load(&dir.path().join("missing.obj")).is_err());
-    assert!(Candidate::load(&dir.path().join("mesh.fbx")).is_err());
+    assert!(Candidate::load(&dir.path().join("mesh.stl")).is_err());
 }
 #[test]
 fn ambiguous_gltf_is_rejected_instead_of_choosing_first_scene() {
