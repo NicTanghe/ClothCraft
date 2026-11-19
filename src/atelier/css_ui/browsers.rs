@@ -5,7 +5,7 @@
 //! - Left Asset & Piece Browser (`render_left_browser`):
 //!   - Bundled templates browser (T-shirt, Dress, Apron, Two-panel, Local-ease, Curved-panels, Partial-chain)
 //!   - Dirty-document confirmation state
-//!   - Import/Export quick actions (DXF, SVG, Avatar OBJ/glTF/GLB, Export OBJ, True-Scale SVG with 100 mm ruler note)
+//!   - Import/Export quick actions (DXF, SVG, Avatar OBJ/glTF/GLB/FBX/USD, Export OBJ, True-Scale SVG with 100 mm ruler note)
 //!   - Pattern Piece cards list (stable `panel.id`, vertex/triangle counts, mirror badges, fabric, selection highlight)
 //! - Right 5-Category Object Browser (`render_object_browser`):
 //!   - Category tabs: 2D Pattern, Sewing, 3D Form, Material, Environment
@@ -414,7 +414,7 @@ fn render_import_export_section(state: &LeftBrowserState) -> Node {
                         "Import SVG"
                     </button>
                     <button id="btn-import-avatar" class="btn btn-action">
-                        "Import Avatar (OBJ/glTF/GLB)"
+                        "Import Avatar (OBJ/glTF/GLB/FBX/USD)"
                     </button>
                 </div>
             </div>
@@ -1270,7 +1270,7 @@ fn render_category_environment(
                     </div>
                     <div class="avatar-row">
                         <span class="meta-label">"Type:"</span>
-                        <span class="meta-val">"Static OBJ / glTF / GLB Mannequin"</span>
+                        <span class="meta-val">"Static OBJ / glTF / GLB / FBX / USD Mannequin"</span>
                     </div>
                     <div class="avatar-row">
                         <span class="meta-label">"Collision:"</span>

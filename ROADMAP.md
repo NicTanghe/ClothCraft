@@ -104,11 +104,11 @@ The priorities below are the product requirements. Within the critical group, im
 | OBJ + MTL | Static garments, avatars, Blender, Maya | **Critical** | **Partial:** avatar OBJ import and garment OBJ export; no MTL/material round trip. Add groups, material assignments and documented axes/UV conventions |
 | glTF / GLB | Modern 3D assets, PBR, realtime visualization | **Critical** | Planned. Static garment/avatar round trip first, then materials, textures and animation capabilities |
 | Alembic `.abc` | Animated simulation caches for VFX/cinematics | **Critical** | Planned. Fixed-topology position/normal cache, timestamps, units and DCC playback fixture |
-| OpenUSD `.usd/.usda/.usdc` | Production pipelines and Chaos Cloth workflows | **Critical** | Planned. Mesh/material/time-sample interchange; validate any Chaos-specific schema separately |
-| FBX `.fbx` | Rigged characters, animation, Unreal, Unity, DCC | **High** | Planned. Avatar hierarchy, skinning, bind transforms and sampled animation; select dependency/distribution strategy before integrating |
+| OpenUSD `.usd/.usda/.usdc` | Production pipelines and Chaos Cloth workflows | **Critical** | **Partial:** static avatar mesh import (USDA/USDC/USDZ), a bounded CPU USDA snapshot writer and lossless editable USDA template/project documents (S1 of [#51](https://github.com/NicTanghe/ClothCraft/issues/51)). Material/time-sample interchange, richer USD authoring and any Chaos-specific schema remain planned |
+| FBX `.fbx` | Rigged characters, animation, Unreal, Unity, DCC | **High** | **Partial:** static avatar mesh import for FBX 7.x ASCII/binary, including model hierarchy, static transforms, units and global axes. Skinning, bind poses, pivots and sampled animation remain planned |
 | PDF / SVG | Print and share 2D patterns | **High** | **Partial:** annotated preview and physical SVG sewing outlines with a 100 mm ruler. No PDF, tiling or allowances; physical printer validation remains open |
 | Grading rule files | S/M/L/XL size ranges, industrial manufacturing | **High** | Planned. Identify concrete dialects; explicit units, size tables, stable point identities and reversible grade application |
-| USDZ `.usdz` | AR and product presentation | **Medium** | Planned after USD: packaging, material/texture validation and viewer fixture |
+| USDZ `.usdz` | AR and product presentation | **Medium** | **Partial (input):** static avatar meshes are read through the USD importer. Packaging, material/texture validation and a viewer fixture remain planned |
 | MDD / PC2 | Legacy deformation-cache pipelines | **Secondary** | Planned. Fixed vertex order, frame/time conversion and topology mismatch rejection |
 | SBSAR | Procedural Substance materials | **Secondary** | Planned. Dependency/runtime evaluation and material baking workflow; appearance parameters are not calibrated cloth physics |
 

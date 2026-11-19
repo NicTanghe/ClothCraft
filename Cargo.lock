@@ -442,6 +442,7 @@ dependencies = [
  "bytemuck",
  "clap",
  "cssimpler",
+ "flate2",
  "glam",
  "i_overlay",
  "image",

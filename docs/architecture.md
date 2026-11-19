@@ -77,6 +77,7 @@ restart/release protocols. See [its evidence and limitations](settling-zoo.md).
 | `math.rs`, `energy.rs` | Second-order AD, membrane and bending | Current + rest geometry → energy/derivatives |
 | `contact.rs` | Vertex/sphere penalty | Discrete contact, per-vertex thickness |
 | `avatar.rs` | OBJ, static BVH and local signed distance | Mannequin → `Collider` implementation |
+| `avatar_import.rs`, `gltf_avatar.rs`, `fbx_avatar.rs`, `usd_avatar.rs` | Static avatar intake, format policy and canonical OBJ staging | Chosen file → validated `SurfaceMesh` in metres, right-handed Y-up |
 | `fitting.rs` | Arrangement, cache and transactional steps | FittingProject → FittingScene |
 | `solver.rs` | Implicit Euler, Newton/PCG, Armijo | Compiled model + state → state/metrics |
 | `project.rs` | Legacy single-panel scene format | `Project` JSON v1 |

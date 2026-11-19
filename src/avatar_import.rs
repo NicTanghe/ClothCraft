@@ -1,8 +1,9 @@
 //! CPU preparation for replacing a static avatar without changing project v1.
 use crate::{
     avatar::SurfaceMesh,
+    fbx_avatar,
     fitting::{FittingProject, FittingScene},
-    gltf_avatar,
+    gltf_avatar, usd_avatar,
     vbd::VbdSettings,
 };
 use glam::DVec3;
@@ -47,6 +48,14 @@ impl Candidate {
                 let imported = gltf_avatar::load(path, None, limits)?;
                 (imported.mesh, imported.warnings)
             }
+            "fbx" => {
+                let imported = fbx_avatar::load(path, limits)?;
+                (imported.mesh, imported.warnings)
+            }
+            "usd" | "usda" | "usdc" | "usdz" => {
+                let imported = usd_avatar::load(path, limits)?;
+                (imported.mesh, imported.warnings)
+            }
             "obj" => {
                 let mut bytes = Vec::new();
                 std::fs::File::open(path)
@@ -67,7 +76,7 @@ impl Candidate {
                 (mesh, vec!["OBJ has no declared units: coordinates are interpreted as metres, Y-up. No rescaling is applied.".into(),
                     "Geometry only: materials, textures, UVs, authored normals and object groups are not retained. Polygon faces use the existing fan triangulation; use triangulated OBJ for unambiguous geometry.".into()])
             }
-            _ => return Err("Choose a static OBJ, glTF or GLB avatar".into()),
+            _ => return Err("Choose a static OBJ, glTF/GLB, FBX or USD avatar".into()),
         };
         mesh.validate()?;
         warnings.push("Import does not repair intersections, open surfaces or inconsistent winding. Check placement before simulating.".into());

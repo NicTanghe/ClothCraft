@@ -1,5 +1,27 @@
 # Repository handoff
 
+## Static FBX and USD avatar import — 19 November 2026
+
+Issue #55 widens static avatar intake beyond OBJ/glTF/GLB. `src/fbx_avatar.rs`
+reads FBX 7.x ASCII and binary (including zlib arrays) into the same
+`SurfaceMesh`, composing the `Model` hierarchy, `Lcl`/`PreRotation`/geometric
+transforms, `UnitScaleFactor` and the global axis basis. `src/usd_avatar.rs`
+composes `.usd`/`.usda`/`.usdc`/`.usdz` through the pure-Rust `openusd` 0.8
+crate and flattens visible `UsdGeom Mesh` prims, applying the static
+`xformOpOrder` subset, stage `metersPerUnit`/`upAxis`, left-handed winding and
+invisible-subtree skipping. Both adapters feed `avatar_import::Candidate`, so
+staging, confirmation, save/reload and worker-generation invalidation are
+unchanged. Losses and limits are in [avatar import](avatar-import.md);
+`tests/avatar_formats.rs` generates every fixture, including a zlib-compressed
+binary FBX (7.4 and the widened 7.5/7.7 records), USDA/USDC stages and a USDZ
+package.
+
+Observed validation: the CPU-only suite passed 715 tests with one ignored opt-in
+preview and no failures; CPU-only and desktop all-target Clippy passed with
+warnings denied; `cargo build --locked -j 2` passed; the nine desktop import UI
+tests passed; `cargo fmt --all --check` passed. No GPU work or native window was
+run.
+
 ## Seam-aware boundary splitting — 18 November 2026
 
 Ported from [erythrofr/ClothCraft#244](https://github.com/erythrofr/ClothCraft/pull/244).
