@@ -1333,6 +1333,74 @@ mod tests {
         }
     }
 
+    /// The cubic `Boundary` view must follow the `Fill` mesh outline. The mesh
+    /// comes from `PolygonPattern::build`; the curve comes from the authored
+    /// controls, so this checks the two derived representations against each
+    /// other. Deviation stays below the Bézier flatten tolerance.
+    #[test]
+    fn boundary_curves_follow_the_fill_mesh_outline() {
+        let template = fixture("curved-panels");
+        let garment = template.compile().expect("compiles");
+        for view in panel_views(&template, &garment) {
+            let boundary = view.boundary.as_ref().expect("boundary view");
+            let mut edge_counts = std::collections::HashMap::new();
+            for triangle in &view.triangles {
+                for (a, b) in [
+                    (triangle[0], triangle[1]),
+                    (triangle[1], triangle[2]),
+                    (triangle[2], triangle[0]),
+                ] {
+                    *edge_counts.entry((a.min(b), a.max(b))).or_insert(0usize) += 1;
+                }
+            }
+            let outline: Vec<_> = edge_counts
+                .into_iter()
+                .filter(|(_, count)| *count == 1)
+                .map(|(edge, _)| edge)
+                .collect();
+            assert!(!outline.is_empty());
+            let mut max = 0.0f64;
+            for control in boundary.points.chunks_exact(4) {
+                for step in 0..=32 {
+                    let p = cubic_at(
+                        [control[0], control[1], control[2], control[3]],
+                        step as f64 / 32.0,
+                    );
+                    let distance = outline
+                        .iter()
+                        .map(|&(a, b)| point_segment_distance(p, view.points[a], view.points[b]))
+                        .fold(f64::INFINITY, f64::min);
+                    max = max.max(distance);
+                }
+            }
+            assert!(max < 0.0003, "curve deviates {max} m from the fill outline");
+        }
+    }
+
+    fn cubic_at(p: [[f64; 3]; 4], t: f64) -> [f64; 3] {
+        let u = 1.0 - t;
+        std::array::from_fn(|i| {
+            u * u * u * p[0][i]
+                + 3.0 * u * u * t * p[1][i]
+                + 3.0 * u * t * t * p[2][i]
+                + t * t * t * p[3][i]
+        })
+    }
+
+    fn point_segment_distance(p: [f64; 3], a: [f64; 3], b: [f64; 3]) -> f64 {
+        let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let length_squared = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        let t = if length_squared == 0.0 {
+            0.0
+        } else {
+            (((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1] + (p[2] - a[2]) * d[2]) / length_squared)
+                .clamp(0.0, 1.0)
+        };
+        let closest = [a[0] + t * d[0], a[1] + t * d[1], a[2] + t * d[2]];
+        ((p[0] - closest[0]).powi(2) + (p[1] - closest[1]).powi(2) + (p[2] - closest[2]).powi(2))
+            .sqrt()
+    }
+
     #[test]
     fn placement_matrix_matches_the_compiled_transform() {
         use crate::garment::template::Placement;
