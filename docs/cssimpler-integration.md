@@ -1,9 +1,10 @@
 # cssimpler integration
 
-Both native desktop editors use cssimpler revision `cb805c0`, which includes
-captured event handlers, typed UI actions, frame-aligned pointer scheduling and
-the transition update described in cssimpler's `docs/`. The fitting runner
-delivers commands through one per-instance
+Both native desktop editors use cssimpler revision `081fe94`, which includes
+captured event handlers, typed UI actions, frame-aligned pointer scheduling, the
+transition update described in cssimpler's `docs/`, per-mesh wireframe strokes
+(PR #41) and GPU viewports embedded as Wayland subsurfaces (PR #40). The fitting
+runner delivers commands through one per-instance
 `cssimpler::ActionQueue<RunnerAction>`. The queue is FIFO and
 duplicate-preserving: two Step clicks enqueue two commands, and a command that
 carries a payload shares the same channel as a unit command. This replaces the
@@ -72,10 +73,23 @@ ruler. The asset browser also offers a separate OBJ save dialog for the current
 
 The runner's 3D header uses two icon buttons: one toggles smooth/flat shading and
 one shows or hides a cloth-only wireframe. Shading still rewrites the authored
-normals on the garment and collision display mesh. The wireframe is a separate
-`/ClothWire` USD mesh made of thin lifted quads over garment edges; it excludes
-avatars, colliders and other loaded display geometry. Both are view-only state
-and are not saved in the document.
+normals on the garment and collision display mesh. The wireframe is a renderer
+stroke: cssimpler draws the polygon-cage edges of the meshes the runner marks, so
+the runner enables it on the `/World/Garment/*` panel meshes only and leaves
+avatars, colliders and other display geometry shaded. No overlay mesh is authored
+into the stage, so accepted solver steps update only the panel points. Both are
+view-only state and are not saved in the document.
+
+## Wayland viewports
+
+cssimpler PR #40 embeds each GPU viewport as a `wl_subsurface` of the parent
+window on Wayland, following the backend winit chose for the parent, so no
+ClothCraft code change is needed beyond the revision bump. The desktop feature
+already pulls the Wayland client crates transitively, and the Linux CI image
+already installs `libwayland-dev`. Nothing here forces the X11 path; the
+`env -u WAYLAND_DISPLAY` workaround in cssimpler's docs is only for deliberately
+exercising XWayland. Native acceptance on Wayland is still pending; see
+[platform validation](platform-validation.md).
 
 ## Native vector board (FC-0061)
 
@@ -152,29 +166,41 @@ The fitting runner's implementation is grouped by state/actions, editing, board,
 input and UI category. See [the module map](css-runner-structure.md) when locating
 code; its public `atelier::css_runner` entry points remain available.
 
-## Settings and 2D zoom speed
+## Settings, 2D zoom speed and wireframe style
 
 The fitting editor has **Settings** immediately after **Export** in the top bar.
-Its only entry is **2D zoom speed**, for mouse-wheel and trackpad zoom. The default
-is 1.5× the earlier sensitivity (one positive wheel line changes zoom by 4.5%
-instead of 3%). The −/+ controls adjust it in 0.25 increments between 0.25× and
-4×; Reset restores 1.5×. Changes apply immediately to the current editor instance.
-This initial setting is session-local: it is not written into garment documents
-or retained between launches. Toolbar/keyboard zoom steps and 3D zoom retain
-their existing behavior.
+It holds **2D zoom speed** and **3D wireframe**.
+
+**2D zoom speed** covers mouse-wheel and trackpad zoom. The default is 1.5× the
+earlier sensitivity (one positive wheel line changes zoom by 4.5% instead of
+3%). The −/+ controls adjust it in 0.25 increments between 0.25× and 4×; Reset
+restores 1.5×.
+
+**3D wireframe** sets the cloth overlay's colour and thickness. The colour
+button cycles five presets (Ink, White, Cyan, Amber, Red) and starts on Ink, the
+colour the former ribbon overlay used. The −/+ controls change the stroke width
+by 1 px between 1 and 8 px, defaulting to 2 px; Reset restores the default colour
+and width. These controls change the stroke only — the separate 3D header icon
+still shows and hides the wireframe, and turning it on keeps the chosen style.
+
+Both settings apply immediately to the current editor instance and are
+session-local: they are not written into garment documents or retained between
+launches. Toolbar/keyboard zoom steps and 3D zoom retain their existing
+behavior.
 
 Close, Escape or a click outside dismisses the panel. Board pointer/wheel input
 and editor keyboard shortcuts are blocked while it is open; settings do not
 create history entries or mark the document modified. Opening the panel also
 closes the solver menu/palette and clears pending edge double-click tracking.
-The closed panel builds no menu nodes; the feature retains just an open flag and
-a numeric speed value in runner state, with existing per-instance operation
-queues handling its controls.
+The closed panel builds no menu nodes; the feature retains just an open flag, a
+numeric speed value, and the wireframe colour index and width in runner state,
+with existing per-instance operation queues handling its controls.
 
 Headless settings tests click the real controls at 1600×980 and 1280×800, check
 Close/Escape/outside-click dismissal, ensure modal input does not edit the board,
 and verify line/pixel scroll equivalence, cursor anchoring, speed/zoom bounds,
-Reset and unchanged 3D zoom. The complete desktop suite passes 775 tests (27
-opt-in checks ignored); CPU-only passes 658 (one ignored). Strict desktop/CPU
-Clippy, build, formatting and all eight factory tests pass. No native-window or
-GPU acceptance was run for this settings change.
+Reset and unchanged 3D zoom. They also verify that the wireframe colour and
+width controls reach the shared viewport settings, clamp at both limits and
+survive the overlay toggle. Strict desktop/CPU Clippy, build, formatting and all
+eight factory tests pass. No native-window or GPU acceptance was run for these
+settings changes.

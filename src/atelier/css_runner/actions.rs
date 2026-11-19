@@ -1,5 +1,6 @@
 //! Queued UI actions, operation dispatch and frame updates.
 
+use super::super::viewport_wireframe;
 use super::board::interaction::set_active_2d_tool;
 use super::board::types::ToolDraft2d;
 use super::editing::{
@@ -116,6 +117,9 @@ pub enum RunnerUiOp {
     SetShadingMode(clothcraft::usd_scene::ShadingMode),
     ToggleShading,
     ToggleWireframe,
+    CycleWireframeColour,
+    AdjustWireframeWidth(f32),
+    ResetWireframeStyle,
     AdjustCornerRadiusMm(f64),
     AdjustCornerTension(f64),
     ApplyCornerRoundSelected,
@@ -559,6 +563,30 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                 "Cloth wireframe: {}",
                 if state.wireframe { "on" } else { "off" }
             );
+        }
+        RunnerUiOp::CycleWireframeColour => {
+            state.wireframe_colour =
+                (state.wireframe_colour + 1) % viewport_wireframe::COLOURS.len();
+            state.sync_usd_wireframe();
+            let (name, _) = viewport_wireframe::COLOURS[state.wireframe_colour];
+            state.status_message = format!("Wireframe colour: {name}");
+        }
+        RunnerUiOp::AdjustWireframeWidth(delta) => {
+            if delta.is_finite() {
+                state.wireframe_width_px = (state.wireframe_width_px + delta).clamp(
+                    viewport_wireframe::MIN_WIDTH_PX,
+                    viewport_wireframe::MAX_WIDTH_PX,
+                );
+                state.sync_usd_wireframe();
+                state.status_message =
+                    format!("Wireframe width: {:.0} px", state.wireframe_width_px);
+            }
+        }
+        RunnerUiOp::ResetWireframeStyle => {
+            state.wireframe_colour = viewport_wireframe::DEFAULT_COLOUR;
+            state.wireframe_width_px = viewport_wireframe::DEFAULT_WIDTH_PX;
+            state.sync_usd_wireframe();
+            state.status_message = "Wireframe style reset".into();
         }
         RunnerUiOp::AdjustCornerRadiusMm(delta) => {
             state.corner_radius_mm = (state.corner_radius_mm + delta).clamp(1.0, 250.0);

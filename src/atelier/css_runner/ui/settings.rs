@@ -29,6 +29,7 @@ pub(in super::super) fn build_runner_settings(state: &CssRunnerState) -> Option<
             {toggle("settings-body-details", "Details", state.show_body_details, RunnerAction::Ui(RunnerUiOp::ToggleBodyDetails))}
         </div>
     });
+    let wireframe = state.wireframe_settings();
     Some(ui! {
         <div id="settings-layer" class="settings-layer">
             <div id="settings-backdrop" class="settings-backdrop"
@@ -65,6 +66,21 @@ pub(in super::super) fn build_runner_settings(state: &CssRunnerState) -> Option<
                         {if state.body_settings_open { icon_chevron_down() } else { icon_chevron_right() }}
                     </button>
                     {body_options}
+                </div>
+                <div class="settings-entry">
+                    <span class="settings-label">"3D wireframe"</span>
+                    <div class="settings-controls">
+                        <button id="wireframe-colour" class="cad-2d-pill" title="Cycle wireframe colour"
+                            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CycleWireframeColour)}>{wireframe.colour_name()}</button>
+                        <button id="wireframe-width-dec" class="cad-2d-pill" title="Thinner wireframe"
+                            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustWireframeWidth(-1.0))}>"−"</button>
+                        <span id="wireframe-width-value" class="settings-value">{format!("{:.0} px", wireframe.width_px)}</span>
+                        <button id="wireframe-width-inc" class="cad-2d-pill" title="Thicker wireframe"
+                            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AdjustWireframeWidth(1.0))}>"+"</button>
+                        <button id="wireframe-reset" class="cad-2d-pill" title="Restore the default wireframe colour and width"
+                            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ResetWireframeStyle)}>"Reset"</button>
+                    </div>
+                    <span class="settings-hint">"Cloth edges only; view-only"</span>
                 </div>
             </div>
         </div>

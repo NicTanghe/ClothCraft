@@ -1,5 +1,6 @@
 //! Settings controls, modal input ownership and wheel sensitivity regressions.
 
+use super::super::super::viewport_wireframe::{DEFAULT_WIDTH_PX, MAX_WIDTH_PX, MIN_WIDTH_PX};
 use super::super::super::worker;
 use super::super::actions::{RunnerUiOp, apply_runner_ui_op};
 use super::super::app::create_runner_app;
@@ -71,6 +72,11 @@ fn settings_controls_close_and_do_not_edit_the_board() {
             "#zoom-speed-inc",
             "#zoom-speed-dec",
             "#zoom-speed-reset",
+            "#wireframe-colour",
+            "#wireframe-width-dec",
+            "#wireframe-width-value",
+            "#wireframe-width-inc",
+            "#wireframe-reset",
         ] {
             let b = app.find_element_bounds_by_id(id).unwrap();
             assert!(
@@ -240,4 +246,47 @@ fn zoom_speed_affects_both_scroll_units_preserves_anchor_and_keeps_limits() {
         }
     ));
     assert!((state.camera.distance - 4.8).abs() < 1e-6);
+}
+
+#[test]
+fn wireframe_colour_and_thickness_reach_the_viewport() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = selection_test_state(dir.path());
+    macro_rules! shared {
+        () => {
+            *state
+                .viewport_wireframe
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+        };
+    }
+
+    // Defaults: off, first colour, 2 px.
+    state.sync_usd_wireframe();
+    assert!(!shared!().enabled);
+    assert_eq!(shared!().colour, 0);
+    assert_eq!(shared!().width_px, DEFAULT_WIDTH_PX);
+
+    apply_runner_ui_op(&mut state, RunnerUiOp::CycleWireframeColour);
+    assert_eq!(shared!().colour, 1);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AdjustWireframeWidth(1.0));
+    assert_eq!(shared!().width_px, 3.0);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AdjustWireframeWidth(-100.0));
+    assert_eq!(shared!().width_px, MIN_WIDTH_PX);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AdjustWireframeWidth(100.0));
+    assert_eq!(shared!().width_px, MAX_WIDTH_PX);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AdjustWireframeWidth(f32::NAN));
+    assert_eq!(shared!().width_px, MAX_WIDTH_PX);
+
+    // Turning the overlay on keeps the chosen style.
+    apply_runner_ui_op(&mut state, RunnerUiOp::ToggleWireframe);
+    assert!(shared!().enabled);
+    assert_eq!(shared!().colour, 1);
+    assert_eq!(shared!().width_px, MAX_WIDTH_PX);
+
+    // Reset restores colour and width but not the toggle.
+    apply_runner_ui_op(&mut state, RunnerUiOp::ResetWireframeStyle);
+    assert!(shared!().enabled);
+    assert_eq!(shared!().colour, 0);
+    assert_eq!(shared!().width_px, DEFAULT_WIDTH_PX);
 }
