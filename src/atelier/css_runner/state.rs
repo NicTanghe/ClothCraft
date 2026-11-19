@@ -19,7 +19,7 @@ use clothcraft::vbd::{VbdMetrics, VbdSettings};
 use cssimpler::ActionQueue;
 use cssimpler::frame_drag::FrameAlignedDrag;
 use std::cell::RefCell;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
 pub(super) const DEFAULT_2D_ZOOM_SPEED: f64 = 1.5;
@@ -42,6 +42,10 @@ pub struct CssRunnerState {
     pub(super) frame_drag: FrameAlignedDrag,
     pub(super) input_dirty: bool,
     pub wireframe: bool,
+    /// Shared with the GPU viewport, which applies the stroke on its next frame.
+    pub viewport_wireframe: Arc<AtomicBool>,
+    /// Wakes the on-demand viewport when the wireframe toggle changes.
+    pub viewport_redraw: Arc<Mutex<Option<cssimpler::renderer::gpu::GpuRedrawHandle>>>,
     pub(super) board_background: RefCell<Option<super::board::rendering::BoardBackgroundCache>>,
     pub(super) native_number_drag: bool,
     pub(super) number_drag: Arc<Mutex<super::input::number::NumberDragState>>,
@@ -150,6 +154,8 @@ impl CssRunnerState {
             frame_drag: FrameAlignedDrag::new(),
             input_dirty: false,
             wireframe: false,
+            viewport_wireframe: Arc::new(AtomicBool::new(false)),
+            viewport_redraw: Arc::new(Mutex::new(None)),
             board_background: RefCell::new(None),
             native_number_drag: false,
             number_drag: Arc::new(Mutex::new(Default::default())),
@@ -321,22 +327,22 @@ impl CssRunnerState {
         {
             self.status_message = format!("USD update error: {error}");
         }
-        if self.wireframe {
-            self.sync_usd_wireframe();
-        }
     }
 
-    /// Refresh or hide the cloth-only wireframe overlay.
+    /// Apply the cloth-only wireframe toggle to the native viewport.
+    ///
+    /// The stroke lives in the GPU renderer, so the panel positions and the
+    /// stage stay untouched; the viewport applies the flag on its next frame.
     pub fn sync_usd_wireframe(&mut self) {
-        if let Some(scene) = &self.usd_scene
-            && let Err(error) = clothcraft::usd_scene::update_viewport_wireframe(
-                scene,
-                &self.scene.garment,
-                &self.scene.state,
-                self.wireframe,
-            )
+        self.viewport_wireframe
+            .store(self.wireframe, Ordering::Relaxed);
+        if let Some(handle) = self
+            .viewport_redraw
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
         {
-            self.status_message = format!("USD wireframe error: {error}");
+            handle.request_redraw();
         }
     }
 

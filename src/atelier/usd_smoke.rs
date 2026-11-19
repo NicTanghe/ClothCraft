@@ -9,6 +9,7 @@ pub struct SmokeViewport {
     pub done: Rc<Cell<bool>>,
     pub redraw: GpuRedrawHandle,
     pub frames: u32,
+    pub sync: super::viewport_wireframe::WireframeSync,
 }
 fn error(e: impl std::fmt::Display) -> renderer::RendererError {
     renderer::RendererError::Surface(e.to_string())
@@ -23,6 +24,7 @@ impl GpuViewportRenderer for SmokeViewport {
     fn render(&mut self, gpu: &GpuContext, frame: GpuViewportFrame<'_>) -> renderer::Result<()> {
         let info = frame.info;
         let time = frame.frame;
+        self.sync.sync(&mut self.renderer);
         self.renderer.render(gpu, frame)?;
         self.frames += 1;
         if self.frames < 2 {

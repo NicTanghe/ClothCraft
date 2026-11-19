@@ -59,7 +59,6 @@ writes a file; a subsequent I/O error is not an atomic file-replacement guarante
 |---|---|
 | Root metadata | Explicit `metersPerUnit = 1`, `upAxis = "Y"`, `defaultPrim = "World"` |
 | `/World/Garment` | Scope containing one `Mesh` per compiled panel; custom integer `clothcraft:snapshotVersion = 1` |
-| `/ClothWire` | Root-level display-only `Mesh` with thin lifted quads along each unique garment edge; its visibility is toggled by the 3D header. It never includes avatar, collider or other loaded geometry |
 | `clothcraft:timeSeconds` | Custom double snapshot timestamp in seconds; this is not a time-sampled animation or playback range |
 | Mesh prim name | `panel_` followed by the lowercase hexadecimal UTF-8 bytes of the panel ID; injective and stable across panel reordering |
 | `clothcraft:panelId` | Original semantic panel ID as a custom string; mesh indices never become editable IDs |
@@ -217,16 +216,20 @@ not touch physics and resets to Smooth on launch.
 
 ### Cloth wireframe overlay
 
-The 3D header's second icon toggle shows or hides `/ClothWire`. The native USD
-renderer draws triangles rather than line primitives, so the overlay authors one
-thin quad per unique garment edge, lifted along the adjacent face normal by
-0.4 mm to avoid z-fighting. Width is about 1.2 mm. Only the simulated garment
-triangles contribute; the avatar collision mesh, sphere collider and any other
-loaded display geometry are excluded. The overlay is view-only state, is not
-saved in the document and never feeds physics. While visible, accepted solver
-steps refresh its positions and normals; while hidden, the mesh is marked
-`invisible` and simulation updates skip it. Topology edits rebuild its quads.
-This is a diagnostic overlay, not a measured performance feature.
+The 3D header's second icon toggle shows or hides the cloth wireframe. cssimpler
+strokes polygon-cage edges per USD mesh on the GPU, so the overlay is renderer
+state rather than display geometry: the runner enables the stroke on each
+`/World/Garment/*` panel mesh and leaves `/Collider`, avatars and every other
+display mesh shaded only. Because the stroke follows the authored cage, no
+ribbon quads, lifts or normals are published, accepted solver steps do not
+re-author overlay geometry, and the stage never contains a `/ClothWire` mesh.
+
+The stroke is a solid 2 px band in the previous overlay colour. It is centred on
+each edge, so at a silhouette it covers both the surface and the background
+behind it. The toggle is view-only state: it is not saved in the document, never
+feeds physics, and reaches the viewport through a shared flag that wakes the
+on-demand viewport when it changes. This is a diagnostic overlay, not a measured
+performance feature.
 
 The native preview also includes a static display mesh for the collision surface:
 the loaded mannequin in the fitting workspace and a tessellated analytic sphere

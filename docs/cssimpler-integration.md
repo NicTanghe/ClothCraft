@@ -1,9 +1,10 @@
 # cssimpler integration
 
-Both native desktop editors use cssimpler revision `cb805c0`, which includes
-captured event handlers, typed UI actions, frame-aligned pointer scheduling and
-the transition update described in cssimpler's `docs/`. The fitting runner
-delivers commands through one per-instance
+Both native desktop editors use cssimpler revision `081fe94`, which includes
+captured event handlers, typed UI actions, frame-aligned pointer scheduling, the
+transition update described in cssimpler's `docs/`, per-mesh wireframe strokes
+(PR #41) and GPU viewports embedded as Wayland subsurfaces (PR #40). The fitting
+runner delivers commands through one per-instance
 `cssimpler::ActionQueue<RunnerAction>`. The queue is FIFO and
 duplicate-preserving: two Step clicks enqueue two commands, and a command that
 carries a payload shares the same channel as a unit command. This replaces the
@@ -72,10 +73,23 @@ ruler. The asset browser also offers a separate OBJ save dialog for the current
 
 The runner's 3D header uses two icon buttons: one toggles smooth/flat shading and
 one shows or hides a cloth-only wireframe. Shading still rewrites the authored
-normals on the garment and collision display mesh. The wireframe is a separate
-`/ClothWire` USD mesh made of thin lifted quads over garment edges; it excludes
-avatars, colliders and other loaded display geometry. Both are view-only state
-and are not saved in the document.
+normals on the garment and collision display mesh. The wireframe is a renderer
+stroke: cssimpler draws the polygon-cage edges of the meshes the runner marks, so
+the runner enables it on the `/World/Garment/*` panel meshes only and leaves
+avatars, colliders and other display geometry shaded. No overlay mesh is authored
+into the stage, so accepted solver steps update only the panel points. Both are
+view-only state and are not saved in the document.
+
+## Wayland viewports
+
+cssimpler PR #40 embeds each GPU viewport as a `wl_subsurface` of the parent
+window on Wayland, following the backend winit chose for the parent, so no
+ClothCraft code change is needed beyond the revision bump. The desktop feature
+already pulls the Wayland client crates transitively, and the Linux CI image
+already installs `libwayland-dev`. Nothing here forces the X11 path; the
+`env -u WAYLAND_DISPLAY` workaround in cssimpler's docs is only for deliberately
+exercising XWayland. Native acceptance on Wayland is still pending; see
+[platform validation](platform-validation.md).
 
 ## Native vector board (FC-0061)
 
