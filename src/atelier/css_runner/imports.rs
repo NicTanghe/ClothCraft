@@ -64,6 +64,9 @@ pub struct ImportDialog {
     pub acknowledged: bool,
     pub fabric: String,
     pub candidate: Option<Candidate>,
+    /// Arrangement conflicts detected when this avatar is compiled against the
+    /// current project, shown before the reviewer installs it.
+    pub conflicts: Vec<String>,
     dxf_source: Option<Source>,
     dxf_drawing: Option<DxfDrawing>,
     svg_text: Option<String>,
@@ -134,6 +137,7 @@ impl ImportDialog {
             acknowledged: false,
             fabric: String::new(),
             candidate: None,
+            conflicts: Vec::new(),
             dxf_source: None,
             dxf_drawing: None,
             svg_text: None,
@@ -153,6 +157,7 @@ impl ImportDialog {
         self.selected.clear();
         self.acknowledged = false;
         self.candidate = None;
+        self.conflicts.clear();
         self.dxf_source = None;
         self.dxf_drawing = None;
         self.svg_text = None;
@@ -197,6 +202,7 @@ impl ImportDialog {
         self.acknowledged = false;
         self.issues.clear();
         self.losses.clear();
+        self.conflicts.clear();
         if self.source.is_none() {
             self.error = Some("Choose a file first".into());
             return;
@@ -324,6 +330,26 @@ impl ImportDialog {
 
     pub fn selected_count(&self) -> usize {
         self.selected.len()
+    }
+
+    /// Toggle one avatar source mesh and refresh the staged collider counts.
+    pub fn toggle_mesh(&mut self, index: usize) {
+        self.error = None;
+        let mut summary = None;
+        if let Some(candidate) = &mut self.candidate {
+            match candidate.toggle_mesh(index) {
+                Ok(()) => {
+                    summary = Some(format!(
+                        "{} vertices · {} triangles",
+                        candidate.vertices, candidate.triangles
+                    ));
+                }
+                Err(error) => self.error = Some(error),
+            }
+        }
+        if let Some(summary) = summary {
+            self.summary = summary;
+        }
     }
 
     pub fn preview_bounds(&self) -> Option<(DVec2, DVec2)> {
@@ -460,6 +486,9 @@ impl CssRunnerState {
             self.import_tolerance_mm,
             self.import_scale_mm_per_unit,
         );
+        if kind == ImportKind::Avatar {
+            self.refresh_avatar_conflicts(&mut dialog);
+        }
         self.status_message = match &dialog.error {
             Some(error) => format!("{} import error: {error}", kind.label()),
             None => format!("Review {} import from {}", kind.label(), path.display()),
@@ -477,6 +506,34 @@ impl CssRunnerState {
     pub fn toggle_import_outline(&mut self, index: usize) {
         if let Some(dialog) = &mut self.import_dialog {
             dialog.toggle(index);
+        }
+    }
+
+    /// Enable or disable one source mesh in the avatar collider review.
+    pub fn toggle_import_mesh(&mut self, index: usize) {
+        let mut dialog = match self.import_dialog.take() {
+            Some(dialog) => dialog,
+            None => return,
+        };
+        dialog.toggle_mesh(index);
+        if dialog.kind == ImportKind::Avatar {
+            self.refresh_avatar_conflicts(&mut dialog);
+        }
+        self.import_dialog = Some(dialog);
+    }
+
+    /// Compile the candidate scene without installing it to report arrangement
+    /// conflicts in the review modal. No workspace field is mutated.
+    fn refresh_avatar_conflicts(&self, dialog: &mut ImportDialog) {
+        dialog.conflicts.clear();
+        let Some(candidate) = &dialog.candidate else {
+            return;
+        };
+        match candidate.prepare(&self.project, self.settings.clone()) {
+            Ok(prepared) => dialog.conflicts.extend(prepared.warnings().iter().cloned()),
+            Err(error) => dialog.conflicts.push(format!(
+                "This avatar cannot replace the current scene: {error}"
+            )),
         }
     }
 
@@ -554,13 +611,18 @@ impl CssRunnerState {
                 let source = dialog.source.clone().unwrap_or_default();
                 let vertices = candidate.vertices;
                 let triangles = candidate.triangles;
+                let warnings = prepared.warnings().to_vec();
                 self.install_avatar(prepared);
-                self.status_message = format!(
+                let mut message = format!(
                     "Replaced avatar from {} ({} vertices, {} triangles); drape reset and history cleared",
                     source.display(),
                     vertices,
                     triangles
                 );
+                for warning in warnings {
+                    message.push_str(&format!(" · {warning}"));
+                }
+                self.status_message = message;
             }
             Err(error) => {
                 let mut dialog = dialog;

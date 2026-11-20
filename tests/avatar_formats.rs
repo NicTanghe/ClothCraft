@@ -5,8 +5,10 @@
 //! are stated explicitly rather than inferred from the importer.
 
 use clothcraft::{
-    avatar_import::Candidate, fitting::FittingProject, garment::presets::GarmentKind,
-    vbd::VbdSettings,
+    avatar_import::Candidate,
+    fitting::FittingProject,
+    garment::presets::GarmentKind,
+    vbd::{VbdSettings, VbdSolver},
 };
 use glam::DVec3;
 use openusd::{
@@ -694,4 +696,218 @@ fn unsupported_avatar_extension_is_still_rejected() {
     std::fs::write(&path, "solid mesh\nendsolid mesh\n").unwrap();
     let error = Candidate::load(&path).unwrap_err();
     assert!(error.contains("OBJ"), "{error}");
+}
+
+// ---------------------------------------------------------------------------
+// Multi-mesh selection and arrangement warnings
+// ---------------------------------------------------------------------------
+
+/// Mixamo-style FBX: a body mesh with two triangles and a smaller helper mesh.
+fn ascii_fbx_two_meshes() -> String {
+    r#"; FBX 7.4.0 project file
+FBXHeaderExtension: {
+    FBXHeaderVersion: 1003
+    FBXVersion: 7400
+}
+GlobalSettings: {
+    Version: 1000
+    Properties70: {
+        P: "UnitScaleFactor", "double", "Number", "",100
+        P: "UpAxis", "int", "Integer", "",1
+        P: "FrontAxis", "int", "Integer", "",2
+        P: "CoordAxis", "int", "Integer", "",0
+    }
+}
+Objects: {
+    Geometry: 100, "Geometry::Body", "Mesh" {
+        Vertices: *12 {
+            a: 0,0,0,1,0,0,1,1,0,0,1,0
+        }
+        PolygonVertexIndex: *6 {
+            a: 0,1,-3,0,2,-4
+        }
+    }
+    Geometry: 101, "Geometry::Marker", "Mesh" {
+        Vertices: *9 {
+            a: 2,0,0,3,0,0,2,1,0
+        }
+        PolygonVertexIndex: *3 {
+            a: 0,1,-3
+        }
+    }
+    Model: 200, "Model::Root", "Null" {
+        Properties70: {
+            P: "Lcl Translation", "Lcl Translation", "", "A",0,0,0
+        }
+    }
+    Model: 201, "Model::Body", "Mesh" {
+    }
+    Model: 202, "Model::Marker", "Mesh" {
+    }
+}
+Connections: {
+    C: "OO", 100, 201
+    C: "OO", 101, 202
+    C: "OO", 201, 200
+    C: "OO", 202, 200
+    C: "OO", 200, 0
+}
+"#
+    .to_owned()
+}
+
+#[test]
+fn fbx_meshes_are_listed_and_the_largest_mesh_is_selected() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("two-meshes.fbx");
+    std::fs::write(&path, ascii_fbx_two_meshes()).unwrap();
+    let mut candidate = Candidate::load(&path).unwrap();
+    assert_eq!(candidate.meshes.len(), 2);
+    let names: Vec<_> = candidate
+        .meshes
+        .iter()
+        .map(|mesh| mesh.name.as_str())
+        .collect();
+    assert_eq!(names, ["Body", "Marker"]);
+    // 4 vertices / 2 triangles in the body, 3 vertices / 1 triangle in the marker.
+    assert_eq!((candidate.vertices, candidate.triangles), (4, 2));
+    assert!(candidate.meshes[0].selected);
+    assert!(!candidate.meshes[1].selected);
+    assert!(
+        candidate
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Alpha_Joints")
+                || warning.contains("marker")
+                || warning.contains("Marker"))
+    );
+
+    candidate.toggle_mesh(1).unwrap();
+    assert_eq!((candidate.vertices, candidate.triangles), (7, 3));
+    candidate.toggle_mesh(0).unwrap();
+    assert_eq!((candidate.vertices, candidate.triangles), (3, 1));
+    assert!(
+        candidate.toggle_mesh(1).is_err(),
+        "the last mesh stays selected"
+    );
+
+    // The staged OBJ follows the selection, so preparation uses only the marker.
+    let current = project(dir.path());
+    let prepared = candidate.prepare(&current, VbdSettings::default()).unwrap();
+    let (_, scene, _) = prepared.into_parts();
+    assert_eq!(scene.collider.surface.vertices.len(), 3);
+    assert_eq!(scene.collider.surface.triangles.len(), 1);
+}
+
+#[test]
+fn usd_mesh_selection_lists_visible_prims() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("two-meshes.usda");
+    let text = r#"#usda 1.0
+(
+    metersPerUnit = 1
+)
+def Xform "World"
+{
+    def Mesh "Body"
+    {
+        int[] faceVertexCounts = [3, 3]
+        int[] faceVertexIndices = [0, 1, 2, 0, 2, 3]
+        point3f[] points = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    }
+    def Mesh "Helper"
+    {
+        int[] faceVertexCounts = [3]
+        int[] faceVertexIndices = [0, 1, 2]
+        point3f[] points = [(2, 0, 0), (3, 0, 0), (2, 1, 0)]
+    }
+}
+"#;
+    std::fs::write(&path, text).unwrap();
+    let candidate = Candidate::load(&path).unwrap();
+    assert_eq!(candidate.meshes.len(), 2);
+    assert_eq!(
+        candidate
+            .meshes
+            .iter()
+            .map(|mesh| mesh.name.as_str())
+            .collect::<Vec<_>>(),
+        ["World/Body", "World/Helper"]
+    );
+    assert!(candidate.meshes[0].selected, "the body has more triangles");
+    assert!(!candidate.meshes[1].selected);
+    assert_eq!((candidate.vertices, candidate.triangles), (4, 2));
+}
+
+/// Outward-wound cube around the T-shirt front panel's authored plane.
+fn cube_obj() -> &'static str {
+    "v -0.2 1.0 0.36
+v 0.2 1.0 0.36
+v 0.2 1.2 0.36
+v -0.2 1.2 0.36
+v -0.2 1.0 0.40
+v 0.2 1.0 0.40
+v 0.2 1.2 0.40
+v -0.2 1.2 0.40
+f 5 6 7
+f 5 7 8
+f 1 4 3
+f 1 3 2
+f 1 5 8
+f 1 8 4
+f 2 3 7
+f 2 7 6
+f 1 2 6
+f 1 6 5
+f 4 8 7
+f 4 7 3
+"
+}
+
+#[test]
+fn arrangement_conflicts_are_separated_before_install() {
+    let dir = tempfile::tempdir().unwrap();
+    let avatar = dir.path().join("old.obj");
+    std::fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").unwrap();
+    let current = FittingProject::basic(GarmentKind::Tshirt, 1, avatar);
+    let before = current
+        .template
+        .panels
+        .iter()
+        .find(|panel| panel.id == "front")
+        .unwrap()
+        .placement
+        .translation;
+    let cube = dir.path().join("cube.obj");
+    std::fs::write(&cube, cube_obj()).unwrap();
+    let candidate = Candidate::load(&cube).unwrap();
+    let prepared = candidate.prepare(&current, VbdSettings::default()).unwrap();
+    let warnings = prepared.warnings();
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.contains("moved outward") && warning.contains("front")),
+        "{warnings:?}"
+    );
+    assert!(warnings.iter().any(|warning| warning.contains("2D board")));
+    let (project, scene, _) = prepared.into_parts();
+    let front = project
+        .template
+        .panels
+        .iter()
+        .find(|panel| panel.id == "front")
+        .unwrap();
+    assert_ne!(
+        front.placement.translation, before,
+        "the front panel's authored placement must move"
+    );
+    assert!(
+        VbdSolver::new(
+            scene.garment.clone(),
+            Some(&scene.collider.surface),
+            &scene.state
+        )
+        .is_ok(),
+        "the separated arrangement must pass the solver's initial-state check"
+    );
 }

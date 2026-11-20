@@ -108,7 +108,7 @@ The long-term goal is interchangeable physics behind a stable document and autho
 | Data | Input | Output |
 |---|---|---|
 | Editable garment | ClothCraft project / template JSON | Project / template JSON |
-| Static avatar | OBJ, static glTF / GLB, FBX 7.x ASCII/binary, USD (USDA/USDC/USDZ) geometry | — |
+| Static avatar | OBJ, static glTF / GLB, FBX 7.x ASCII/binary, USD (USDA/USDC/USDZ) geometry; multi-mesh sources can exclude helper meshes from the collider | — |
 | Simulated garment mesh | — | OBJ geometry and material-space UVs |
 | 2D patterns | Selected closed outlines from generic planar ASCII DXF and physically scaled SVG subsets | Annotated SVG preview and millimetre-scale sewing outlines with stored seam allowances and sewing-line notches when present, and a 100 mm ruler; notches are not duplicated onto cutting lines; no tiling or cutting certification |
 | Research data | — | Metrics, fiber frames and geometric grain guides |

@@ -158,6 +158,35 @@ fn panel_body(state: &CssRunnerState, dialog: &ImportDialog) -> Node {
 }
 
 fn avatar_body(state: &CssRunnerState, dialog: &ImportDialog) -> Node {
+    let mesh_rows: Vec<Node> = dialog
+        .candidate
+        .as_ref()
+        .filter(|candidate| candidate.meshes.len() > 1)
+        .map(|candidate| {
+            candidate
+                .meshes
+                .iter()
+                .enumerate()
+                .map(|(index, mesh)| {
+                    let id = format!("import-mesh-{index}");
+                    let class = if mesh.selected {
+                        "import-row active"
+                    } else {
+                        "import-row"
+                    };
+                    ui! {
+                        <button id={id} class={class}
+                            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ImportToggleMesh(index))}>
+                            <span class="import-row-label">{mesh.name.clone()}</span>
+                            <span class="import-row-detail">
+                                {format!("{} vertices · {} triangles", mesh.vertices, mesh.triangles)}
+                            </span>
+                        </button>
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     let details = dialog.candidate.as_ref().map(|candidate| {
         let [lo, hi] = candidate.bounds;
         let size = hi - lo;
@@ -177,6 +206,13 @@ fn avatar_body(state: &CssRunnerState, dialog: &ImportDialog) -> Node {
                 <span class="import-hint">
                     {format!("Min: {:.4}, {:.4}, {:.4} m · Max: {:.4}, {:.4}, {:.4} m", lo.x, lo.y, lo.z, hi.x, hi.y, hi.z)}
                 </span>
+                <div class="import-section">
+                    <span class="import-section-title">"Collider meshes"</span>
+                    <span class="import-hint">
+                        "The mesh with the most triangles is selected by default. Enable every surface that should collide and leave helper meshes (for example Mixamo joint markers) off."
+                    </span>
+                    {mesh_rows}
+                </div>
                 {warnings}
             </div>
         }
@@ -184,6 +220,11 @@ fn avatar_body(state: &CssRunnerState, dialog: &ImportDialog) -> Node {
     let error = dialog.error.as_ref().map(|error| {
         ui! { <div id="import-error" class="import-error">{error.clone()}</div> }
     });
+    let conflicts: Vec<Node> = dialog
+        .conflicts
+        .iter()
+        .map(|conflict| ui! { <div class="import-warning">{conflict.clone()}</div> })
+        .collect();
     let footer = footer_buttons(
         state,
         dialog.candidate.is_some(),
@@ -194,9 +235,10 @@ fn avatar_body(state: &CssRunnerState, dialog: &ImportDialog) -> Node {
         <div class="import-body">
             {source_row(state, dialog)}
             {details}
+            {conflicts}
             {error}
             <div class="import-warning">
-                "Authored patterns, seams, materials and placement are kept. Replacing the avatar resets draped positions and velocities and clears undo history. Save the current drape first if it is needed."
+                "Authored patterns, seams and materials are kept. Replacing the avatar resets draped positions and velocities and clears undo history. Panels that intersect the new avatar are moved outward automatically and reported. Save the current drape first if it is needed."
             </div>
             {footer}
         </div>
