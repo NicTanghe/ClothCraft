@@ -75,3 +75,4 @@ No proprietary source, icons or assets were imported.
 Hosted accounts, external AI generation and vendor hardware are outside this
 native rewrite slice. Their appearance in a commercial manual does not
 automatically add them to ClothCraft's accepted backlog.
+

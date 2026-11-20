@@ -721,6 +721,179 @@ pub fn append_viewport_surface(mut usda: String, surface: &crate::avatar::Surfac
     usda
 }
 
+/// Display-only studio backdrop theme. The cove geometry is not part of the
+/// fitted scene and never participates in collision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StudioBackdropTheme {
+    Dark,
+    Light,
+}
+
+impl StudioBackdropTheme {
+    /// Linear-ish sRGB display colour authored on the USD mesh.
+    pub fn cove_color(self) -> [f32; 3] {
+        match self {
+            Self::Dark => [0.12, 0.135, 0.16],
+            Self::Light => [0.84, 0.85, 0.87],
+        }
+    }
+}
+
+/// Analytic seam-free cyclorama used by the 3D viewport.
+///
+/// The surface is a floor disk, a quarter-circle fillet and a cylindrical back
+/// wall at a fixed radius, so it reads as an infinite studio cove from any
+/// orbit angle. It has no ceiling, is closed only by its boundary at the top,
+/// and is intended for display only: no cloth, avatar or contact code reads it.
+pub fn infinity_cove_mesh() -> crate::avatar::SurfaceMesh {
+    infinity_cove_geometry().0
+}
+
+/// Cove mesh with analytic inward/upward normals. Area-weighted normals skew
+/// the fillet toward the tall wall triangles and leave a visible horizon seam.
+fn infinity_cove_geometry() -> (crate::avatar::SurfaceMesh, Vec<glam::DVec3>) {
+    use glam::DVec3;
+    const SEGMENTS: usize = 128;
+    const FILLET_STEPS: usize = 12;
+    const RADIUS: f64 = 30.0;
+    const WALL_HEIGHT: f64 = 40.0;
+    const FILLET: f64 = 8.0;
+    let floor_radius = RADIUS - FILLET;
+    let step = std::f64::consts::TAU / SEGMENTS as f64;
+    let mut vertices = vec![DVec3::ZERO];
+    let mut normals = vec![DVec3::Y];
+    let mut rings: Vec<Vec<usize>> = Vec::with_capacity(FILLET_STEPS + 2);
+
+    let mut ring = Vec::with_capacity(SEGMENTS);
+    for segment in 0..SEGMENTS {
+        let angle = segment as f64 * step;
+        ring.push(vertices.len());
+        vertices.push(DVec3::new(
+            floor_radius * angle.cos(),
+            0.0,
+            floor_radius * angle.sin(),
+        ));
+        normals.push(DVec3::Y);
+    }
+    rings.push(ring);
+
+    for step_index in 1..=FILLET_STEPS {
+        let theta = (step_index as f64 / FILLET_STEPS as f64) * std::f64::consts::FRAC_PI_2;
+        let radial = floor_radius + FILLET * theta.sin();
+        let y = FILLET * (1.0 - theta.cos());
+        let mut ring = Vec::with_capacity(SEGMENTS);
+        for segment in 0..SEGMENTS {
+            let angle = segment as f64 * step;
+            ring.push(vertices.len());
+            vertices.push(DVec3::new(radial * angle.cos(), y, radial * angle.sin()));
+            normals.push(DVec3::new(
+                -theta.sin() * angle.cos(),
+                theta.cos(),
+                -theta.sin() * angle.sin(),
+            ));
+        }
+        rings.push(ring);
+    }
+
+    let mut top = Vec::with_capacity(SEGMENTS);
+    for segment in 0..SEGMENTS {
+        let angle = segment as f64 * step;
+        top.push(vertices.len());
+        vertices.push(DVec3::new(
+            RADIUS * angle.cos(),
+            WALL_HEIGHT,
+            RADIUS * angle.sin(),
+        ));
+        normals.push(DVec3::new(-angle.cos(), 0.0, -angle.sin()));
+    }
+    rings.push(top);
+
+    let mut triangles = Vec::new();
+    // Floor fan: upward normals.
+    for segment in 0..SEGMENTS {
+        let next = (segment + 1) % SEGMENTS;
+        triangles.push([0, rings[0][next], rings[0][segment]]);
+    }
+    // Inward/upward quads from the floor ring through every fillet ring to the
+    // wall. Reversing the usual outward order keeps the visible side inside.
+    for pair in rings.windows(2) {
+        for segment in 0..SEGMENTS {
+            let next = (segment + 1) % SEGMENTS;
+            let (a, b) = (pair[0][segment], pair[1][segment]);
+            let (a_next, b_next) = (pair[0][next], pair[1][next]);
+            triangles.push([a, b_next, b]);
+            triangles.push([a, a_next, b_next]);
+        }
+    }
+    (
+        crate::avatar::SurfaceMesh {
+            vertices,
+            triangles,
+        },
+        normals,
+    )
+}
+
+/// Append the display-only studio cove to a viewport stage.
+/// Append the display-only studio cove to a viewport stage.
+pub fn append_infinity_cove(mut usda: String, theme: StudioBackdropTheme) -> String {
+    let (mesh, normals) = infinity_cove_geometry();
+    let [r, g, b] = theme.cove_color();
+    writeln!(
+        usda,
+        "\ndef Mesh \"InfinityCove\"\n{{\n uniform token subdivisionScheme = \"none\"\n uniform bool doubleSided = true\n color3f[] primvars:displayColor = [({r}, {g}, {b})] ( interpolation = \"constant\" )\n point3f[] points = ["
+    )
+    .unwrap();
+    for (index, point) in mesh.vertices.iter().enumerate() {
+        if index > 0 {
+            usda.push(',');
+        }
+        write!(usda, "({},{},{})", point.x, point.y, point.z).unwrap();
+    }
+    usda.push_str("]\n int[] faceVertexCounts = [");
+    for index in 0..mesh.triangles.len() {
+        if index > 0 {
+            usda.push(',');
+        }
+        usda.push('3');
+    }
+    usda.push_str("]\n int[] faceVertexIndices = [");
+    for (index, triangle) in mesh.triangles.iter().enumerate() {
+        if index > 0 {
+            usda.push(',');
+        }
+        write!(usda, "{},{},{}", triangle[0], triangle[1], triangle[2]).unwrap();
+    }
+    usda.push(']');
+    write!(usda, "\n normal3f[] normals = [").unwrap();
+    for (index, normal) in normals.iter().enumerate() {
+        if index > 0 {
+            usda.push_str(", ");
+        }
+        write!(usda, "({}, {}, {})", normal.x, normal.y, normal.z).unwrap();
+    }
+    usda.push_str("] (\n    interpolation = \"vertex\"\n )");
+    usda.push_str("\n}\n");
+    usda
+}
+
+/// Recolour the already-authored studio cove when the UI theme changes.
+#[cfg(feature = "desktop")]
+pub fn update_infinity_cove_color(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    theme: StudioBackdropTheme,
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::gf;
+    let [r, g, b] = theme.cove_color();
+    scene
+        .stage()
+        .attribute("/InfinityCove.primvars:displayColor")
+        .map_err(|error| error.to_string())?
+        .set(vec![gf::vec3f(r, g, b)])
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 /// Tessellate the analytic reference collider for display only.
 pub fn viewport_sphere(sphere: &crate::contact::Sphere) -> crate::avatar::SurfaceMesh {
     use glam::DVec3;
