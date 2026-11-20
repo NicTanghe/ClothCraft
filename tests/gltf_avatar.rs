@@ -212,17 +212,34 @@ fn discarded_vertex_attributes_require_existing_accessors_and_matching_counts() 
     assert_eq!(actual.triangles, expected.triangles);
 }
 #[test]
+fn skins_and_animations_import_the_bind_pose_with_warnings() {
+    let (doc, bin) = fixture();
+    let mut skinned = doc.clone();
+    skinned["skins"] = json!([{}]);
+    skinned["animations"] = json!([{}]);
+    skinned["nodes"][0]["skin"] = json!(0);
+    let asset = parse(&skinned, &bin).unwrap();
+    assert!(
+        asset
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Skinning"))
+    );
+    assert!(
+        asset
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Animations"))
+    );
+    assert_eq!(asset.mesh.vertices.len(), 3);
+}
+
+#[test]
 fn unsupported_deformations_and_required_extensions_are_explicit_errors() {
     let (doc, bin) = fixture();
-    for (key, value) in [
-        ("skins", json!([{}])),
-        ("animations", json!([{}])),
-        ("extensionsRequired", json!(["KHR_draco_mesh_compression"])),
-    ] {
-        let mut bad = doc.clone();
-        bad[key] = value;
-        assert!(parse(&bad, &bin).is_err());
-    }
+    let mut bad = doc.clone();
+    bad["extensionsRequired"] = json!(["KHR_draco_mesh_compression"]);
+    assert!(parse(&bad, &bin).is_err());
     let mut bad = doc.clone();
     bad["meshes"][0]["primitives"][0]["targets"] = json!([{}]);
     assert!(parse(&bad, &bin).is_err());
@@ -335,10 +352,10 @@ fn invalid_transforms_and_degenerate_triangles_are_rejected() {
 }
 
 #[test]
-fn skinning_attributes_and_overflowing_geometry_are_rejected() {
+fn skinning_attributes_are_ignored_and_overflowing_geometry_is_rejected() {
     let (mut doc, bin) = fixture();
     doc["meshes"][0]["primitives"][0]["attributes"]["JOINTS_0"] = json!(0);
-    assert!(parse(&doc, &bin).is_err());
+    assert_eq!(parse(&doc, &bin).unwrap().mesh.vertices.len(), 3);
     doc["meshes"][0]["primitives"][0]["attributes"]
         .as_object_mut()
         .unwrap()

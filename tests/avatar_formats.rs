@@ -911,3 +911,143 @@ fn arrangement_conflicts_are_separated_before_install() {
         "the separated arrangement must pass the solver's initial-state check"
     );
 }
+
+// ---------------------------------------------------------------------------
+// glTF parts, welding and ground alignment
+// ---------------------------------------------------------------------------
+
+/// GLB with two named mesh nodes. The body quad is authored with split
+/// vertices (two triangles, six positions) that weld into one quad; the stand
+/// triangle is a smaller helper.
+fn two_mesh_glb() -> Vec<u8> {
+    let positions: [[f32; 3]; 9] = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [2.5, 0.0, 0.0],
+        [2.0, 0.5, 0.0],
+    ];
+    let indices: [u16; 9] = [0, 1, 2, 3, 4, 5, 0, 1, 2];
+    let mut binary = Vec::new();
+    for p in positions {
+        for value in p {
+            binary.extend(value.to_le_bytes());
+        }
+    }
+    for index in indices {
+        binary.extend(index.to_le_bytes());
+    }
+    while !binary.len().is_multiple_of(4) {
+        binary.push(0);
+    }
+    let byte_length = binary.len();
+    let json = serde_json::json!({
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {"children": [1, 2], "name": "Root"},
+            {"mesh": 0, "name": "Body"},
+            {"mesh": 1, "name": "Stand"}
+        ],
+        "meshes": [
+            {"name": "Body", "primitives": [{"attributes": {"POSITION": 0}, "indices": 2}]},
+            {"name": "Stand", "primitives": [{"attributes": {"POSITION": 1}, "indices": 3}]}
+        ],
+        "buffers": [{"byteLength": byte_length}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": 108, "target": 34962},
+            {"buffer": 0, "byteOffset": 108, "byteLength": 18, "target": 34963}
+        ],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 6, "type": "VEC3",
+             "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
+            {"bufferView": 0, "byteOffset": 72, "componentType": 5126, "count": 3, "type": "VEC3",
+             "min": [2.0, 0.0, 0.0], "max": [2.5, 0.5, 0.0]},
+            {"bufferView": 1, "componentType": 5123, "count": 6, "type": "SCALAR"},
+            {"bufferView": 1, "byteOffset": 12, "componentType": 5123, "count": 3, "type": "SCALAR"}
+        ]
+    });
+    let mut json_bytes = serde_json::to_vec(&json).unwrap();
+    while !json_bytes.len().is_multiple_of(4) {
+        json_bytes.push(b' ');
+    }
+    let mut out = b"glTF".to_vec();
+    out.extend(2u32.to_le_bytes());
+    out.extend((28u32 + json_bytes.len() as u32 + binary.len() as u32).to_le_bytes());
+    out.extend((json_bytes.len() as u32).to_le_bytes());
+    out.extend(0x4e4f534au32.to_le_bytes());
+    out.extend(json_bytes);
+    out.extend((binary.len() as u32).to_le_bytes());
+    out.extend(0x004e4942u32.to_le_bytes());
+    out.extend(binary);
+    out
+}
+
+#[test]
+fn gltf_meshes_are_listed_and_area_selects_the_body() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("two-meshes.glb");
+    std::fs::write(&path, two_mesh_glb()).unwrap();
+    let mut candidate = Candidate::load(&path).unwrap();
+    assert_eq!(
+        candidate
+            .meshes
+            .iter()
+            .map(|mesh| mesh.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Body", "Stand"]
+    );
+    assert_eq!(
+        (candidate.meshes[0].vertices, candidate.meshes[0].triangles),
+        (6, 2)
+    );
+    assert_eq!(
+        (candidate.meshes[1].vertices, candidate.meshes[1].triangles),
+        (3, 1)
+    );
+    assert!(candidate.meshes[0].selected, "body has the larger area");
+    assert!(!candidate.meshes[1].selected);
+    // The split body quad welds six authored positions into four vertices.
+    assert_eq!((candidate.vertices, candidate.triangles), (4, 2));
+    assert!(
+        candidate
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Merged 2 coincident vertices")),
+        "{:?}",
+        candidate.warnings
+    );
+    // The viewport keeps both source meshes while only the body collides.
+    let prepared = candidate
+        .prepare(&project(dir.path()), VbdSettings::default())
+        .unwrap();
+    assert_eq!(prepared.display().vertices.len(), 9);
+    assert_eq!(prepared.display().triangles.len(), 3);
+    let (_, scene, _) = prepared.into_parts();
+    assert_eq!(scene.collider.surface.vertices.len(), 4);
+    candidate.toggle_mesh(1).unwrap();
+    assert_eq!((candidate.vertices, candidate.triangles), (7, 3));
+}
+
+#[test]
+fn avatar_below_the_floor_is_raised_to_the_ground() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("below.obj");
+    std::fs::write(&path, "v 0 -2 0\nv 1 -2 0\nv 0 -1 0\nf 1 2 3\n").unwrap();
+    let candidate = Candidate::load(&path).unwrap();
+    assert_close(candidate.bounds[0], DVec3::new(0.0, 0.0, 0.0));
+    assert_close(candidate.bounds[1], DVec3::new(1.0, 1.0, 0.0));
+    assert!(
+        candidate
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("below the floor")),
+        "{:?}",
+        candidate.warnings
+    );
+}

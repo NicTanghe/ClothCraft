@@ -24,8 +24,11 @@ Save/Discard/Cancel document-close flow; a modal must not bypass that protection
 - glTF/GLB uses the existing static geometry importer, including node transforms
   and mirrored winding. Coordinates remain metres, right-handed and Y-up.
   A declared default or sole scene is required; ambiguous scenes are rejected.
-  There is no scene selector yet. Animation, skinning and unsupported extensions
-  remain explicit errors; see `src/gltf_avatar.rs` for the complete subset.
+  There is no scene selector yet, but every node mesh is listed for collider
+  selection. Skins and animations are not evaluated: each mesh imports its
+  stored bind pose at its node transform and the losses are reported. Morph
+  targets, geometry extensions and required extensions remain explicit errors;
+  see `src/gltf_avatar.rs` for the complete subset.
 - OBJ uses the existing parser and interprets coordinates as metres and Y-up.
   No height guessing, scaling or axis conversion occurs. Use triangulated OBJ;
   polygons use the existing fan triangulation, not a general concave triangulator.
@@ -56,11 +59,22 @@ Save/Discard/Cancel document-close flow; a modal must not bypass that protection
   non-default `purpose` are imported with a report because proxy/render helper
   geometry may then be included.
 - Multi-mesh sources are listed in the confirmation with each mesh's name,
-  vertex and triangle count (FBX `Geometry` objects and USD `Mesh` prims). The
-  mesh with the most triangles is selected by default as the collider; enable any additional
-  surface that should collide and leave helper meshes such as Mixamo's
-  `Alpha_Joints` off. Deselecting every mesh is rejected. OBJ and glTF/GLB
-  import as a single mesh.
+  vertex and triangle count and surface area (FBX `Geometry` objects, USD `Mesh`
+  prims and glTF/GLB node meshes). The mesh with the largest surface area is
+  selected by default as the collider; enable any additional surface that should
+  collide and leave helper meshes such as Mixamo's `Alpha_Joints` or a dressform
+  stand off. Deselecting every mesh is rejected; OBJ imports as a single mesh.
+- The 3D viewport always displays every source mesh, including meshes that are
+  not part of the collision proxy. Only the selected meshes collide.
+- Exactly coincident vertices inside each source mesh are welded before
+  collision, because glTF/FBX exporters commonly split vertices at normal or UV
+  seams and leave a geometrically closed surface topologically open. The number
+  of merged vertices is reported. A weld that would create a non-manifold edge
+  is skipped for that mesh rather than producing a collider the solver rejects.
+- When the source geometry extends below Y = 0 (for example a dressform whose
+  stand is authored below its origin), the whole asset is raised so its lowest
+  point sits on the floor and the garment arrangement keeps its usual standing
+  height. The shift is reported; no scaling or axis conversion is applied.
 - Only surface positions and triangles are retained. Materials, textures, UVs,
   authored normals and object identities are lost. This is an avatar collider
   import, not a material-aware interchange workflow. Polygon faces use fan
@@ -144,9 +158,9 @@ Clippy with warnings denied passed, and the nine
 installer. `cargo fmt --all --check` passed. No GPU or native window ran.
 
 Local validation, 20 November 2026 (multi-mesh colliders and arrangement
-preflight): the CPU-only suite passed 722 tests with one ignored opt-in preview
-and no failures, including fifteen `avatar_formats` tests and the new
-multi-mesh/conflict regressions; the eleven
+preflight): the CPU-only suite passed 721 tests with one ignored opt-in preview
+and no failures, including seventeen `avatar_formats` tests and the new
+multi-mesh/conflict regressions; the twelve
 `atelier::css_runner::tests::imports` desktop UI tests passed through the
 production installer. CPU-only and desktop all-target Clippy with warnings
 denied, the desktop build and `cargo fmt --all --check` passed.

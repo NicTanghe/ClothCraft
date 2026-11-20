@@ -1,5 +1,38 @@
 # Repository handoff
 
+## Dressform GLB collider import — 20 November 2026
+
+Follow-up to the avatar-import fixes. The `fold-craft-dressform-us8.glb`
+dressform imported as one merged mesh containing the form and its entire stand
+(27 node meshes, 305,710 triangles) with the stand authored below Y = 0, so the
+dressform sat at floor level while the authored garment floated around 0.84–1.5
+m, and the form's split seam vertices left the collider topologically open.
+Simulated cloth could then penetrate the form far outside the contact envelope.
+
+- glTF/GLB now expose named per-node meshes like FBX and USD. The review modal
+  lists them with counts and surface area, and selects the largest area by
+  default; for this asset that is `DressForm` (0.71 m²) rather than the 0.09 m²
+  wire cage or the heavy stand.
+- Exactly coincident vertices are welded inside each source mesh, with a
+  non-manifold weld reverted for that mesh. The dressform form closes from
+  10,891 to 8,339 vertices (2,552 merged) and becomes a watertight manifold, so
+  contact signs and coverage are defined.
+- Assets whose geometry extends below Y = 0 are raised to the floor using the
+  whole source asset (not only the selected meshes), so deselecting the stand
+  still leaves the form at standing height. The shift is reported.
+- Observed locally with the supplied GLB and the T-shirt preset: `DressForm`
+  selected, raised 834 mm, solver initialises and 240 CPU steps keep cloth at
+  the ~3 mm contact envelope (`min signed distance` 3.0–3.4 mm) instead of the
+  previous −115 mm penetration.
+- The 3D viewport publishes every imported mesh; meshes disabled in the review
+  remain visible but do not contribute contacts. After a document reload only
+  the saved collider mesh exists, because project v1 stores one avatar OBJ.
+
+Validation: the CPU-only suite passed 721 tests with one ignored preview,
+including seventeen `avatar_formats` tests; the twelve desktop import UI tests
+passed; CPU-only and desktop all-target Clippy with warnings denied; the desktop
+build and formatting passed. No native window was opened.
+
 ## Avatar import: multi-mesh colliders and arrangement preflight — 20 November 2026
 
 Fixes [#57](https://github.com/NicTanghe/ClothCraft/issues/57). Replacing the
@@ -22,7 +55,7 @@ move cloth in 3D, which addresses the reported workflow where moving pieces on
 the 2D board could not clear the OGC `initial intersection between faces ...`
 rejection.
 
-Observed validation: the CPU-only suite passed 722 tests with one ignored
+Observed validation: the CPU-only suite passed 721 tests with one ignored
 preview and no failures, including fifteen `avatar_formats` tests; the eleven
 desktop import UI tests passed; CPU-only and desktop all-target Clippy with
 warnings denied, the desktop build and formatting passed. No GPU or window run.

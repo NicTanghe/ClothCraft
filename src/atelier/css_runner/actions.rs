@@ -297,7 +297,7 @@ pub(super) fn apply_runner_action(
         RunnerAction::CamReset => {
             state.camera = clothcraft::usd_scene::default_scene_camera(
                 &state.scene.state.x,
-                Some(&state.scene.collider.surface),
+                Some(state.avatar_display_surface()),
             );
             state.sync_usd_camera();
             state.status_message = "Reset 3D camera".to_string();

@@ -179,7 +179,7 @@ fn avatar_body(state: &CssRunnerState, dialog: &ImportDialog) -> Node {
                             onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ImportToggleMesh(index))}>
                             <span class="import-row-label">{mesh.name.clone()}</span>
                             <span class="import-row-detail">
-                                {format!("{} vertices · {} triangles", mesh.vertices, mesh.triangles)}
+                                {format!("{} vertices · {} triangles · {:.2} m²", mesh.vertices, mesh.triangles, mesh.area_m2)}
                             </span>
                         </button>
                     }
@@ -209,7 +209,7 @@ fn avatar_body(state: &CssRunnerState, dialog: &ImportDialog) -> Node {
                 <div class="import-section">
                     <span class="import-section-title">"Collider meshes"</span>
                     <span class="import-hint">
-                        "The mesh with the most triangles is selected by default. Enable every surface that should collide and leave helper meshes (for example Mixamo joint markers) off."
+                        "The mesh with the largest surface area is selected by default. Enable every surface that should collide and leave helper meshes (for example dressform stands or Mixamo joint markers) off."
                     </span>
                     {mesh_rows}
                 </div>
