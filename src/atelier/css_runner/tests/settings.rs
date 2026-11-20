@@ -8,9 +8,10 @@ use super::super::board::geometry::{
     compute_2d_viewport_rect, screen_to_board_m, viewport_3d_rect,
 };
 use super::super::input::handle_runner_event;
+use super::super::preferences::{AppPreferences, PreferenceStore};
 use super::super::state::{DEFAULT_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED, MIN_2D_ZOOM_SPEED};
 use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
-use clothcraft::css_ui::load_studio_stylesheet;
+use clothcraft::css_ui::{Theme, ViewLayoutMode, load_studio_stylesheet};
 use cssimpler::renderer::{
     EngineEvent, FrameInfo, KeyIdentity, KeyboardEvent, KeyboardModifiers, ScrollDelta,
 };
@@ -289,4 +290,66 @@ fn wireframe_colour_and_thickness_reach_the_viewport() {
     assert!(shared!().enabled);
     assert_eq!(shared!().colour, 0);
     assert_eq!(shared!().width_px, DEFAULT_WIDTH_PX);
+}
+
+#[test]
+fn settings_survive_a_restart_through_the_preference_file() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("preferences/settings.ron");
+    let mut state = selection_test_state(dir.path());
+    state.attach_preferences(PreferenceStore::at(&path));
+
+    state.theme = Theme::Light;
+    state.layout_mode = ViewLayoutMode::TwoDOnly;
+    state.board_2d_zoom_speed = 3.25;
+    state.show_body_fill = false;
+    state.show_body_border = false;
+    state.wireframe = true;
+    state.wireframe_colour = 3;
+    state.wireframe_width_px = 6.0;
+    state.project.template.measurement_bits = Some(16);
+    state.flush_preferences(true);
+    assert!(path.exists(), "flush should create {}", path.display());
+
+    // A second session starts from the defaults and then loads the file.
+    let mut restored = selection_test_state(dir.path());
+    restored.attach_preferences(PreferenceStore::at(&path));
+    assert_eq!(restored.theme, Theme::Light);
+    assert_eq!(restored.layout_mode, ViewLayoutMode::TwoDOnly);
+    assert_eq!(restored.board_2d_zoom_speed, 3.25);
+    assert!(!restored.show_body_fill);
+    assert!(!restored.show_body_border);
+    assert!(restored.show_body_outline);
+    assert!(restored.wireframe);
+    assert_eq!(restored.wireframe_colour, 3);
+    assert_eq!(restored.wireframe_width_px, 6.0);
+    assert_eq!(restored.project.template.measurement_precision(), 16);
+}
+
+#[test]
+fn opened_documents_keep_their_own_measurement_precision() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let store = PreferenceStore::at(dir.path().join("settings.ron"));
+    store
+        .save(&AppPreferences {
+            zoom_speed: 2.0,
+            measurement_bits: 16,
+            ..AppPreferences::default()
+        })
+        .unwrap();
+
+    let mut state = selection_test_state(dir.path());
+    state.files.source = Some(dir.path().join("garment.json"));
+    state.project.template.measurement_bits = Some(10);
+    state.attach_preferences(store);
+
+    // The document's own value wins; unrelated preferences still apply.
+    assert_eq!(state.project.template.measurement_precision(), 10);
+    assert_eq!(state.board_2d_zoom_speed, 2.0);
 }

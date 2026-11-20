@@ -169,7 +169,8 @@ code; its public `atelier::css_runner` entry points remain available.
 ## Settings, 2D zoom speed and wireframe style
 
 The fitting editor has **Settings** immediately after **Export** in the top bar.
-It holds **2D zoom speed** and **3D wireframe**.
+It holds **New measurement precision**, **2D zoom speed**, **Body reference**
+layers and **3D wireframe**.
 
 **2D zoom speed** covers mouse-wheel and trackpad zoom. The default is 1.5× the
 earlier sensitivity (one positive wheel line changes zoom by 4.5% instead of
@@ -183,10 +184,28 @@ by 1 px between 1 and 8 px, defaulting to 2 px; Reset restores the default colou
 and width. These controls change the stroke only — the separate 3D header icon
 still shows and hides the wireframe, and turning it on keeps the chosen style.
 
-Both settings apply immediately to the current editor instance and are
-session-local: they are not written into garment documents or retained between
-launches. Toolbar/keyboard zoom steps and 3D zoom retain their existing
-behavior.
+Settings apply immediately and are written to a per-user RON preference file
+(`settings.ron`, Rusty Object Notation), so theme, view layout, zoom speed,
+body-reference layers, wireframe style and the default measurement precision
+survive a restart. The file is not part of a garment document and never changes
+geometry, fabrics, seams or solver settings. It lives at:
+
+- Windows: `%APPDATA%\ClothCraft\settings.ron` (roaming AppData).
+- macOS: `~/Library/Application Support/ClothCraft/settings.ron`.
+- Linux/BSD: `$XDG_CONFIG_HOME/clothcraft/settings.ron`, falling back to
+  `~/.config/clothcraft/settings.ron`.
+
+`CLOTHCRAFT_CONFIG_DIR` overrides the directory for portable builds and manual
+testing. Writes are debounced while a control is dragged and flushed when the
+window closes, using the same temporary-file replacement as document saves.
+Missing, unreadable or invalid files fall back to the defaults without blocking
+startup, and a later save repairs them. Files carry a schema version; an unknown
+version falls back to defaults rather than being read with different field
+meanings.
+
+The saved measurement precision is the default for a fresh session. A garment
+opened from disk keeps the precision stored in that document. Toolbar/keyboard
+zoom steps and 3D zoom retain their existing behavior.
 
 Close, Escape or a click outside dismisses the panel. Board pointer/wheel input
 and editor keyboard shortcuts are blocked while it is open; settings do not
@@ -201,6 +220,8 @@ Close/Escape/outside-click dismissal, ensure modal input does not edit the board
 and verify line/pixel scroll equivalence, cursor anchoring, speed/zoom bounds,
 Reset and unchanged 3D zoom. They also verify that the wireframe colour and
 width controls reach the shared viewport settings, clamp at both limits and
-survive the overlay toggle. Strict desktop/CPU Clippy, build, formatting and all
-eight factory tests pass. No native-window or GPU acceptance was run for these
-settings changes.
+survive the overlay toggle. Preference regressions cover a restart round trip,
+missing/corrupt/out-of-range files, schema versions and the Windows, macOS and
+Linux paths. Strict desktop/CPU Clippy, build, formatting and all eight factory
+tests pass. No native-window or GPU acceptance was run for these settings
+changes.
