@@ -18,6 +18,7 @@ use clothcraft::fitting::{FittingProject, FittingScene};
 use clothcraft::garment::GarmentTemplate;
 use clothcraft::gpu_avbd::ContactMethod;
 use clothcraft::render::Camera;
+use clothcraft::usd_scene::StudioBackdropTheme;
 use clothcraft::vbd::{VbdMetrics, VbdSettings};
 use cssimpler::ActionQueue;
 use cssimpler::frame_drag::FrameAlignedDrag;
@@ -307,6 +308,26 @@ impl CssRunnerState {
         self.corner_preview_active = false;
     }
 
+    /// Theme for the display-only studio cove.
+    pub fn studio_backdrop_theme(&self) -> StudioBackdropTheme {
+        match self.theme {
+            Theme::Dark => StudioBackdropTheme::Dark,
+            Theme::Light => StudioBackdropTheme::Light,
+        }
+    }
+
+    /// Recolour the studio cove after a theme change.
+    pub fn sync_usd_backdrop(&mut self) {
+        let Some(scene) = &self.usd_scene else {
+            return;
+        };
+        if let Err(error) =
+            clothcraft::usd_scene::update_infinity_cove_color(scene, self.studio_backdrop_theme())
+        {
+            self.status_message = format!("Studio backdrop update error: {error}");
+        }
+    }
+
     /// Surface shown in the 3D viewport and used for framing. It includes
     /// imported meshes that are not part of the collision proxy.
     pub fn avatar_display_surface(&self) -> &SurfaceMesh {
@@ -434,6 +455,7 @@ impl CssRunnerState {
     fn apply_preferences(&mut self, preferences: &AppPreferences) {
         let preferences = preferences.clone().sanitized();
         self.theme = preferences.theme.into();
+        self.sync_usd_backdrop();
         self.layout_mode = preferences.layout.into();
         self.board_2d_zoom_speed = preferences.zoom_speed;
         self.show_body_outline = preferences.body_visible;

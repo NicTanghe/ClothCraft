@@ -246,3 +246,6 @@ its dimensions/frame count/scope to `ui.json`, then exits normally. The capture
 excludes UI chrome, editing and simulation; it rejects uniform images. Normal
 launches do not capture/read back GPU images. Portable Windows verification
 checks this lifecycle and its evidence.
+
+Display-only studio geometry (the theme-aware infinity cove) is described in
+[studio backdrop](studio-backdrop.md); it is not part of the fitted scene.

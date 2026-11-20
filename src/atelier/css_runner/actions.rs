@@ -284,7 +284,10 @@ pub(super) fn apply_runner_action(
             state.command_palette_open = !state.command_palette_open;
             state.settings_open = false;
         }
-        RunnerAction::ThemeToggle => state.theme = state.theme.toggled(),
+        RunnerAction::ThemeToggle => {
+            state.theme = state.theme.toggled();
+            state.sync_usd_backdrop();
+        }
         RunnerAction::ViewSplit => state.layout_mode = ViewLayoutMode::Split,
         RunnerAction::View3d => state.layout_mode = ViewLayoutMode::ThreeDOnly,
         RunnerAction::View2d => state.layout_mode = ViewLayoutMode::TwoDOnly,
