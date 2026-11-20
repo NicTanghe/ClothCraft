@@ -3,6 +3,7 @@
 use super::super::{DocumentFiles, RunOptions, perf, usd_smoke, viewport_wireframe, worker};
 use super::actions::update_runner;
 use super::input::handle_runner_event;
+use super::preferences::PreferenceStore;
 use super::state::CssRunnerState;
 use super::ui::shell::build_runner_ui;
 use clothcraft::css_ui::load_studio_stylesheet;
@@ -125,6 +126,14 @@ pub fn run(
     } else {
         ContactMethod::Ipc
     };
+    // Smoke and performance runs keep deterministic defaults and never write to
+    // the real user profile.
+    if !smoke && !perf_test {
+        match PreferenceStore::user() {
+            Ok(store) => state.attach_preferences(store),
+            Err(error) => state.status_message = format!("Settings can't be saved: {error}"),
+        }
+    }
     if perf_test {
         state.perf = Some(perf::PerfRun::new());
         state.playing = true;

@@ -8,6 +8,7 @@ use super::board::geometry::fit_2d_board;
 use super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::imports::ImportDialog;
 use super::mesh_preparation;
+use super::preferences::{AppPreferences, PreferenceStore};
 use clothcraft::authoring::corner_tool::CIRCLE_TENSION;
 use clothcraft::authoring::{CornerRule, History};
 use clothcraft::avatar_import::StagedAvatar;
@@ -22,10 +23,13 @@ use cssimpler::frame_drag::FrameAlignedDrag;
 use std::cell::RefCell;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
+use std::time::{Duration, Instant};
 
 pub(super) const DEFAULT_2D_ZOOM_SPEED: f64 = 1.5;
 pub(super) const MIN_2D_ZOOM_SPEED: f64 = 0.25;
 pub(super) const MAX_2D_ZOOM_SPEED: f64 = 4.0;
+/// Coalesce rapid control changes (for example a zoom-speed drag) into one write.
+const PREFERENCE_SAVE_DEBOUNCE: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ObjectCategory {
@@ -132,6 +136,13 @@ pub struct CssRunnerState {
     pub board_2d_pan: (f64, f64),
     pub board_2d_zoom: f64,
     pub board_2d_zoom_speed: f64,
+    /// Where preferences are written. `None` keeps them session-local: smoke
+    /// runs and the headless tests never touch the real user profile.
+    preference_store: Option<PreferenceStore>,
+    /// Last successfully loaded or saved snapshot, used to detect changes.
+    saved_preferences: AppPreferences,
+    preference_dirty_since: Option<Instant>,
+    preference_error: Option<String>,
 }
 
 impl CssRunnerState {
@@ -242,6 +253,10 @@ impl CssRunnerState {
             board_2d_pan: (0.0, 0.0),
             board_2d_zoom: 1.0,
             board_2d_zoom_speed: DEFAULT_2D_ZOOM_SPEED,
+            preference_store: None,
+            saved_preferences: AppPreferences::default(),
+            preference_dirty_since: None,
+            preference_error: None,
         }
     }
 
@@ -371,6 +386,98 @@ impl CssRunnerState {
         }
     }
 
+    /// Load the per-user preferences and apply them to this editor instance.
+    ///
+    /// Values that belong to the document (geometry, fabrics, seams and solver
+    /// settings) are left alone. The measurement precision is applied only to
+    /// a fresh session; a project opened from disk keeps its own value.
+    pub(super) fn attach_preferences(&mut self, store: PreferenceStore) {
+        let preferences = store.load();
+        self.apply_preferences(&preferences);
+        self.saved_preferences = self.capture_preferences();
+        self.preference_store = Some(store);
+        self.preference_dirty_since = None;
+        self.preference_error = None;
+    }
+
+    /// Current preference values, normalized to the ranges the controls allow.
+    fn capture_preferences(&self) -> AppPreferences {
+        AppPreferences {
+            version: super::preferences::VERSION,
+            theme: self.theme.into(),
+            layout: self.layout_mode.into(),
+            zoom_speed: self.board_2d_zoom_speed,
+            body_visible: self.show_body_outline,
+            body_fill: self.show_body_fill,
+            body_outline: self.show_body_border,
+            body_details: self.show_body_details,
+            wireframe_enabled: self.wireframe,
+            wireframe_colour: self.wireframe_colour,
+            wireframe_width_px: self.wireframe_width_px,
+            measurement_bits: self.project.template.measurement_precision(),
+        }
+        .sanitized()
+    }
+
+    fn apply_preferences(&mut self, preferences: &AppPreferences) {
+        let preferences = preferences.clone().sanitized();
+        self.theme = preferences.theme.into();
+        self.layout_mode = preferences.layout.into();
+        self.board_2d_zoom_speed = preferences.zoom_speed;
+        self.show_body_outline = preferences.body_visible;
+        self.show_body_fill = preferences.body_fill;
+        self.show_body_border = preferences.body_outline;
+        self.show_body_details = preferences.body_details;
+        self.wireframe = preferences.wireframe_enabled;
+        self.wireframe_colour = preferences.wireframe_colour;
+        self.wireframe_width_px = preferences.wireframe_width_px;
+        if self.files.source.is_none() {
+            self.project.template.measurement_bits = Some(preferences.measurement_bits);
+        }
+        self.sync_usd_wireframe();
+    }
+
+    /// Write changed preferences after a short debounce, or immediately when
+    /// `force` is set (shutdown and tests).
+    ///
+    /// Returns `true` when the status line changed because the file could not
+    /// be written, so the caller can repaint.
+    pub(super) fn flush_preferences(&mut self, force: bool) -> bool {
+        let Some(store) = self.preference_store.clone() else {
+            return false;
+        };
+        let current = self.capture_preferences();
+        if current == self.saved_preferences {
+            self.preference_dirty_since = None;
+            return false;
+        }
+        let now = Instant::now();
+        let since = *self.preference_dirty_since.get_or_insert(now);
+        if !force && now.saturating_duration_since(since) < PREFERENCE_SAVE_DEBOUNCE {
+            return false;
+        }
+        match store.save(&current) {
+            Ok(()) => {
+                let recovered = self.preference_error.take().is_some();
+                self.saved_preferences = current;
+                self.preference_dirty_since = None;
+                if recovered {
+                    self.status_message = "Settings saved".to_string();
+                }
+                recovered
+            }
+            Err(error) => {
+                self.preference_dirty_since = Some(now);
+                if self.preference_error.as_deref() == Some(error.as_str()) {
+                    return false;
+                }
+                self.preference_error = Some(error.clone());
+                self.status_message = format!("Settings not saved: {error}");
+                true
+            }
+        }
+    }
+
     /// Re-apply the current shading mode to the garment and collision display meshes.
     pub fn sync_usd_shading(&mut self) {
         if let Some(scene) = &self.usd_scene
@@ -419,5 +526,13 @@ impl CssRunnerState {
         self.status_message = "Reset simulation state".to_string();
         self.sync_usd_points();
         self.send_control_state(false);
+    }
+}
+
+impl Drop for CssRunnerState {
+    fn drop(&mut self) {
+        // Normal window close and process exit both drop the state; writing here
+        // keeps changes made inside the debounce window.
+        let _ = self.flush_preferences(true);
     }
 }

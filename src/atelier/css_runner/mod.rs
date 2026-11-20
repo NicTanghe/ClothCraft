@@ -14,6 +14,7 @@ mod editing;
 pub mod imports;
 mod input;
 mod mesh_preparation;
+mod preferences;
 mod state;
 mod ui;
 

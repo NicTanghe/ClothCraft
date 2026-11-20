@@ -1,5 +1,39 @@
 # Repository handoff
 
+## Saved user preferences — 20 November 2026
+
+The native runner now writes its Settings panel and workspace preferences to a
+per-user `settings.ron` and loads them at startup, instead of rebuilding
+hard-coded defaults every launch. The file uses RON (Rusty Object Notation) and
+holds the theme, view layout, 2D zoom speed, body-reference layers, wireframe
+toggle/colour/width and the default measurement precision. It is not part of a
+garment document and never changes geometry, fabrics, seams, history or solver
+settings.
+
+Locations: `%APPDATA%\ClothCraft\settings.ron` on Windows,
+`~/Library/Application Support/ClothCraft/settings.ron` on macOS, and
+`$XDG_CONFIG_HOME/clothcraft/settings.ron` (falling back to
+`~/.config/clothcraft/settings.ron`) on Linux/BSD. `CLOTHCRAFT_CONFIG_DIR`
+overrides the directory for portable builds and testing.
+
+`atelier/css_runner/preferences.rs` owns the versioned schema, per-platform
+path, clamping and atomic temporary-file replacement. Runner state captures the
+live values, writes after a 500 ms debounce while controls are dragged, and
+flushes on drop/window close. A missing, unreadable, invalid or unknown-version
+file falls back to defaults without blocking startup. An opened project keeps
+its own stored measurement precision; the preference is the default for a fresh
+session. Smoke and performance runs keep deterministic defaults and never touch
+the user profile.
+
+`src/atelier/css_runner/tests/settings.rs` covers a restart round trip and the
+document-precision precedence; the preferences module covers missing, corrupt,
+out-of-range and version-mismatched files plus the Windows, macOS and Linux
+paths.
+
+Observed validation: the desktop library suite passed 195 tests with 8 ignored;
+strict desktop all-target Clippy and formatting passed. No GPU or native window
+run was performed.
+
 ## Static FBX and USD avatar import — 19 November 2026
 
 Issue #55 widens static avatar intake beyond OBJ/glTF/GLB. `src/fbx_avatar.rs`

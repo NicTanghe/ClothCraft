@@ -244,7 +244,14 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         state.mesh_draft = mesh_preparation::MeshDraft::from_panel(selected_mesh_panel);
     }
 
-    if number_changed || input_changed || had_actions || (had_result && !state.playing) {
+    let preferences_status_changed = state.flush_preferences(false);
+
+    if number_changed
+        || input_changed
+        || had_actions
+        || preferences_status_changed
+        || (had_result && !state.playing)
+    {
         Invalidation::Structure
     } else if had_result {
         Invalidation::Paint
