@@ -22,8 +22,10 @@
 //! format change. The caller must display `ImportedAvatar::warnings` before
 //! accepting the geometry. It discards UVs, authored normals, materials, textures
 //! and scene object identities. Required extensions, geometry/node extensions,
-//! animation, skinning, morphs, sparse geometry accessors and non-triangle topology
-//! are rejected explicitly. Singular/sheared node matrices are rejected. Validation
+//! morphs, sparse geometry accessors and non-triangle topology are rejected
+//! explicitly. Skins and animations are accepted but not evaluated: every mesh
+//! imports its stored bind pose at its node transform and the losses are
+//! reported in `warnings`. Singular/sheared node matrices are rejected. Validation
 //! detects malformed indices and degenerate/nonfinite triangles; it does not
 //! prove that an avatar is closed, consistently oriented or self-intersection-free.
 //! Discarded vertex attributes are checked for accessor existence and matching
@@ -387,7 +389,10 @@ impl Default for Limits {
 /// normals, UVs and textures are not preserved; see `warnings` before applying.
 #[derive(Debug)]
 pub struct ImportedAvatar {
+    /// Every mesh instance merged; the avatar importer selects which parts collide.
     pub mesh: SurfaceMesh,
+    /// Named per-node meshes with node transforms applied, in traversal order.
+    pub parts: Vec<(String, SurfaceMesh)>,
     pub scene: usize,
     pub warnings: Vec<String>,
 }
@@ -455,6 +460,8 @@ struct Accessor {
 }
 #[derive(Deserialize)]
 struct Mesh {
+    #[serde(default)]
+    name: Option<String>,
     primitives: Vec<Primitive>,
     weights: Option<Vec<f64>>,
 }
@@ -470,8 +477,9 @@ struct Primitive {
 }
 #[derive(Deserialize)]
 struct Node {
+    #[serde(default)]
+    name: Option<String>,
     mesh: Option<usize>,
-    skin: Option<usize>,
     weights: Option<Vec<f64>>,
     #[serde(default)]
     children: Vec<usize>,
@@ -523,9 +531,6 @@ pub fn import(
             doc.extensions_required
         ));
     }
-    if !doc.skins.is_empty() || !doc.animations.is_empty() {
-        return Err("Skinned or animated avatars are unsupported; export a static mesh".into());
-    }
     if doc.nodes.len() > limits.nodes {
         return Err("Avatar node limit exceeded".into());
     }
@@ -568,8 +573,8 @@ pub fn import(
     }
     let mut parents = vec![None; doc.nodes.len()];
     for (parent, node) in doc.nodes.iter().enumerate() {
-        if node.skin.is_some() || node.weights.is_some() || !node.extensions.is_empty() {
-            return Err("Node skinning, morph weights or extensions are unsupported".into());
+        if node.weights.is_some() || !node.extensions.is_empty() {
+            return Err("Node morph weights or extensions are unsupported".into());
         }
         for &child in &node.children {
             let slot = parents.get_mut(child).ok_or("Invalid child node index")?;
@@ -609,10 +614,7 @@ pub fn import(
         }
         stack.push((root, DMat4::IDENTITY, 1usize));
     }
-    let mut mesh = SurfaceMesh {
-        vertices: vec![],
-        triangles: vec![],
-    };
+    let mut parts: Vec<(String, SurfaceMesh)> = Vec::new();
     while let Some((index, parent, depth)) = stack.pop() {
         if depth > limits.depth {
             return Err("Avatar hierarchy depth limit exceeded".into());
@@ -633,22 +635,71 @@ pub fn import(
             if source.primitives.is_empty() {
                 return Err("Empty glTF mesh".into());
             }
+            let mut part = SurfaceMesh {
+                vertices: vec![],
+                triangles: vec![],
+            };
             for primitive in &source.primitives {
-                append_primitive(&doc, &buffers, primitive, world, &mut mesh, limits)?;
+                append_primitive(&doc, &buffers, primitive, world, &mut part, limits)?;
+            }
+            if !part.vertices.is_empty() && !part.triangles.is_empty() {
+                let name = node
+                    .name
+                    .clone()
+                    .or_else(|| source.name.clone())
+                    .unwrap_or_else(|| format!("mesh {id}"));
+                parts.push((name, part));
             }
         }
         for &child in node.children.iter().rev() {
             stack.push((child, world, depth + 1));
         }
     }
+    if parts.is_empty() {
+        return Err("The selected glTF scene contains no triangle mesh".into());
+    }
+    let mut mesh = SurfaceMesh {
+        vertices: vec![],
+        triangles: vec![],
+    };
+    for (_, part) in &parts {
+        let base = mesh.vertices.len();
+        mesh.vertices.extend_from_slice(&part.vertices);
+        mesh.triangles.extend(
+            part.triangles
+                .iter()
+                .map(|triangle| triangle.map(|index| base + index)),
+        );
+    }
+    if mesh.vertices.len() > limits.vertices || mesh.triangles.len() > limits.triangles {
+        return Err("Expanded avatar geometry limit exceeded".into());
+    }
     mesh.validate()?;
-    for t in &mesh.triangles {
-        let [a, b, c] = t.map(|i| mesh.vertices[i]);
-        if !(b - a).cross(c - a).length_squared().is_finite() {
-            return Err("Transformed triangle exceeds finite geometric range".into());
+    for (_, part) in &parts {
+        for t in &part.triangles {
+            let [a, b, c] = t.map(|i| part.vertices[i]);
+            if !(b - a).cross(c - a).length_squared().is_finite() {
+                return Err("Transformed triangle exceeds finite geometric range".into());
+            }
         }
     }
-    Ok(ImportedAvatar { mesh, scene: selected, warnings: vec!["Static geometry only: normals, UVs, materials, textures, cameras and lights are not imported.".into()] })
+    let mut warnings =
+        vec!["Static geometry only: normals, UVs, materials, textures, cameras and lights are not imported.".to_owned()];
+    if !doc.skins.is_empty() {
+        warnings.push(
+            "Skinning is not applied: every mesh is imported in its stored bind pose at its node transform."
+                .into(),
+        );
+    }
+    if !doc.animations.is_empty() {
+        warnings.push("Animations are ignored: only the static base scene is imported.".into());
+    }
+    Ok(ImportedAvatar {
+        mesh,
+        parts,
+        scene: selected,
+        warnings,
+    })
 }
 
 fn transform(node: &Node) -> Result<DMat4, String> {
@@ -777,12 +828,6 @@ fn append_primitive(
     mesh: &mut SurfaceMesh,
     limits: Limits,
 ) -> Result<(), String> {
-    if p.attributes
-        .keys()
-        .any(|name| name.starts_with("JOINTS_") || name.starts_with("WEIGHTS_"))
-    {
-        return Err("Skinning attributes are unsupported; export a static mesh".into());
-    }
     if p.mode.unwrap_or(4) != 4 || !p.targets.is_empty() || !p.extensions.is_empty() {
         return Err(
             "Only static triangle primitives without geometry extensions are supported".into(),

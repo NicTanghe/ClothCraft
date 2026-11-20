@@ -548,7 +548,10 @@ fn avatar_import_reviews_source_meshes_and_defaults_to_the_largest() {
         .as_ref()
         .unwrap();
     assert_eq!(candidate.meshes.len(), 2);
-    assert!(candidate.meshes[0].selected, "body has the most triangles");
+    assert!(
+        candidate.meshes[0].selected,
+        "body has the largest surface area"
+    );
     assert!(
         !candidate.meshes[1].selected,
         "helper mesh is off by default"
@@ -606,6 +609,29 @@ f 1 6 5
 f 4 8 7
 f 4 7 3
 ";
+
+#[test]
+fn avatar_import_displays_all_meshes_but_collides_with_the_selection() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("two-meshes.fbx");
+    std::fs::write(&path, two_mesh_fbx()).unwrap();
+    let mut state = state_with(dir.path());
+    state.open_import_path(ImportKind::Avatar, &path);
+    state.apply_import();
+    assert_eq!(
+        state.scene.collider.surface.vertices.len(),
+        4,
+        "the default collider is the body quad only"
+    );
+    assert_eq!(
+        state.avatar_display.as_ref().unwrap().vertices.len(),
+        7,
+        "the viewport keeps the unselected helper mesh"
+    );
+}
 
 #[test]
 fn avatar_import_reports_arrangement_conflicts_before_install() {

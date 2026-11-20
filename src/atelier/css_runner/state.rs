@@ -11,6 +11,7 @@ use super::mesh_preparation;
 use super::preferences::{AppPreferences, PreferenceStore};
 use clothcraft::authoring::corner_tool::CIRCLE_TENSION;
 use clothcraft::authoring::{CornerRule, History};
+use clothcraft::avatar::SurfaceMesh;
 use clothcraft::avatar_import::StagedAvatar;
 use clothcraft::css_ui::{Theme, ViewLayoutMode};
 use clothcraft::fitting::{FittingProject, FittingScene};
@@ -70,6 +71,8 @@ pub struct CssRunnerState {
     pub import_scale_mm_per_unit: f64,
     /// Keeps the imported avatar's canonical OBJ alive for Save.
     pub staged_avatar: Option<StagedAvatar>,
+    /// Every imported avatar mesh for display; physics uses `scene.collider`.
+    pub avatar_display: Option<Arc<SurfaceMesh>>,
     pub project: FittingProject,
     pub preview_template: Option<GarmentTemplate>,
     pub history: History,
@@ -187,6 +190,7 @@ impl CssRunnerState {
             import_mesh_mm: 25.0,
             import_scale_mm_per_unit: 0.0,
             staged_avatar: None,
+            avatar_display: None,
             project,
             preview_template: None,
             history: History::default(),
@@ -301,6 +305,14 @@ impl CssRunnerState {
         self.selected_2d_point = None;
         self.selected_2d_edge = None;
         self.corner_preview_active = false;
+    }
+
+    /// Surface shown in the 3D viewport and used for framing. It includes
+    /// imported meshes that are not part of the collision proxy.
+    pub fn avatar_display_surface(&self) -> &SurfaceMesh {
+        self.avatar_display
+            .as_deref()
+            .unwrap_or(&self.scene.collider.surface)
     }
 
     pub fn active_template(&self) -> &GarmentTemplate {
@@ -485,7 +497,7 @@ impl CssRunnerState {
                 scene,
                 &self.scene.garment,
                 &self.scene.state,
-                Some(self.scene.collider.surface.as_ref()),
+                Some(self.avatar_display_surface()),
                 self.shading,
             )
         {

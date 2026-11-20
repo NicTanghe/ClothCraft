@@ -37,11 +37,13 @@ impl StagedAvatar {
 /// One importable source surface. Multi-mesh documents (for example Mixamo FBX
 /// files with `Alpha_Surface` and `Alpha_Joints`) expose every mesh so the
 /// reviewer can keep helper geometry out of the collider.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MeshEntry {
     pub name: String,
     pub vertices: usize,
     pub triangles: usize,
+    /// Total triangle area in square metres; the default collider choice.
+    pub area_m2: f64,
     pub selected: bool,
 }
 
@@ -54,6 +56,8 @@ pub struct Candidate {
     pub warnings: Vec<String>,
     pub meshes: Vec<MeshEntry>,
     parts: Vec<SurfaceMesh>,
+    /// Every source mesh for the viewport, including meshes not used as colliders.
+    display: Arc<SurfaceMesh>,
     base_warnings: Vec<String>,
     asset: StagedAvatar,
 }
@@ -75,7 +79,7 @@ impl Candidate {
         let (parts, mut warnings) = match extension.as_str() {
             "gltf" | "glb" => {
                 let imported = gltf_avatar::load(path, None, limits)?;
-                (vec![(fallback_name, imported.mesh)], imported.warnings)
+                (imported.parts, imported.warnings)
             }
             "fbx" => {
                 let imported = fbx_avatar::load(path, limits)?;
@@ -119,6 +123,7 @@ impl Candidate {
                 name: name.clone(),
                 vertices: mesh.vertices.len(),
                 triangles: mesh.triangles.len(),
+                area_m2: surface_area(mesh),
                 selected: *selected,
             })
             .collect();
@@ -130,6 +135,10 @@ impl Candidate {
             warnings: Vec::new(),
             meshes,
             parts: parts.into_iter().map(|(_, mesh)| mesh).collect(),
+            display: Arc::new(SurfaceMesh {
+                vertices: vec![],
+                triangles: vec![],
+            }),
             base_warnings: std::mem::take(&mut warnings),
             asset,
         };
@@ -156,10 +165,19 @@ impl Candidate {
         let limits = gltf_avatar::Limits::default();
         let mut vertices = Vec::new();
         let mut triangles = Vec::new();
+        let mut merged_vertices = 0usize;
+        let mut dropped_triangles = 0usize;
         for (entry, part) in self.meshes.iter().zip(&self.parts) {
             if !entry.selected {
                 continue;
             }
+            // glTF/FBX exporters often split vertices at normal/UV seams. The
+            // surface is watertight in space but topologically open, which
+            // breaks penetration signs and contact coverage; weld exact
+            // duplicates inside each part before merging.
+            let (part, merged, dropped) = weld_coincident_vertices(part.clone());
+            merged_vertices += merged;
+            dropped_triangles += dropped;
             let base = vertices.len();
             vertices.extend_from_slice(&part.vertices);
             triangles.extend(
@@ -174,7 +192,7 @@ impl Candidate {
         if vertices.len() > limits.vertices || triangles.len() > limits.triangles {
             return Err("Avatar geometry exceeds the import limit".into());
         }
-        let mesh = SurfaceMesh {
+        let mut mesh = SurfaceMesh {
             vertices,
             triangles,
         };
@@ -183,6 +201,25 @@ impl Candidate {
         for &p in &mesh.vertices {
             bounds[0] = bounds[0].min(p);
             bounds[1] = bounds[1].max(p);
+        }
+        // Avatars authored with geometry below the floor (for example a
+        // dressform whose stand extends below its origin) otherwise sit half
+        // underground and the garment floats above them. Use every source part,
+        // not only the selected collider, so deselecting the stand keeps the
+        // form at its standing height.
+        let asset_floor = self
+            .parts
+            .iter()
+            .flat_map(|part| part.vertices.iter().map(|point| point.y))
+            .fold(f64::INFINITY, f64::min);
+        let mut ground_shift = 0.0;
+        if asset_floor.is_finite() && asset_floor < -1e-6 {
+            ground_shift = -asset_floor;
+            for point in &mut mesh.vertices {
+                point.y += ground_shift;
+            }
+            bounds[0].y += ground_shift;
+            bounds[1].y += ground_shift;
         }
         if !(bounds[1] - bounds[0]).is_finite()
             || mesh.triangles.iter().any(|triangle| {
@@ -219,9 +256,45 @@ impl Candidate {
                 summary.push_str(&format!("; not selected: {}", skipped.join(", ")));
             }
             summary.push_str(
-                ". The mesh with the most triangles is selected by default; enable every surface that should collide and leave helper meshes (for example joint markers) off.",
+                ". The mesh with the largest surface area is selected by default; enable every surface that should collide and leave helper meshes (for example stand or joint-marker meshes) off.",
             );
             self.warnings.push(summary);
+        }
+        if merged_vertices > 0 {
+            self.warnings.push(format!(
+                "Merged {merged_vertices} coincident vertices so the collider uses connected surface topology."
+            ));
+        }
+        if dropped_triangles > 0 {
+            self.warnings.push(format!(
+                "Dropped {dropped_triangles} triangles that became degenerate while welding coincident vertices."
+            ));
+        }
+        let mut display_vertices = Vec::new();
+        let mut display_triangles = Vec::new();
+        for part in &self.parts {
+            let base = display_vertices.len();
+            display_vertices.extend_from_slice(&part.vertices);
+            display_triangles.extend(
+                part.triangles
+                    .iter()
+                    .map(|triangle| triangle.map(|index| base + index)),
+            );
+        }
+        if ground_shift != 0.0 {
+            for point in &mut display_vertices {
+                point.y += ground_shift;
+            }
+        }
+        self.display = Arc::new(SurfaceMesh {
+            vertices: display_vertices,
+            triangles: display_triangles,
+        });
+        if ground_shift > 1e-6 {
+            self.warnings.push(format!(
+                "The avatar extended {:.1} mm below the floor and was raised so its lowest point sits at Y = 0. The authored vertical position is not preserved.",
+                ground_shift * 1000.0
+            ));
         }
         self.warnings.push(
             "Import does not repair intersections, open surfaces or inconsistent winding. Check placement before simulating."
@@ -263,14 +336,94 @@ impl Candidate {
             project,
             scene,
             asset: self.asset.clone(),
+            display: Arc::clone(&self.display),
             warnings,
         })
     }
 }
 
-/// The collider defaults to the mesh with the most triangles, which is the body in
+/// The collider defaults to the mesh with the largest surface area, which is the
+/// body in
 /// common multi-mesh exports (Mixamo's body plus joint markers). Every mesh is
 /// listed in the review modal and can be selected explicitly.
+/// Merge vertices with identical positions and remap triangles. Returns the
+/// welded mesh, how many vertices were merged and how many triangles collapsed.
+fn weld_coincident_vertices(mesh: SurfaceMesh) -> (SurfaceMesh, usize, usize) {
+    use std::collections::HashMap;
+    let canonical = |value: f64| if value == 0.0 { 0.0 } else { value };
+    let mut lookup: HashMap<[u64; 3], usize> = HashMap::new();
+    let mut vertices = Vec::with_capacity(mesh.vertices.len());
+    let mut remap = Vec::with_capacity(mesh.vertices.len());
+    for point in &mesh.vertices {
+        let key = [
+            canonical(point.x).to_bits(),
+            canonical(point.y).to_bits(),
+            canonical(point.z).to_bits(),
+        ];
+        match lookup.get(&key) {
+            Some(&index) => remap.push(index),
+            None => {
+                let index = vertices.len();
+                lookup.insert(key, index);
+                vertices.push(*point);
+                remap.push(index);
+            }
+        }
+    }
+    let merged = mesh.vertices.len().saturating_sub(vertices.len());
+    let mut triangles = Vec::with_capacity(mesh.triangles.len());
+    let mut dropped = 0usize;
+    for triangle in &mesh.triangles {
+        let triangle = triangle.map(|index| remap[index]);
+        if triangle[0] == triangle[1] || triangle[1] == triangle[2] || triangle[0] == triangle[2] {
+            dropped += 1;
+        } else {
+            triangles.push(triangle);
+        }
+    }
+    // OGC requires manifold edges. Touching but separately-authored pieces can
+    // weld into a three-way junction; keep the original split surface for that
+    // part instead of producing a collider the solver rejects.
+    let mut edges: HashMap<(usize, usize), u8> = HashMap::new();
+    let mut manifold = true;
+    'faces: for triangle in &triangles {
+        for (a, b) in [
+            (triangle[0], triangle[1]),
+            (triangle[1], triangle[2]),
+            (triangle[2], triangle[0]),
+        ] {
+            let key = (a.min(b), a.max(b));
+            let count = edges.entry(key).or_insert(0);
+            *count += 1;
+            if *count > 2 {
+                manifold = false;
+                break 'faces;
+            }
+        }
+    }
+    if !manifold {
+        return (mesh, 0, 0);
+    }
+    (
+        SurfaceMesh {
+            vertices,
+            triangles,
+        },
+        merged,
+        dropped,
+    )
+}
+
+fn surface_area(mesh: &SurfaceMesh) -> f64 {
+    mesh.triangles
+        .iter()
+        .map(|triangle| {
+            let [a, b, c] = triangle.map(|index| mesh.vertices[index]);
+            (b - a).cross(c - a).length() * 0.5
+        })
+        .sum()
+}
+
 fn default_selection(parts: &[(String, SurfaceMesh)]) -> Vec<bool> {
     if parts.len() <= 1 {
         return vec![true; parts.len()];
@@ -278,7 +431,7 @@ fn default_selection(parts: &[(String, SurfaceMesh)]) -> Vec<bool> {
     let largest = parts
         .iter()
         .enumerate()
-        .max_by_key(|(_, (_, mesh))| mesh.triangles.len())
+        .max_by(|a, b| surface_area(&a.1.1).total_cmp(&surface_area(&b.1.1)))
         .map(|(index, _)| index)
         .unwrap_or(0);
     let mut selected = vec![false; parts.len()];
@@ -312,6 +465,7 @@ fn separate_initial_arrangement(
     let avatar_centre = (lo + hi) * 0.5;
     let mut moved: std::collections::BTreeMap<String, f64> = std::collections::BTreeMap::new();
     let mut unresolved = None;
+    let mut solved = false;
     for _ in 0..SEPARATION_MAX_STEPS {
         let result = VbdSolver::new(
             scene.garment.clone(),
@@ -320,6 +474,7 @@ fn separate_initial_arrangement(
         );
         let error = match result {
             Ok(_) => {
+                solved = true;
                 unresolved = None;
                 break;
             }
@@ -374,6 +529,9 @@ fn separate_initial_arrangement(
         }
     }
     if moved.is_empty() {
+        if solved {
+            return Vec::new();
+        }
         let mut warnings = arrangement_warnings(scene);
         if let Some(error) = unresolved {
             warnings.push(format!(
@@ -481,9 +639,19 @@ pub struct Prepared {
     project: FittingProject,
     scene: FittingScene,
     asset: StagedAvatar,
+    display: Arc<SurfaceMesh>,
     warnings: Vec<String>,
 }
 impl Prepared {
+    /// Every imported source mesh, including meshes not selected as colliders.
+    pub fn display(&self) -> &SurfaceMesh {
+        &self.display
+    }
+
+    /// Shared display surface for the runner's USD stage.
+    pub fn display_surface(&self) -> Arc<SurfaceMesh> {
+        Arc::clone(&self.display)
+    }
     /// Conflicts detected after compiling the replacement scene, before any
     /// workspace field is installed.
     pub fn warnings(&self) -> &[String] {

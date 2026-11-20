@@ -633,7 +633,9 @@ impl CssRunnerState {
     }
 
     fn install_avatar(&mut self, prepared: avatar_import::Prepared) {
+        let display = prepared.display_surface();
         let (project, scene, asset) = prepared.into_parts();
+        self.avatar_display = Some(display);
         self.project = project;
         self.scene = scene;
         self.initial_scene = self.scene.clone();
@@ -661,7 +663,7 @@ impl CssRunnerState {
         if let Some(usd) = &self.usd_scene {
             if let Err(error) = clothcraft::usd_scene::update_viewport_surface(
                 usd,
-                &self.scene.collider.surface,
+                self.avatar_display_surface(),
                 self.shading,
             ) {
                 self.status_message = format!("USD collider update error: {error}");
