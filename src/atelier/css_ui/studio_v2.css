@@ -2079,3 +2079,72 @@ button {
 }
 .import-footer .btn-action { flex: 0 0 auto; min-width: 140px; }
 .btn-action.disabled { opacity: 0.45; cursor: default; }
+
+.viewport-shadow-controls {
+  display: flex;
+  flex-direction: column;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0 10px;
+  background-color: var(--viewport-header-bg);
+  overflow: hidden;
+}
+
+.viewport-shadow-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.viewport-shadow-label {
+  width: 55px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.viewport-shadow-track {
+  position: relative;
+  height: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.viewport-shadow-rail, .viewport-shadow-fill {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  height: 2px;
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.viewport-shadow-rail {
+  width: 100%;
+  background-color: var(--border);
+}
+
+.viewport-shadow-fill {
+  background-color: var(--accent);
+}
+
+.viewport-shadow-thumb {
+  position: absolute;
+  top: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--accent);
+  pointer-events: none;
+}
+
+.viewport-shadow-track.focused .viewport-shadow-thumb,
+.viewport-shadow-track:hover .viewport-shadow-thumb {
+  background-color: var(--text);
+}
+
+.viewport-shadow-controls.unavailable {
+  opacity: 0.5;
+}

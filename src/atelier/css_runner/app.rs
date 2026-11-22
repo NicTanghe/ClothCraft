@@ -53,6 +53,8 @@ pub fn create_runner_app<'a>(
     let smoke_output = state.files.output.join("ui.png");
     // Clone the viewport handles before `state` moves into the application.
     let wireframe = state.viewport_wireframe.clone();
+    let shadow_levels = state.viewport_shadow_levels.clone();
+    let shadow_supported = state.viewport_shadow_supported.clone();
     let redraw_slot = state.viewport_redraw.clone();
     let app = App::new(
         state,
@@ -75,7 +77,8 @@ pub fn create_runner_app<'a>(
             *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
             let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
             let mut renderer = UsdRenderer::new(init, usd_scene, cam_mode)?;
-            if renderer.supports_shadow_mapping() {
+            shadow_supported.set(renderer.supports_shadow_mapping());
+            if shadow_supported.get() {
                 renderer.set_studio_lighting(Some(UsdStudioLighting {
                     key_intensity: 0.76,
                     key_tint: [1.06, 0.99, 0.87],
@@ -84,17 +87,20 @@ pub fn create_runner_app<'a>(
                     fill_tint: [0.84, 0.94, 1.08],
                     ambient: 0.24,
                     floor: false,
-                    shadows: Some(UsdShadowSettings {
+                    shadows: Some(shadow_levels.get().apply(UsdShadowSettings {
                         resolution: 2048,
-                        filter_radius: 48,
-                        light_radius: 0.16,
                         ..UsdShadowSettings::default()
-                    }),
+                    })),
                     ..UsdStudioLighting::default()
                 }))?;
             }
             let viewport = viewport_wireframe::RunnerViewport::new(
-                renderer, wireframe, cube, camera, cube_hover,
+                renderer,
+                wireframe,
+                cube,
+                camera,
+                cube_hover,
+                shadow_levels,
             );
             if smoke {
                 Ok(Box::new(usd_smoke::SmokeViewport {

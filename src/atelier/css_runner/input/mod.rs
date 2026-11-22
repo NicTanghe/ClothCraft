@@ -43,7 +43,9 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     use std::sync::atomic::Ordering;
     let text_editing = state.numeric_input_active.load(Ordering::Relaxed);
-    if number::handle_number_event(state, event) {
+    if number::handle_number_event(state, event)
+        || super::shadow_controls::handle_event(state, event)
+    {
         return true;
     }
     // Native numeric text inputs own keyboard events until the next pointer press.

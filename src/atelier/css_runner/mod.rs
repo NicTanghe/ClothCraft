@@ -15,6 +15,7 @@ pub mod imports;
 mod input;
 mod mesh_preparation;
 mod preferences;
+pub(super) mod shadow_controls;
 mod state;
 mod ui;
 

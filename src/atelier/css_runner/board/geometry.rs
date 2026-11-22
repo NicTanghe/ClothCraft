@@ -97,11 +97,12 @@ pub fn viewport_3d_rect(state: &CssRunnerState) -> Rect2d {
         ViewLayoutMode::Split => stage_w * 0.5,
     };
 
+    let chrome_height = 32.0 + super::super::shadow_controls::HEIGHT;
     Rect2d {
         x: left_w,
-        y: body_y + 32.0,
+        y: body_y + chrome_height,
         w: vp3d_w,
-        h: (body_h - 32.0).max(1.0),
+        h: (body_h - chrome_height).max(1.0),
     }
 }
 

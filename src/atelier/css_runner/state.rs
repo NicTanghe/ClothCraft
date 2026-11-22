@@ -9,6 +9,7 @@ use super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::imports::ImportDialog;
 use super::mesh_preparation;
 use super::preferences::{AppPreferences, PreferenceStore};
+use super::shadow_controls::{ShadowControl, ShadowLevels};
 use clothcraft::authoring::corner_tool::CIRCLE_TENSION;
 use clothcraft::authoring::{CornerRule, History};
 use clothcraft::avatar::SurfaceMesh;
@@ -56,6 +57,10 @@ pub struct CssRunnerState {
     pub wireframe_width_px: f32,
     /// Shared with the GPU viewport, which applies the stroke on its next frame.
     pub viewport_wireframe: Arc<Mutex<WireframeSettings>>,
+    pub(super) viewport_shadow_levels: Rc<Cell<ShadowLevels>>,
+    pub(super) viewport_shadow_supported: Rc<Cell<bool>>,
+    pub(super) shadow_drag: Option<ShadowControl>,
+    pub(super) shadow_focus: Option<ShadowControl>,
     /// Wakes the on-demand viewport when the wireframe toggle or style changes.
     pub viewport_redraw: Arc<Mutex<Option<cssimpler::renderer::gpu::GpuRedrawHandle>>>,
     pub(super) board_background: RefCell<Option<super::board::rendering::BoardBackgroundCache>>,
@@ -181,6 +186,10 @@ impl CssRunnerState {
             wireframe_colour: super::super::viewport_wireframe::DEFAULT_COLOUR,
             wireframe_width_px: super::super::viewport_wireframe::DEFAULT_WIDTH_PX,
             viewport_wireframe: Arc::new(Mutex::new(WireframeSettings::default())),
+            viewport_shadow_levels: Rc::new(Cell::new(ShadowLevels::default())),
+            viewport_shadow_supported: Rc::new(Cell::new(true)),
+            shadow_drag: None,
+            shadow_focus: None,
             viewport_redraw: Arc::new(Mutex::new(None)),
             board_background: RefCell::new(None),
             native_number_drag: false,
@@ -440,7 +449,7 @@ impl CssRunnerState {
         }
     }
 
-    fn request_viewport_redraw(&self) {
+    pub(super) fn request_viewport_redraw(&self) {
         if let Some(handle) = self
             .viewport_redraw
             .lock()
