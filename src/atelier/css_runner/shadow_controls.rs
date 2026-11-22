@@ -2,7 +2,7 @@
 
 use super::board::{geometry::viewport_3d_rect, types::Rect2d};
 use super::state::CssRunnerState;
-use cssimpler::core::Node;
+use cssimpler::core::{LengthPercentageCalc, Node, Style};
 use cssimpler::renderer::gpu::usd::UsdShadowSettings;
 use cssimpler::renderer::{ButtonState, EngineEvent, KeyIdentity, PointerButton};
 use cssimpler::ui;
@@ -96,9 +96,12 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
         let value = state.viewport_shadow_levels.get().value(control);
         let width = control.track(state).w;
         let filled = width * f32::from(value) / 100.0;
-        let track_style = format!("width:{width}px");
-        let fill_style = format!("width:{filled}px");
-        let thumb_style = format!("left:{}px", filled - 4.0);
+        let mut track_style = Style::default();
+        track_style.layout.calc.width = Some(LengthPercentageCalc::new(0.0, width));
+        let mut fill_style = Style::default();
+        fill_style.layout.calc.width = Some(LengthPercentageCalc::new(0.0, filled));
+        let mut thumb_style = Style::default();
+        thumb_style.layout.calc.inset_left = Some(LengthPercentageCalc::new(0.0, filled - 4.0));
         let title = if supported {
             format!("Shadow {label} · {value}%")
         } else {
@@ -109,16 +112,34 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
         } else {
             "viewport-shadow-track"
         };
+        let track: Node = Node::element("div")
+            .with_id(id)
+            .with_class(class)
+            .with_style(track_style)
+            .with_attribute("title", title)
+            .with_attribute("role", "slider")
+            .with_attribute("aria-label", label)
+            .with_attribute("aria-valuemin", "0")
+            .with_attribute("aria-valuemax", "100")
+            .with_attribute("aria-valuenow", value.to_string())
+            .with_children([
+                Node::element("div")
+                    .with_class("viewport-shadow-rail")
+                    .into(),
+                Node::element("div")
+                    .with_class("viewport-shadow-fill")
+                    .with_style(fill_style)
+                    .into(),
+                Node::element("div")
+                    .with_class("viewport-shadow-thumb")
+                    .with_style(thumb_style)
+                    .into(),
+            ])
+            .into();
         ui! {
             <div class="viewport-shadow-row">
                 <span class="viewport-shadow-label">{label}</span>
-                <div id={id} class={class} style={track_style} title={title}
-                     role="slider" aria-label={label} aria-valuemin="0" aria-valuemax="100"
-                     aria-valuenow={value.to_string()}>
-                    <div class="viewport-shadow-rail"></div>
-                    <div class="viewport-shadow-fill" style={fill_style}></div>
-                    <div class="viewport-shadow-thumb" style={thumb_style}></div>
-                </div>
+                {track}
             </div>
         }
     };
