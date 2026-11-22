@@ -77,11 +77,17 @@ pub fn create_runner_app<'a>(
             let mut renderer = UsdRenderer::new(init, usd_scene, cam_mode)?;
             if renderer.supports_shadow_mapping() {
                 renderer.set_studio_lighting(Some(UsdStudioLighting {
-                    key_intensity: 0.73,
-                    ambient: 0.40,
+                    key_intensity: 0.76,
+                    key_tint: [1.06, 0.99, 0.87],
+                    toward_fill: [0.70, 0.45, 0.55],
+                    fill_intensity: 0.34,
+                    fill_tint: [0.84, 0.94, 1.08],
+                    ambient: 0.24,
                     floor: false,
                     shadows: Some(UsdShadowSettings {
-                        filter_radius: 5,
+                        resolution: 2048,
+                        filter_radius: 48,
+                        light_radius: 0.16,
                         ..UsdShadowSettings::default()
                     }),
                     ..UsdStudioLighting::default()
