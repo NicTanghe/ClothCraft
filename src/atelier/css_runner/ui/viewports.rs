@@ -64,7 +64,6 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
                     <button id="shading-toggle" class="viewport-tool-btn icon-only" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleShading)} title={shading_title}>{shading_icon}</button>
                 </div>
             </div>
-            {super::super::shadow_controls::build(state)}
             <div class="canvas-area">
                 <div id="runner-viewport-3d-scene" class="viewport"></div>
             </div>

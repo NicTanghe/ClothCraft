@@ -1,17 +1,35 @@
-//! Studio shadow controls in the native 3D viewport toolbar.
+//! Studio shadow sliders for the editor settings panel.
 
-use super::board::{geometry::viewport_3d_rect, types::Rect2d};
 use super::state::CssRunnerState;
 use cssimpler::core::{LengthPercentageCalc, Node, Style};
 use cssimpler::renderer::gpu::usd::UsdShadowSettings;
 use cssimpler::renderer::{ButtonState, EngineEvent, KeyIdentity, PointerButton};
 use cssimpler::ui;
 
-pub(super) const HEIGHT: f32 = 28.0;
-const ROW_HEIGHT: f32 = HEIGHT / 2.0;
-const LABEL_WIDTH: f32 = 76.0;
-const SIDE_PADDING: f32 = 6.0;
-const MAX_WIDTH: f32 = 225.0;
+const LABEL_WIDTH: f32 = 82.0;
+const MAX_WIDTH: f32 = 260.0;
+
+#[derive(Default)]
+pub(super) struct ShadowInput {
+    x: f32,
+    primary_pressed: bool,
+    drag: Option<ShadowDrag>,
+    focus: Option<ShadowControl>,
+}
+
+#[derive(Clone, Copy)]
+struct ShadowDrag {
+    control: ShadowControl,
+    left: f32,
+    width: f32,
+}
+
+impl ShadowDrag {
+    fn apply(self, state: &CssRunnerState, x: f32) -> bool {
+        let percent = ((x - self.left) / self.width * 100.0).clamp(0.0, 100.0);
+        self.control.set(state, percent.round() as u8)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ShadowControl {
@@ -56,45 +74,29 @@ impl ShadowLevels {
 }
 
 impl ShadowControl {
-    const ALL: [Self; 2] = [Self::Softness, Self::Strength];
-
-    fn track(self, state: &CssRunnerState) -> Rect2d {
-        let viewport = viewport_3d_rect(state);
-        let row = match self {
-            Self::Softness => 0.0,
-            Self::Strength => 1.0,
-        };
-        Rect2d {
-            x: viewport.x + SIDE_PADDING + LABEL_WIDTH,
-            y: viewport.y - HEIGHT + row * ROW_HEIGHT,
-            w: (viewport.w.max(100.0) - 2.0 * SIDE_PADDING).min(MAX_WIDTH) - LABEL_WIDTH,
-            h: ROW_HEIGHT,
-        }
-    }
-
-    fn set(self, state: &CssRunnerState, value: u8) {
+    fn set(self, state: &CssRunnerState, value: u8) -> bool {
         let mut levels = state.viewport_shadow_levels.get();
         match self {
             Self::Softness => levels.softness = value,
             Self::Strength => levels.strength = value,
         }
-        if state.viewport_shadow_levels.replace(levels) != levels {
+        let changed = state.viewport_shadow_levels.replace(levels) != levels;
+        if changed {
             state.request_viewport_redraw();
         }
-    }
-
-    fn set_from_pointer(self, state: &CssRunnerState, x: f32) {
-        let track = self.track(state);
-        let percent = ((x - track.x) / track.w * 100.0).clamp(0.0, 100.0);
-        self.set(state, percent.round() as u8);
+        changed
     }
 }
 
 pub(super) fn build(state: &CssRunnerState) -> Node {
     let supported = state.viewport_shadow_supported.get();
+    let panel_width = state.window_size.0;
+    let group_width = (panel_width * 0.90 - 34.0).clamp(LABEL_WIDTH + 8.0, MAX_WIDTH);
+    let left = (panel_width - group_width) * 0.5 + LABEL_WIDTH;
+    let width = group_width - LABEL_WIDTH;
+    let focus = state.shadow_input.lock().unwrap().focus;
     let row = |control: ShadowControl, id: &str, label: &str| {
         let value = state.viewport_shadow_levels.get().value(control);
-        let width = control.track(state).w;
         let filled = width * f32::from(value) / 100.0;
         let mut track_style = Style::default();
         track_style.layout.calc.width = Some(LengthPercentageCalc::new(0.0, width));
@@ -107,11 +109,12 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
         } else {
             "Shadow mapping is unavailable on this device".to_owned()
         };
-        let class = if state.shadow_focus == Some(control) {
-            "viewport-shadow-track focused"
+        let class = if focus == Some(control) {
+            "settings-shadow-track focused"
         } else {
-            "viewport-shadow-track"
+            "settings-shadow-track"
         };
+        let pointer = state.shadow_input.clone();
         let track: Node = Node::element("div")
             .with_id(id)
             .with_class(class)
@@ -122,106 +125,121 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
             .with_attribute("aria-valuemin", "0")
             .with_attribute("aria-valuemax", "100")
             .with_attribute("aria-valuenow", value.to_string())
+            .on_mousedown_shared(move || {
+                let mut input = pointer.lock().unwrap();
+                if supported && input.primary_pressed {
+                    input.focus = Some(control);
+                    input.drag = Some(ShadowDrag {
+                        control,
+                        left,
+                        width,
+                    });
+                }
+            })
             .with_children([
                 Node::element("div")
-                    .with_class("viewport-shadow-rail")
+                    .with_class("settings-shadow-rail")
                     .into(),
                 Node::element("div")
-                    .with_class("viewport-shadow-fill")
+                    .with_class("settings-shadow-fill")
                     .with_style(fill_style)
                     .into(),
                 Node::element("div")
-                    .with_class("viewport-shadow-thumb")
+                    .with_class("settings-shadow-thumb")
                     .with_style(thumb_style)
                     .into(),
             ])
             .into();
         ui! {
-            <div class="viewport-shadow-row">
-                <span class="viewport-shadow-label">{label}</span>
+            <div class="settings-shadow-row">
+                <span class="settings-shadow-label">{label}</span>
                 {track}
             </div>
         }
     };
     let class = if supported {
-        "viewport-shadow-controls"
+        "settings-shadow-controls"
     } else {
-        "viewport-shadow-controls unavailable"
+        "settings-shadow-controls unavailable"
     };
-    ui! {
-        <div class={class} aria-label="Shadows">
-            {row(ShadowControl::Softness, "shadow-softness-slider", "Softness")}
-            {row(ShadowControl::Strength, "shadow-strength-slider", "Strength")}
-        </div>
+    let mut group_style = Style::default();
+    group_style.layout.calc.width = Some(LengthPercentageCalc::new(0.0, group_width));
+    Node::element("div")
+        .with_class(class)
+        .with_attribute("aria-label", "Shadows")
+        .with_style(group_style)
+        .with_children([
+            row(
+                ShadowControl::Softness,
+                "shadow-softness-slider",
+                "Softness",
+            ),
+            row(
+                ShadowControl::Strength,
+                "shadow-strength-slider",
+                "Strength",
+            ),
+        ])
+        .into()
+}
+
+pub(super) fn tick(state: &CssRunnerState) -> bool {
+    if !state.settings_open {
+        *state.shadow_input.lock().unwrap() = ShadowInput::default();
+        return false;
     }
+    let (drag, x) = {
+        let input = state.shadow_input.lock().unwrap();
+        (input.drag, input.x)
+    };
+    drag.is_some_and(|drag| drag.apply(state, x))
 }
 
 pub(super) fn handle_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
-    let available = state.viewport_shadow_supported.get()
-        && !state.settings_open
-        && !state.command_palette_open
-        && !state.solver_menu_open
-        && state.import_dialog.is_none()
-        && state.layout_mode != clothcraft::css_ui::ViewLayoutMode::TwoDOnly;
+    if !state.settings_open {
+        return false;
+    }
     match event {
         EngineEvent::PointerMoved { position, .. } => {
-            if let Some(drag) = state.shadow_drag {
-                state.last_pointer_pos = (position.x, position.y);
-                drag.set_from_pointer(state, position.x);
-                return true;
-            }
+            state.shadow_input.lock().unwrap().x = position.x;
         }
         EngineEvent::PointerButton {
             button: PointerButton::Primary,
             state: ButtonState::Pressed,
             ..
         } => {
-            state.shadow_focus = None;
-            if available && !state.pointer_down {
-                let (x, y) = state.last_pointer_pos;
-                if let Some(control) = ShadowControl::ALL
-                    .into_iter()
-                    .find(|control| control.track(state).contains(x, y))
-                {
-                    state.shadow_focus = Some(control);
-                    state.shadow_drag = Some(control);
-                    state.pointer_down = true;
-                    control.set_from_pointer(state, x);
-                    return true;
-                }
-            }
+            let mut input = state.shadow_input.lock().unwrap();
+            input.focus = None;
+            input.primary_pressed = true;
+            input.x = state.last_pointer_pos.0;
         }
         EngineEvent::PointerButton {
             button: PointerButton::Primary,
             state: ButtonState::Released,
             ..
-        } if state.shadow_drag.take().is_some() => {
-            state.pointer_down = false;
-            return true;
+        } => {
+            let (drag, x) = {
+                let mut input = state.shadow_input.lock().unwrap();
+                input.primary_pressed = false;
+                (input.drag.take(), input.x)
+            };
+            if let Some(drag) = drag {
+                drag.apply(state, x);
+                return true;
+            }
         }
         EngineEvent::PointerLeft | EngineEvent::FocusChanged(false) | EngineEvent::Suspended => {
-            if state.shadow_drag.take().is_some() {
-                state.pointer_down = false;
-            }
-            state.shadow_focus = None;
+            *state.shadow_input.lock().unwrap() = ShadowInput::default();
         }
-        EngineEvent::Key(event) if available && event.state == ButtonState::Pressed => {
-            if let (Some(control), KeyIdentity::Named(key)) =
-                (state.shadow_focus, &event.logical_key)
-            {
+        EngineEvent::Key(event) if event.state == ButtonState::Pressed => {
+            let focus = state.shadow_input.lock().unwrap().focus;
+            if let (Some(control), KeyIdentity::Named(key)) = (focus, &event.logical_key) {
                 let current = state.viewport_shadow_levels.get().value(control);
                 let value = match key.as_str() {
                     "ArrowLeft" | "ArrowDown" => current.saturating_sub(1),
                     "ArrowRight" | "ArrowUp" => current.saturating_add(1).min(100),
                     "Home" => 0,
                     "End" => 100,
-                    "Escape" => {
-                        state.shadow_focus = None;
-                        if state.shadow_drag.take().is_some() {
-                            state.pointer_down = false;
-                        }
-                        return true;
-                    }
                     _ => return false,
                 };
                 control.set(state, value);

@@ -7,7 +7,7 @@ directional fill. A 2048² depth map and a contact-hardening filter keep shadow
 edges tighter near contact and widen them farther from the caster. Meshes and
 the infinity cove receive these shadows on devices with sampled-depth support.
 The cove stays out of the light-space pass and its bounds. Other devices keep
-the original lighting and cove. The 3D viewport's Softness and Strength sliders
+the original lighting and cove. The Softness and Strength sliders in Settings → 3D shadows
 adjust the penumbra and blocked key light independently for the current session.
 
 Garment panel meshes preview a fine fabric weave using their USD display

@@ -2080,17 +2080,15 @@ button {
 .import-footer .btn-action { flex: 0 0 auto; min-width: 140px; }
 .btn-action.disabled { opacity: 0.45; cursor: default; }
 
-.viewport-shadow-controls {
+.settings-shadow-controls {
   display: flex;
   flex-direction: column;
-  height: 28px;
+  align-self: center;
   flex-shrink: 0;
-  padding: 0 6px;
-  background-color: var(--viewport-header-bg);
-  overflow: hidden;
+  gap: 6px;
 }
 
-.viewport-shadow-row {
+.settings-shadow-row {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -2098,8 +2096,8 @@ button {
   flex-shrink: 0;
 }
 
-.viewport-shadow-label {
-  width: 76px;
+.settings-shadow-label {
+  width: 82px;
   overflow: hidden;
   white-space: nowrap;
   flex-shrink: 0;
@@ -2107,14 +2105,14 @@ button {
   color: var(--text-muted);
 }
 
-.viewport-shadow-track {
+.settings-shadow-track {
   position: relative;
   height: 14px;
   flex-shrink: 0;
   cursor: pointer;
 }
 
-.viewport-shadow-rail, .viewport-shadow-fill {
+.settings-shadow-rail, .settings-shadow-fill {
   position: absolute;
   left: 0;
   top: 6px;
@@ -2123,16 +2121,16 @@ button {
   pointer-events: none;
 }
 
-.viewport-shadow-rail {
+.settings-shadow-rail {
   width: 100%;
   background-color: var(--border);
 }
 
-.viewport-shadow-fill {
+.settings-shadow-fill {
   background-color: var(--accent);
 }
 
-.viewport-shadow-thumb {
+.settings-shadow-thumb {
   position: absolute;
   top: 3px;
   width: 8px;
@@ -2142,11 +2140,11 @@ button {
   pointer-events: none;
 }
 
-.viewport-shadow-track.focused .viewport-shadow-thumb,
-.viewport-shadow-track:hover .viewport-shadow-thumb {
+.settings-shadow-track.focused .settings-shadow-thumb,
+.settings-shadow-track:hover .settings-shadow-thumb {
   background-color: var(--text);
 }
 
-.viewport-shadow-controls.unavailable {
+.settings-shadow-controls.unavailable {
   opacity: 0.5;
 }
