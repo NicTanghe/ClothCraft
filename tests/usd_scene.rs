@@ -313,6 +313,15 @@ fn cove_colour_attribute_updates_without_reloading_the_stage() {
     let usda = append_infinity_cove("#usda 1.0\n".to_string(), StudioBackdropTheme::Dark);
     std::fs::write(&path, usda).unwrap();
     let scene = UsdScene::open(&path).unwrap();
+    assert_eq!(
+        scene
+            .stage()
+            .attribute("/InfinityCove.cssimpler:castsShadow")
+            .unwrap()
+            .get_at::<bool>(None)
+            .unwrap(),
+        Some(false)
+    );
     let read = || {
         scene
             .stage()

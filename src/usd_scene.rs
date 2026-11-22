@@ -834,14 +834,14 @@ fn infinity_cove_geometry() -> (crate::avatar::SurfaceMesh, Vec<glam::DVec3>) {
     )
 }
 
-/// Append the display-only studio cove to a viewport stage.
-/// Append the display-only studio cove to a viewport stage.
+/// Append the display-only studio cove. It can receive shadows without
+/// casting into the map or expanding its bounds.
 pub fn append_infinity_cove(mut usda: String, theme: StudioBackdropTheme) -> String {
     let (mesh, normals) = infinity_cove_geometry();
     let [r, g, b] = theme.cove_color();
     writeln!(
         usda,
-        "\ndef Mesh \"InfinityCove\"\n{{\n uniform token subdivisionScheme = \"none\"\n uniform bool doubleSided = true\n color3f[] primvars:displayColor = [({r}, {g}, {b})] ( interpolation = \"constant\" )\n point3f[] points = ["
+        "\ndef Mesh \"InfinityCove\"\n{{\n uniform token subdivisionScheme = \"none\"\n uniform bool doubleSided = true\n custom bool cssimpler:castsShadow = false\n color3f[] primvars:displayColor = [({r}, {g}, {b})] ( interpolation = \"constant\" )\n point3f[] points = ["
     )
     .unwrap();
     for (index, point) in mesh.vertices.iter().enumerate() {

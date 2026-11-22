@@ -199,6 +199,9 @@ impl GpuViewportRenderer for RunnerViewport {
                     &path,
                     UsdMaterial {
                         surface: UsdSurface::Fabric,
+                        // Garment UVs are in metres. Keep the weave fine enough
+                        // to fade from view at fitting distance.
+                        weave_frequency: 256.0,
                         ..UsdMaterial::default()
                     },
                 )?;

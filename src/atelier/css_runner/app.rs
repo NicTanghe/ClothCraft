@@ -11,9 +11,10 @@ use clothcraft::fitting::{FittingProject, FittingScene};
 use clothcraft::gpu_avbd::ContactMethod;
 use cssimpler::app::{App, Invalidation, RenderMode};
 use cssimpler::core::Node;
-use cssimpler::renderer::gpu::openusd_schemas::geom::{ImageableSchema, Mesh, Visibility};
-use cssimpler::renderer::gpu::usd::{UsdCameraMode, UsdRenderer, UsdStudioLighting};
-use cssimpler::renderer::{self, FrameInfo, WindowConfig};
+use cssimpler::renderer::gpu::usd::{
+    UsdCameraMode, UsdRenderer, UsdShadowSettings, UsdStudioLighting,
+};
+use cssimpler::renderer::{FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
 
 #[allow(clippy::type_complexity)]
@@ -73,20 +74,18 @@ pub fn create_runner_app<'a>(
             let redraw = init.redraw.clone();
             *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
             let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
-            let mut renderer = UsdRenderer::new(init, usd_scene.clone(), cam_mode)?;
+            let mut renderer = UsdRenderer::new(init, usd_scene, cam_mode)?;
             if renderer.supports_shadow_mapping() {
-                // The large cove would cast into the light and dominate its bounds.
-                // Use the studio floor, which receives shadows without casting them.
-                let cove = Mesh::get(usd_scene.stage(), "/InfinityCove")
-                    .map_err(|error| renderer::RendererError::Surface(error.to_string()))?
-                    .ok_or_else(|| {
-                        renderer::RendererError::Surface("Missing studio cove".into())
-                    })?;
-                cove.create_visibility_attr()
-                    .map_err(|error| renderer::RendererError::Surface(error.to_string()))?
-                    .set(Visibility::Invisible)
-                    .map_err(|error| renderer::RendererError::Surface(error.to_string()))?;
-                renderer.set_studio_lighting(Some(UsdStudioLighting::default()))?;
+                renderer.set_studio_lighting(Some(UsdStudioLighting {
+                    key_intensity: 0.73,
+                    ambient: 0.40,
+                    floor: false,
+                    shadows: Some(UsdShadowSettings {
+                        filter_radius: 5,
+                        ..UsdShadowSettings::default()
+                    }),
+                    ..UsdStudioLighting::default()
+                }))?;
             }
             let viewport = viewport_wireframe::RunnerViewport::new(
                 renderer, wireframe, cube, camera, cube_hover,

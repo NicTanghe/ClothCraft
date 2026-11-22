@@ -2,13 +2,12 @@
 
 ## cssimpler studio viewport preview
 
-The native 3D viewport uses the renderer from cssimpler PR #46. On devices
-with sampled-depth support, the studio key casts shadows between scene meshes
-and onto its generated floor. The USD infinity cove is hidden in that mode
-because its size would dominate the shadow bounds and its walls would cast
-into the scene. Other devices keep the original lighting and cove.
+The native 3D viewport uses the cssimpler studio renderer. It casts filtered
+shadows between meshes and onto the infinity cove on devices with sampled-depth
+support. The cove stays out of the light-space pass and its bounds. Other
+devices keep the original lighting and cove.
 
-Garment panel meshes preview the fabric response using their USD display
+Garment panel meshes preview a fine fabric weave using their USD display
 colour. Avatar meshes keep the default surface response. The viewport changes
 apply to display geometry and do not change the collider or solver.
 
