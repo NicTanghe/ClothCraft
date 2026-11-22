@@ -245,6 +245,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         state.mesh_draft = mesh_preparation::MeshDraft::from_panel(selected_mesh_panel);
     }
 
+    state.sync_view_cube_hover();
     let preferences_status_changed = state.flush_preferences(false);
 
     if number_changed

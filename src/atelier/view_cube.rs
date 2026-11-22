@@ -5,8 +5,7 @@ use glam::{Vec2, Vec3};
 
 const GRID: [f32; 4] = [0.0, 0.16, 0.84, 1.0];
 const GRID_DIRECTIONS: [f32; 3] = [-1.0, 0.0, 1.0];
-const QUAD_VERTICES: usize = 6;
-const MAX_VERTICES: usize = 3 * (1 + 9 + 15) * QUAD_VERTICES;
+const MAX_FACES: usize = 3;
 
 struct Face {
     direction: Vec3,
@@ -94,24 +93,26 @@ pub fn pick(camera: &Camera, size: Vec2, pointer: Vec2) -> Option<Vec3> {
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 2],
-    colour: [f32; 3],
+struct FacePaint {
+    origin_and_u: [f32; 4],
+    v_and_centre: [f32; 4],
+    colour_and_hover: [f32; 4],
+    glyph_and_silhouette: [f32; 4],
 }
 
-fn quad(vertices: &mut Vec<Vertex>, points: [Vec2; 4], size: Vec2, colour: [f32; 3]) {
-    vertices.extend([0, 1, 2, 0, 2, 3].map(|index| {
-        let position = points[index] / size;
-        Vertex {
-            position: [position.x * 2.0 - 1.0, 1.0 - position.y * 2.0],
-            colour,
-        }
-    }));
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct CubePaint {
+    bounds: [f32; 4],
+    viewport: [f32; 4],
+    grid: [f32; 4],
+    faces: [FacePaint; MAX_FACES],
 }
 
 pub struct ViewCube {
     pipeline: wgpu::RenderPipeline,
-    vertices: wgpu::Buffer,
+    paint: wgpu::Buffer,
+    binding: wgpu::BindGroup,
 }
 
 impl ViewCube {
@@ -128,17 +129,17 @@ impl ViewCube {
                 module: &shader,
                 entry_point: Some("vertex"),
                 compilation_options: Default::default(),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Vertex>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x3],
-                })],
+                buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fragment"),
                 compilation_options: Default::default(),
-                targets: &[Some(format.into())],
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
             }),
             primitive: Default::default(),
             depth_stencil: None,
@@ -146,66 +147,102 @@ impl ViewCube {
             multiview_mask: None,
             cache: None,
         });
-        let vertices = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("View cube vertices"),
-            size: (MAX_VERTICES * std::mem::size_of::<Vertex>()) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        let paint = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("View cube paint"),
+            size: std::mem::size_of::<CubePaint>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        Self { pipeline, vertices }
+        let binding = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("View cube paint"),
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: paint.as_entire_binding(),
+            }],
+        });
+        Self {
+            pipeline,
+            paint,
+            binding,
+        }
     }
 
-    pub fn draw(&self, gpu: &GpuContext, frame: GpuViewportFrame<'_>, camera: &Camera) {
+    pub fn draw(
+        &self,
+        gpu: &GpuContext,
+        frame: GpuViewportFrame<'_>,
+        camera: &Camera,
+        hovered: Option<Vec3>,
+    ) {
+        use bytemuck::Zeroable;
         let size = Vec2::new(frame.info.bounds.width, frame.info.bounds.height);
-        let mut vertices = Vec::with_capacity(MAX_VERTICES);
+        let [width, height] = frame.info.physical_size;
+        let physical = Vec2::new(width as f32, height as f32);
+        let scale = physical / size.max(Vec2::ONE);
+        let mut paint = CubePaint::zeroed();
+        let mut min = Vec2::splat(f32::INFINITY);
+        let mut max = Vec2::splat(f32::NEG_INFINITY);
+        paint.viewport = [physical.x, physical.y, frame.info.scale_factor as f32, 0.0];
+        paint.grid = [GRID[1], GRID[2], 0.0, 0.0];
+
         for face in faces(camera, size) {
-            let centre = face.points.iter().copied().sum::<Vec2>() / 4.0;
-            quad(&mut vertices, face.points, size, [0.035, 0.044, 0.055]);
-            for (row, v) in GRID.windows(2).enumerate() {
-                for (column, u) in GRID.windows(2).enumerate() {
-                    let inset = 0.012;
-                    let points = [
-                        face.project(u[0] + inset, v[0] + inset),
-                        face.project(u[1] - inset, v[0] + inset),
-                        face.project(u[1] - inset, v[1] - inset),
-                        face.project(u[0] + inset, v[1] - inset),
-                    ];
-                    let colour = if row == 1 && column == 1 {
-                        face.colour
-                    } else {
-                        face.colour.map(|channel| channel * 0.74)
-                    };
-                    quad(&mut vertices, points, size, colour);
-                }
+            let points = face.points.map(|point| point * scale);
+            for point in points {
+                min = min.min(point);
+                max = max.max(point);
             }
-            // A small screen-aligned initial stays upright as the cube turns.
-            // Skip it when the projected face is too narrow to contain it.
-            let clearance = (0..4)
-                .map(|index| {
-                    let a = face.points[index];
-                    let edge = face.points[(index + 1) % 4] - a;
-                    edge.perp_dot(centre - a).abs() / edge.length()
-                })
-                .fold(f32::INFINITY, f32::min);
-            if clearance * (GRID[2] - GRID[1]) >= 7.0 {
-                for (row, bits) in face.mark.into_iter().enumerate() {
-                    for column in 0..3 {
-                        if bits & (4 >> column) != 0 {
-                            let origin = centre
-                                + Vec2::new(column as f32 * 2.0 - 3.0, row as f32 * 2.0 - 5.0);
-                            let points = [Vec2::ZERO, Vec2::X, Vec2::ONE, Vec2::Y]
-                                .map(|offset| origin + offset * 2.0);
-                            quad(&mut vertices, points, size, [0.95, 0.95, 0.95]);
-                        }
-                    }
-                }
+            let origin = points[0];
+            let horizontal = points[1] - origin;
+            let vertical = points[3] - origin;
+            let area = horizontal.perp_dot(vertical);
+            if area == 0.0 {
+                continue;
             }
+            let u = -vertical.perp() / area;
+            let v = horizontal.perp() / area;
+            let centre = face.project(0.5, 0.5) * scale;
+            let hover_index = (0..9)
+                .find(|cell| hovered == Some(face.snap_direction(cell % 3, cell / 3)))
+                .map_or(-1.0, |cell| cell as f32);
+            let glyph = face
+                .mark
+                .into_iter()
+                .fold(0u32, |bits, row| (bits << 3) | u32::from(row));
+            let minimum_clearance = 0.5 / u.length().max(v.length());
+            let label_visible = minimum_clearance * (GRID[2] - GRID[1]) >= 7.0 * paint.viewport[2];
+            let silhouette = [-face.tangent, face.tangent, -face.bitangent, face.bitangent]
+                .into_iter()
+                .enumerate()
+                .fold(0u32, |mask, (edge, normal)| {
+                    mask | (u32::from(normal.dot(camera.direction()) <= 1e-5) << edge)
+                });
+            // Pack only nondegenerate faces so the shader can scan a contiguous array.
+            let slot = paint.viewport[3] as usize;
+            paint.faces[slot] = FacePaint {
+                origin_and_u: [origin.x, origin.y, u.x, u.y],
+                v_and_centre: [v.x, v.y, centre.x, centre.y],
+                colour_and_hover: [face.colour[0], face.colour[1], face.colour[2], hover_index],
+                glyph_and_silhouette: [
+                    glyph as f32,
+                    if label_visible { 1.0 } else { 0.0 },
+                    silhouette as f32,
+                    0.0,
+                ],
+            };
+            paint.viewport[3] += 1.0;
         }
-        if vertices.is_empty() {
+        if paint.viewport[3] == 0.0 {
             return;
         }
+        paint.bounds = [
+            min.x.floor() - 1.0,
+            min.y.floor() - 1.0,
+            max.x.ceil() + 1.0,
+            max.y.ceil() + 1.0,
+        ];
         gpu.queue
-            .write_buffer(&self.vertices, 0, bytemuck::cast_slice(&vertices));
+            .write_buffer(&self.paint, 0, bytemuck::bytes_of(&paint));
         let mut pass = frame
             .encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -222,14 +259,25 @@ impl ViewCube {
                 ..Default::default()
             });
         pass.set_pipeline(&self.pipeline);
-        pass.set_vertex_buffer(0, self.vertices.slice(..));
-        pass.draw(0..vertices.len() as u32, 0..1);
+        pass.set_bind_group(0, &self.binding, &[]);
+        pass.draw(0..6, 0..1);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn view_cube_shader_validates() {
+        let module = naga::front::wgsl::parse_str(include_str!("view_cube.wgsl")).unwrap();
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::empty(),
+        )
+        .validate(&module)
+        .unwrap();
+    }
 
     #[test]
     fn picks_each_face_edge_and_corner() {

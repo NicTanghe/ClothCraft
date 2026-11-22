@@ -43,6 +43,7 @@ pub fn create_runner_app<'a>(
     state.usd_scene = Some(usd_scene.clone());
     state.viewport_camera.replace(state.camera.clone());
     let camera = state.viewport_camera.clone();
+    let cube_hover = state.viewport_cube_hover.clone();
 
     let smoke = state.smoke;
     let smoke_done = state.smoke_done.clone();
@@ -74,8 +75,9 @@ pub fn create_runner_app<'a>(
             let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
             let renderer =
                 cssimpler::renderer::gpu::usd::UsdRenderer::new(init, usd_scene, cam_mode)?;
-            let viewport =
-                viewport_wireframe::RunnerViewport::new(renderer, wireframe, cube, camera);
+            let viewport = viewport_wireframe::RunnerViewport::new(
+                renderer, wireframe, cube, camera, cube_hover,
+            );
             if smoke {
                 Ok(Box::new(usd_smoke::SmokeViewport {
                     viewport,

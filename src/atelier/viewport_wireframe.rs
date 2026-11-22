@@ -10,6 +10,8 @@ use cssimpler::renderer::{
     self, EngineEvent,
     gpu::{GpuContext, GpuViewportFrame, GpuViewportInfo, GpuViewportRenderer},
 };
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 /// Garment panel meshes are authored under this scope, one mesh per panel.
@@ -149,7 +151,8 @@ pub struct RunnerViewport {
     renderer: UsdRenderer,
     sync: WireframeSync,
     cube: super::view_cube::ViewCube,
-    camera: std::rc::Rc<std::cell::RefCell<clothcraft::render::Camera>>,
+    camera: Rc<RefCell<clothcraft::render::Camera>>,
+    cube_hover: Rc<Cell<Option<glam::Vec3>>>,
 }
 
 impl RunnerViewport {
@@ -157,13 +160,15 @@ impl RunnerViewport {
         renderer: UsdRenderer,
         settings: Arc<Mutex<WireframeSettings>>,
         cube: super::view_cube::ViewCube,
-        camera: std::rc::Rc<std::cell::RefCell<clothcraft::render::Camera>>,
+        camera: Rc<RefCell<clothcraft::render::Camera>>,
+        cube_hover: Rc<Cell<Option<glam::Vec3>>>,
     ) -> Self {
         Self {
             renderer,
             sync: WireframeSync::new(settings),
             cube,
             camera,
+            cube_hover,
         }
     }
 }
@@ -184,7 +189,8 @@ impl GpuViewportRenderer for RunnerViewport {
                 ..frame
             },
         )?;
-        self.cube.draw(gpu, frame, &self.camera.borrow());
+        self.cube
+            .draw(gpu, frame, &self.camera.borrow(), self.cube_hover.get());
         Ok(())
     }
 }

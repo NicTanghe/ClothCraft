@@ -922,6 +922,14 @@ fn view_cube_clicks_use_native_viewport_coordinates() {
         ] {
             state.camera.apply_preset(PresetView::Front);
             handle_runner_event(state, &pointer_move_ev(x, y));
+            state.sync_view_cube_hover();
+            assert!(
+                state
+                    .viewport_cube_hover
+                    .get()
+                    .unwrap()
+                    .abs_diff_eq(direction, 1e-5)
+            );
             assert!(handle_runner_event(state, &pointer_btn_ev(true)));
             handle_runner_event(state, &pointer_btn_ev(false));
             assert!(state.camera.direction().abs_diff_eq(direction, 1e-5));
@@ -929,5 +937,8 @@ fn view_cube_clicks_use_native_viewport_coordinates() {
             assert_eq!(state.camera.target, target);
             assert_eq!(state.camera.distance, distance);
         }
+        handle_runner_event(state, &cssimpler::renderer::EngineEvent::PointerLeft);
+        state.sync_view_cube_hover();
+        assert_eq!(state.viewport_cube_hover.get(), None);
     }
 }
