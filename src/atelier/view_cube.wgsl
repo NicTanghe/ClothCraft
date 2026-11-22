@@ -1,6 +1,6 @@
 struct FacePaint {
     origin_and_u: vec4<f32>,
-    v_and_centre: vec4<f32>,
+    v_and_glyph_right: vec4<f32>,
     colour_and_hover: vec4<f32>,
     glyph_and_silhouette: vec4<f32>,
 }
@@ -29,7 +29,7 @@ fn sample_cube(position: vec2<f32>) -> vec4<f32> {
         let face = paint.faces[index];
         let offset = position - face.origin_and_u.xy;
         let du = face.origin_and_u.zw;
-        let dv = face.v_and_centre.xy;
+        let dv = face.v_and_glyph_right.xy;
         let uv = vec2(dot(offset, du), dot(offset, dv));
         if any(uv < vec2(0.0)) || any(uv > vec2(1.0)) {
             continue;
@@ -41,7 +41,7 @@ fn sample_cube(position: vec2<f32>) -> vec4<f32> {
         let half_width = 0.625 * paint.viewport.z;
         let internal = min(abs(uv - paint.grid.x), abs(uv - paint.grid.y));
         let distance = internal / units_per_pixel;
-        let silhouette = u32(face.glyph_and_silhouette.z);
+        let silhouette = u32(face.glyph_and_silhouette.y);
         let outer = vec4(uv.x, 1.0 - uv.x, uv.y, 1.0 - uv.y) / units_per_pixel.xxyy;
         let widths = half_width * select(
             vec4(1.0), vec4(2.0), (vec4(1u, 2u, 4u, 8u) & vec4(silhouette)) != vec4(0u)
@@ -56,13 +56,15 @@ fn sample_cube(position: vec2<f32>) -> vec4<f32> {
         if f32(cell.y * 3u + cell.x) == face.colour_and_hover.w {
             colour = mix(colour, vec3(1.0), 0.23);
         }
-        if face.glyph_and_silhouette.y > 0.0 {
-            let glyph_pos = floor((position - face.v_and_centre.zw) / (2.0 * paint.viewport.z) + vec2(1.5, 2.5));
-            if all(glyph_pos >= vec2(0.0)) && all(glyph_pos < vec2(3.0, 5.0)) {
-                let bit = (4u - u32(glyph_pos.y)) * 3u + (2u - u32(glyph_pos.x));
-                if (u32(face.glyph_and_silhouette.x) & (1u << bit)) != 0u {
-                    colour = vec3(0.95);
-                }
+        // Sample the bitmap in face coordinates so it foreshortens with the face.
+        let right = face.v_and_glyph_right.zw;
+        let down = vec2(right.y, -right.x);
+        let local = uv - vec2(0.5);
+        let glyph_pos = floor(vec2(dot(local, right), dot(local, down)) / 0.034 + vec2(1.5, 2.5));
+        if all(glyph_pos >= vec2(0.0)) && all(glyph_pos < vec2(3.0, 5.0)) {
+            let bit = (4u - u32(glyph_pos.y)) * 3u + (2u - u32(glyph_pos.x));
+            if (u32(face.glyph_and_silhouette.x) & (1u << bit)) != 0u {
+                colour = vec3(0.95);
             }
         }
         return vec4(colour, 1.0);

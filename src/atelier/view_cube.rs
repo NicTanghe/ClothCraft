@@ -17,6 +17,18 @@ struct Face {
 }
 
 impl Face {
+    fn glyph_right(&self, camera: &Camera) -> Vec2 {
+        if self.direction.y != 0.0 {
+            // Camera right is horizontal, so it lies in both pole faces.
+            let right = camera.right();
+            Vec2::new(self.tangent.dot(right), self.bitangent.dot(right))
+        } else {
+            // Keep the vertical faces' letters aligned with world up.
+            Vec2::new(self.bitangent.y, 0.0)
+        }
+    }
+
+    #[cfg(test)]
     fn project(&self, u: f32, v: f32) -> Vec2 {
         self.points[0]
             + u * (self.points[1] - self.points[0])
@@ -95,7 +107,7 @@ pub fn pick(camera: &Camera, size: Vec2, pointer: Vec2) -> Option<Vec3> {
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct FacePaint {
     origin_and_u: [f32; 4],
-    v_and_centre: [f32; 4],
+    v_and_glyph_right: [f32; 4],
     colour_and_hover: [f32; 4],
     glyph_and_silhouette: [f32; 4],
 }
@@ -201,7 +213,7 @@ impl ViewCube {
             }
             let u = -vertical.perp() / area;
             let v = horizontal.perp() / area;
-            let centre = face.project(0.5, 0.5) * scale;
+            let glyph_right = face.glyph_right(camera);
             let hover_index = (0..9)
                 .find(|cell| hovered == Some(face.snap_direction(cell % 3, cell / 3)))
                 .map_or(-1.0, |cell| cell as f32);
@@ -209,8 +221,6 @@ impl ViewCube {
                 .mark
                 .into_iter()
                 .fold(0u32, |bits, row| (bits << 3) | u32::from(row));
-            let minimum_clearance = 0.5 / u.length().max(v.length());
-            let label_visible = minimum_clearance * (GRID[2] - GRID[1]) >= 7.0 * paint.viewport[2];
             let silhouette = [-face.tangent, face.tangent, -face.bitangent, face.bitangent]
                 .into_iter()
                 .enumerate()
@@ -221,14 +231,9 @@ impl ViewCube {
             let slot = paint.viewport[3] as usize;
             paint.faces[slot] = FacePaint {
                 origin_and_u: [origin.x, origin.y, u.x, u.y],
-                v_and_centre: [v.x, v.y, centre.x, centre.y],
+                v_and_glyph_right: [v.x, v.y, glyph_right.x, glyph_right.y],
                 colour_and_hover: [face.colour[0], face.colour[1], face.colour[2], hover_index],
-                glyph_and_silhouette: [
-                    glyph as f32,
-                    if label_visible { 1.0 } else { 0.0 },
-                    silhouette as f32,
-                    0.0,
-                ],
+                glyph_and_silhouette: [glyph as f32, silhouette as f32, 0.0, 0.0],
             };
             paint.viewport[3] += 1.0;
         }
@@ -277,6 +282,28 @@ mod tests {
         )
         .validate(&module)
         .unwrap();
+    }
+
+    #[test]
+    fn pole_labels_stay_upright_through_an_orbit() {
+        let size = Vec2::splat(640.0);
+        let mut camera = Camera::default();
+        for pitch in [-1.4, -0.3, 0.3, 1.4] {
+            camera.pitch = pitch;
+            for step in 0..16 {
+                camera.yaw = step as f32 * std::f32::consts::TAU / 16.0;
+                let face = faces(&camera, size)
+                    .find(|face| face.direction.y != 0.0)
+                    .unwrap();
+                let right = face.glyph_right(&camera);
+                let down = -right.perp();
+                let centre = face.project(0.5, 0.5);
+                let screen_right = face.project(0.5 + right.x * 0.1, 0.5 + right.y * 0.1) - centre;
+                let screen_down = face.project(0.5 + down.x * 0.1, 0.5 + down.y * 0.1) - centre;
+                assert!(screen_right.x > 0.0 && screen_right.y.abs() < 1e-4);
+                assert!(screen_down.y > 0.0 && screen_down.x.abs() < 1e-4);
+            }
+        }
     }
 
     #[test]
