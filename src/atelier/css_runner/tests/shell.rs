@@ -876,3 +876,69 @@ fn find_title<'a>(node: &'a cssimpler::core::Node, id: &str) -> Option<&'a str> 
         _ => None,
     }
 }
+
+#[test]
+fn view_cube_clicks_use_native_viewport_coordinates() {
+    use super::super::input::handle_runner_event;
+    use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
+    use clothcraft::render::PresetView;
+    use glam::Vec3;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let stylesheet = load_studio_stylesheet().unwrap();
+    let mut app = create_runner_app(selection_test_state(dir.path()), &stylesheet);
+    for (width, height) in [(1600, 980), (1024, 768)] {
+        let size = cssimpler::renderer::ViewportSize::new(width, height);
+        app.set_viewport(size);
+        handle_runner_event(
+            app.state_mut(),
+            &cssimpler::renderer::EngineEvent::ViewportChanged(
+                cssimpler::renderer::ViewportEvent {
+                    width,
+                    height,
+                    scale_factor: 1.0,
+                },
+            ),
+        );
+        app.frame(FrameInfo {
+            delta: Duration::from_millis(16),
+            frame_index: 0,
+        });
+        let host = app
+            .find_element_bounds_by_id("#runner-viewport-3d-scene")
+            .unwrap();
+        let centre_x = host.x + host.width - 62.75;
+        let centre_y = host.y + 62.75;
+        let state = app.state_mut();
+        let target = state.camera.target;
+        let distance = state.camera.distance;
+        for (x, y, direction) in [
+            (centre_x, centre_y, Vec3::Z),
+            (centre_x + 25.0, centre_y, (Vec3::X + Vec3::Z).normalize()),
+            (centre_x + 25.0, centre_y - 25.0, Vec3::ONE.normalize()),
+        ] {
+            state.camera.apply_preset(PresetView::Front);
+            handle_runner_event(state, &pointer_move_ev(x, y));
+            state.sync_view_cube_hover();
+            assert!(
+                state
+                    .viewport_cube_hover
+                    .get()
+                    .unwrap()
+                    .abs_diff_eq(direction, 1e-5)
+            );
+            assert!(handle_runner_event(state, &pointer_btn_ev(true)));
+            handle_runner_event(state, &pointer_btn_ev(false));
+            assert!(state.camera.direction().abs_diff_eq(direction, 1e-5));
+            assert!(!state.dragging_3d);
+            assert_eq!(state.camera.target, target);
+            assert_eq!(state.camera.distance, distance);
+        }
+        handle_runner_event(state, &cssimpler::renderer::EngineEvent::PointerLeft);
+        state.sync_view_cube_hover();
+        assert_eq!(state.viewport_cube_hover.get(), None);
+    }
+}

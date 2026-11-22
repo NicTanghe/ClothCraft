@@ -18,6 +18,13 @@ pub(super) mod scroll;
 /// latest state once. Press, release, keyboard, text and focus events stay
 /// immediate.
 pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
+    match event {
+        EngineEvent::PointerMoved { .. } => state.cube_pointer_present = true,
+        EngineEvent::PointerLeft | EngineEvent::FocusChanged(false) | EngineEvent::Suspended => {
+            state.cube_pointer_present = false;
+        }
+        _ => {}
+    }
     state.frame_drag.feed(event);
     let handled = route_runner_event(state, event);
     if handled

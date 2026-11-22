@@ -450,10 +450,17 @@ impl Camera {
     }
     /// Point the camera along a canonical direction, keeping target and distance.
     pub fn apply_preset(&mut self, view: PresetView) {
+        self.look_from(view.direction());
+    }
+
+    /// Snap to a nonzero viewing direction while preserving target and distance.
+    pub fn look_from(&mut self, direction: Vec3) {
+        let Some(direction) = direction.try_normalize() else {
+            return;
+        };
         self.save_pose();
-        let (yaw, pitch) = view.angles();
-        self.yaw = yaw;
-        self.pitch = pitch;
+        self.yaw = direction.x.atan2(direction.z);
+        self.pitch = direction.y.clamp(-1., 1.).asin();
     }
     /// Toggle between the matched perspective and orthographic projections.
     pub fn toggle_projection(&mut self) {

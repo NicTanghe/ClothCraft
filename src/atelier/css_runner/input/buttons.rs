@@ -958,6 +958,16 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                         }
                     }
                 } else if rect_3d.contains(px, py) {
+                    if let Some(direction) = super::super::super::view_cube::pick(
+                        &state.camera,
+                        glam::Vec2::new(rect_3d.w, rect_3d.h),
+                        glam::Vec2::new(px - rect_3d.x, py - rect_3d.y),
+                    ) {
+                        state.pointer_down = false;
+                        state.camera.look_from(direction);
+                        state.sync_usd_camera();
+                        return true;
+                    }
                     state.dragging_3d = true;
                 }
             } else if !state.pointer_down {

@@ -22,7 +22,8 @@ use clothcraft::usd_scene::StudioBackdropTheme;
 use clothcraft::vbd::{VbdMetrics, VbdSettings};
 use cssimpler::ActionQueue;
 use cssimpler::frame_drag::FrameAlignedDrag;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
@@ -92,6 +93,9 @@ pub struct CssRunnerState {
     pub step_ms: f64,
     pub last_metrics: Option<VbdMetrics>,
     pub camera: Camera,
+    pub viewport_camera: Rc<RefCell<Camera>>,
+    pub viewport_cube_hover: Rc<Cell<Option<glam::Vec3>>>,
+    pub(super) cube_pointer_present: bool,
     pub theme: Theme,
     pub shading: clothcraft::usd_scene::ShadingMode,
     pub show_body_outline: bool,
@@ -209,6 +213,9 @@ impl CssRunnerState {
             step_count: 0,
             step_ms: 0.0,
             last_metrics: None,
+            viewport_camera: Rc::new(RefCell::new(camera.clone())),
+            viewport_cube_hover: Rc::new(Cell::new(None)),
+            cube_pointer_present: false,
             camera,
             theme: Theme::Dark,
             shading: clothcraft::usd_scene::ShadingMode::Smooth,
@@ -364,6 +371,7 @@ impl CssRunnerState {
     }
 
     pub fn sync_usd_camera(&mut self) {
+        self.viewport_camera.replace(self.camera.clone());
         if let Some(scene) = &self.usd_scene
             && let Err(error) = clothcraft::usd_scene::update_viewport_camera(scene, &self.camera)
         {
@@ -406,6 +414,30 @@ impl CssRunnerState {
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = settings;
         self.request_viewport_redraw();
+    }
+
+    pub(super) fn sync_view_cube_hover(&self) {
+        let rect = super::board::geometry::viewport_3d_rect(self);
+        let (x, y) = self.last_pointer_pos;
+        let hovered = if self.cube_pointer_present
+            && !self.pointer_down
+            && !self.settings_open
+            && !self.command_palette_open
+            && !self.solver_menu_open
+            && self.import_dialog.is_none()
+            && rect.contains(x, y)
+        {
+            super::super::view_cube::pick(
+                &self.camera,
+                glam::Vec2::new(rect.w, rect.h),
+                glam::Vec2::new(x - rect.x, y - rect.y),
+            )
+        } else {
+            None
+        };
+        if self.viewport_cube_hover.replace(hovered) != hovered {
+            self.request_viewport_redraw();
+        }
     }
 
     fn request_viewport_redraw(&self) {
