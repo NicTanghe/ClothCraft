@@ -83,7 +83,8 @@ pub fn create_runner_app<'a>(
                         renderer::RendererError::Surface("Missing studio cove".into())
                     })?;
                 cove.create_visibility_attr()
-                    .and_then(|attribute| attribute.set(Visibility::Invisible))
+                    .map_err(|error| renderer::RendererError::Surface(error.to_string()))?
+                    .set(Visibility::Invisible)
                     .map_err(|error| renderer::RendererError::Surface(error.to_string()))?;
                 renderer.set_studio_lighting(Some(UsdStudioLighting::default()))?;
             }
