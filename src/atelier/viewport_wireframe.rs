@@ -148,13 +148,22 @@ impl WireframeSync {
 pub struct RunnerViewport {
     renderer: UsdRenderer,
     sync: WireframeSync,
+    cube: super::view_cube::ViewCube,
+    camera: std::rc::Rc<std::cell::RefCell<clothcraft::render::Camera>>,
 }
 
 impl RunnerViewport {
-    pub fn new(renderer: UsdRenderer, settings: Arc<Mutex<WireframeSettings>>) -> Self {
+    pub fn new(
+        renderer: UsdRenderer,
+        settings: Arc<Mutex<WireframeSettings>>,
+        cube: super::view_cube::ViewCube,
+        camera: std::rc::Rc<std::cell::RefCell<clothcraft::render::Camera>>,
+    ) -> Self {
         Self {
             renderer,
             sync: WireframeSync::new(settings),
+            cube,
+            camera,
         }
     }
 }
@@ -168,7 +177,15 @@ impl GpuViewportRenderer for RunnerViewport {
     }
     fn render(&mut self, gpu: &GpuContext, frame: GpuViewportFrame<'_>) -> renderer::Result<()> {
         self.sync.sync(&mut self.renderer);
-        self.renderer.render(gpu, frame)
+        self.renderer.render(
+            gpu,
+            GpuViewportFrame {
+                encoder: &mut *frame.encoder,
+                ..frame
+            },
+        )?;
+        self.cube.draw(gpu, frame, &self.camera.borrow());
+        Ok(())
     }
 }
 

@@ -92,6 +92,7 @@ pub struct CssRunnerState {
     pub step_ms: f64,
     pub last_metrics: Option<VbdMetrics>,
     pub camera: Camera,
+    pub viewport_camera: std::rc::Rc<std::cell::RefCell<Camera>>,
     pub theme: Theme,
     pub shading: clothcraft::usd_scene::ShadingMode,
     pub show_body_outline: bool,
@@ -209,6 +210,7 @@ impl CssRunnerState {
             step_count: 0,
             step_ms: 0.0,
             last_metrics: None,
+            viewport_camera: std::rc::Rc::new(std::cell::RefCell::new(camera.clone())),
             camera,
             theme: Theme::Dark,
             shading: clothcraft::usd_scene::ShadingMode::Smooth,
@@ -364,6 +366,7 @@ impl CssRunnerState {
     }
 
     pub fn sync_usd_camera(&mut self) {
+        self.viewport_camera.replace(self.camera.clone());
         if let Some(scene) = &self.usd_scene
             && let Err(error) = clothcraft::usd_scene::update_viewport_camera(scene, &self.camera)
         {

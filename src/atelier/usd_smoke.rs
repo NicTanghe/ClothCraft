@@ -4,28 +4,26 @@ use cssimpler::renderer::{self, EngineEvent, gpu::*};
 use std::{cell::Cell, path::PathBuf, rc::Rc};
 
 pub struct SmokeViewport {
-    pub renderer: usd::UsdRenderer,
+    pub viewport: super::viewport_wireframe::RunnerViewport,
     pub output: PathBuf,
     pub done: Rc<Cell<bool>>,
     pub redraw: GpuRedrawHandle,
     pub frames: u32,
-    pub sync: super::viewport_wireframe::WireframeSync,
 }
 fn error(e: impl std::fmt::Display) -> renderer::RendererError {
     renderer::RendererError::Surface(e.to_string())
 }
 impl GpuViewportRenderer for SmokeViewport {
     fn resize(&mut self, gpu: &GpuContext, info: GpuViewportInfo) -> renderer::Result<()> {
-        self.renderer.resize(gpu, info)
+        self.viewport.resize(gpu, info)
     }
     fn event(&mut self, event: &EngineEvent) -> bool {
-        self.renderer.event(event)
+        self.viewport.event(event)
     }
     fn render(&mut self, gpu: &GpuContext, frame: GpuViewportFrame<'_>) -> renderer::Result<()> {
         let info = frame.info;
         let time = frame.frame;
-        self.sync.sync(&mut self.renderer);
-        self.renderer.render(gpu, frame)?;
+        self.viewport.render(gpu, frame)?;
         self.frames += 1;
         if self.frames < 2 {
             self.redraw.request_redraw();
@@ -70,7 +68,7 @@ impl GpuViewportRenderer for SmokeViewport {
             mapped_at_creation: false,
         });
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        self.renderer.render(
+        self.viewport.render(
             gpu,
             GpuViewportFrame {
                 info,

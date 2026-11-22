@@ -1,5 +1,13 @@
 # Repository handoff
 
+## Native viewport view cube
+
+The cube in the upper-right corner follows the 3D camera. Click a face centre
+to align to that axis or click within five logical pixels of an edge to look
+straight at the edge from between its two faces. Snapping preserves the camera
+target and distance. The cube draws after the USD scene in the same native
+viewport and uses the existing 3D pointer handler.
+
 ## Dressform GLB collider import — 20 November 2026
 
 Follow-up to the avatar-import fixes. The `fold-craft-dressform-us8.glb`

@@ -41,6 +41,8 @@ pub fn create_runner_app<'a>(
         state.status_message = format!("USD camera init error: {err}");
     }
     state.usd_scene = Some(usd_scene.clone());
+    state.viewport_camera.replace(state.camera.clone());
+    let camera = state.viewport_camera.clone();
 
     let smoke = state.smoke;
     let smoke_done = state.smoke_done.clone();
@@ -69,21 +71,21 @@ pub fn create_runner_app<'a>(
         move |init| {
             let redraw = init.redraw.clone();
             *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
+            let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
             let renderer =
                 cssimpler::renderer::gpu::usd::UsdRenderer::new(init, usd_scene, cam_mode)?;
+            let viewport =
+                viewport_wireframe::RunnerViewport::new(renderer, wireframe, cube, camera);
             if smoke {
                 Ok(Box::new(usd_smoke::SmokeViewport {
-                    renderer,
+                    viewport,
                     output: smoke_output,
                     done: smoke_done,
                     redraw,
                     frames: 0,
-                    sync: viewport_wireframe::WireframeSync::new(wireframe),
                 }))
             } else {
-                Ok(Box::new(viewport_wireframe::RunnerViewport::new(
-                    renderer, wireframe,
-                )))
+                Ok(Box::new(viewport))
             }
         },
     )
