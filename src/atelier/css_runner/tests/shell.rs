@@ -913,14 +913,15 @@ fn view_cube_clicks_use_native_viewport_coordinates() {
         let centre_x = host.x + host.width - 62.75;
         let centre_y = host.y + 62.75;
         let state = app.state_mut();
-        state.camera.apply_preset(PresetView::Front);
         let target = state.camera.target;
         let distance = state.camera.distance;
-        for (x, direction) in [
-            (centre_x, Vec3::Z),
-            (centre_x + 31.0, (Vec3::X + Vec3::Z).normalize()),
+        for (x, y, direction) in [
+            (centre_x, centre_y, Vec3::Z),
+            (centre_x + 25.0, centre_y, (Vec3::X + Vec3::Z).normalize()),
+            (centre_x + 25.0, centre_y - 25.0, Vec3::ONE.normalize()),
         ] {
-            handle_runner_event(state, &pointer_move_ev(x, centre_y));
+            state.camera.apply_preset(PresetView::Front);
+            handle_runner_event(state, &pointer_move_ev(x, y));
             assert!(handle_runner_event(state, &pointer_btn_ev(true)));
             handle_runner_event(state, &pointer_btn_ev(false));
             assert!(state.camera.direction().abs_diff_eq(direction, 1e-5));

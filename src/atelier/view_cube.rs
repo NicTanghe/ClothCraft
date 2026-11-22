@@ -3,13 +3,33 @@ use clothcraft::render::{Camera, PresetView};
 use cssimpler::renderer::gpu::{GpuContext, GpuViewportFrame};
 use glam::{Vec2, Vec3};
 
-const EDGE_MARGIN: f32 = 5.0;
+const GRID: [f32; 4] = [0.0, 0.16, 0.84, 1.0];
+const GRID_DIRECTIONS: [f32; 3] = [-1.0, 0.0, 1.0];
+const QUAD_VERTICES: usize = 6;
+const MAX_VERTICES: usize = 3 * (1 + 9 + 15) * QUAD_VERTICES;
 
 struct Face {
     direction: Vec3,
     points: [Vec2; 4],
+    tangent: Vec3,
+    bitangent: Vec3,
     colour: [f32; 3],
     mark: [u8; 5],
+}
+
+impl Face {
+    fn project(&self, u: f32, v: f32) -> Vec2 {
+        self.points[0]
+            + u * (self.points[1] - self.points[0])
+            + v * (self.points[3] - self.points[0])
+    }
+
+    fn snap_direction(&self, column: usize, row: usize) -> Vec3 {
+        (self.direction
+            + GRID_DIRECTIONS[column] * self.tangent
+            + GRID_DIRECTIONS[row] * self.bitangent)
+            .normalize()
+    }
 }
 
 fn faces(camera: &Camera, size: Vec2) -> impl Iterator<Item = Face> {
@@ -38,13 +58,15 @@ fn faces(camera: &Camera, size: Vec2) -> impl Iterator<Item = Face> {
             PresetView::Back => ([0.11, 0.26, 0.48], [6, 5, 6, 5, 6]),
             PresetView::Left => ([0.34, 0.19, 0.14], [4, 4, 4, 4, 7]),
             PresetView::Right => ([0.70, 0.33, 0.22], [6, 5, 6, 5, 5]),
-            PresetView::Top => ([0.30, 0.57, 0.40], [7, 2, 2, 2, 2]),
-            PresetView::Bottom => ([0.16, 0.34, 0.25], [2, 2, 2, 7, 2]),
+            PresetView::Top => ([0.30, 0.57, 0.40], [5, 5, 5, 5, 7]),
+            PresetView::Bottom => ([0.16, 0.34, 0.25], [6, 5, 5, 5, 6]),
             PresetView::Isometric => unreachable!(),
         };
         Some(Face {
             direction,
             points,
+            tangent,
+            bitangent,
             colour,
             mark,
         })
@@ -52,38 +74,22 @@ fn faces(camera: &Camera, size: Vec2) -> impl Iterator<Item = Face> {
 }
 
 pub fn pick(camera: &Camera, size: Vec2, pointer: Vec2) -> Option<Vec3> {
-    let mut nearest_edge = None;
-    let mut nearest_distance = EDGE_MARGIN;
-    let mut face_direction = None;
+    let cell =
+        |coordinate: f32| usize::from(coordinate >= GRID[1]) + usize::from(coordinate >= GRID[2]);
     for face in faces(camera, size) {
-        let centre = face.points.iter().copied().sum::<Vec2>() / 4.0;
-        let mut inside = true;
-        for index in 0..4 {
-            let a = face.points[index];
-            let b = face.points[(index + 1) % 4];
-            let edge = b - a;
-            inside &= edge.perp_dot(pointer - a) * edge.perp_dot(centre - a) >= 0.0;
-
-            let fraction = ((pointer - a).dot(edge) / edge.length_squared()).clamp(0.0, 1.0);
-            let distance = pointer.distance(a + fraction * edge);
-            if distance < nearest_distance {
-                nearest_distance = distance;
-                // The two outward normals sum to the direction facing this edge.
-                let axis = if face.direction.x.abs() > 0.5 {
-                    Vec3::Z
-                } else {
-                    Vec3::X
-                };
-                let other = face.direction.cross(axis);
-                let adjacent = [-other, axis, other, -axis][index];
-                nearest_edge = Some((face.direction + adjacent).normalize());
-            }
-        }
-        if inside {
-            face_direction = Some(face.direction);
+        let horizontal = face.points[1] - face.points[0];
+        let vertical = face.points[3] - face.points[0];
+        let offset = pointer - face.points[0];
+        let area = horizontal.perp_dot(vertical);
+        let u = offset.perp_dot(vertical) / area;
+        let v = horizontal.perp_dot(offset) / area;
+        // Include the shared seams despite round-off during projection.
+        let face_bounds = -1e-5..=1.0 + 1e-5;
+        if face_bounds.contains(&u) && face_bounds.contains(&v) {
+            return Some(face.snap_direction(cell(u), cell(v)));
         }
     }
-    nearest_edge.or(face_direction)
+    None
 }
 
 #[repr(C)]
@@ -142,7 +148,7 @@ impl ViewCube {
         });
         let vertices = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("View cube vertices"),
-            size: (3 * (2 + 15) * 6 * std::mem::size_of::<Vertex>()) as u64,
+            size: (MAX_VERTICES * std::mem::size_of::<Vertex>()) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -151,16 +157,27 @@ impl ViewCube {
 
     pub fn draw(&self, gpu: &GpuContext, frame: GpuViewportFrame<'_>, camera: &Camera) {
         let size = Vec2::new(frame.info.bounds.width, frame.info.bounds.height);
-        let mut vertices = Vec::new();
+        let mut vertices = Vec::with_capacity(MAX_VERTICES);
         for face in faces(camera, size) {
             let centre = face.points.iter().copied().sum::<Vec2>() / 4.0;
             quad(&mut vertices, face.points, size, [0.035, 0.044, 0.055]);
-            quad(
-                &mut vertices,
-                face.points.map(|point| point.lerp(centre, 0.11)),
-                size,
-                face.colour,
-            );
+            for (row, v) in GRID.windows(2).enumerate() {
+                for (column, u) in GRID.windows(2).enumerate() {
+                    let inset = 0.012;
+                    let points = [
+                        face.project(u[0] + inset, v[0] + inset),
+                        face.project(u[1] - inset, v[0] + inset),
+                        face.project(u[1] - inset, v[1] - inset),
+                        face.project(u[0] + inset, v[1] - inset),
+                    ];
+                    let colour = if row == 1 && column == 1 {
+                        face.colour
+                    } else {
+                        face.colour.map(|channel| channel * 0.74)
+                    };
+                    quad(&mut vertices, points, size, colour);
+                }
+            }
             // A small screen-aligned initial stays upright as the cube turns.
             // Skip it when the projected face is too narrow to contain it.
             let clearance = (0..4)
@@ -170,7 +187,7 @@ impl ViewCube {
                     edge.perp_dot(centre - a).abs() / edge.length()
                 })
                 .fold(f32::INFINITY, f32::min);
-            if clearance >= 7.0 {
+            if clearance * (GRID[2] - GRID[1]) >= 7.0 {
                 for (row, bits) in face.mark.into_iter().enumerate() {
                     for column in 0..3 {
                         if bits & (4 >> column) != 0 {
@@ -215,29 +232,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn face_centres_snap_to_axes_and_edge_margins_snap_to_bisectors() {
+    fn picks_each_face_edge_and_corner() {
         let size = Vec2::new(640., 480.);
         let mut camera = Camera::default();
+        let mut directions = std::collections::HashSet::new();
         for preset in PresetView::ALL {
             if preset == PresetView::Isometric {
                 continue;
             }
             camera.apply_preset(preset);
             let face = faces(&camera, size).next().unwrap();
-            let centre = face.points.iter().copied().sum::<Vec2>() / 4.0;
-            assert_eq!(pick(&camera, size, centre), Some(preset.direction()));
 
-            for index in 0..4 {
-                let edge = (face.points[index] + face.points[(index + 1) % 4]) / 2.0;
-                let inward = (centre - edge).normalize();
-                let adjacent = inward.x * -camera.right() + inward.y * camera.up();
-                let expected = (preset.direction() + adjacent).normalize();
-                for offset in [-3.0, 3.0] {
-                    let picked = pick(&camera, size, edge + inward * offset).unwrap();
-                    assert!(picked.abs_diff_eq(expected, 1e-5));
+            for (row, v) in [0.08, 0.5, 0.92].into_iter().enumerate() {
+                for (column, u) in [0.08, 0.5, 0.92].into_iter().enumerate() {
+                    let pointer = face.project(u, v);
+                    let expected = preset.direction()
+                        + GRID_DIRECTIONS[column] * face.tangent
+                        + GRID_DIRECTIONS[row] * face.bitangent;
+                    let picked = pick(&camera, size, pointer).unwrap();
+                    assert!(picked.abs_diff_eq(expected.normalize(), 1e-5));
+                    directions.insert(expected.to_array().map(|component| component as i32));
                 }
-                assert!(pick(&camera, size, edge - inward * 8.0).is_none());
             }
+            assert!(pick(&camera, size, face.project(1.04, 0.5)).is_none());
         }
+        assert_eq!(directions.len(), 6 + 12 + 8);
     }
 }
