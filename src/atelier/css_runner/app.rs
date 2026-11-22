@@ -11,7 +11,9 @@ use clothcraft::fitting::{FittingProject, FittingScene};
 use clothcraft::gpu_avbd::ContactMethod;
 use cssimpler::app::{App, Invalidation, RenderMode};
 use cssimpler::core::Node;
-use cssimpler::renderer::{FrameInfo, WindowConfig};
+use cssimpler::renderer::gpu::openusd_schemas::geom::{ImageableSchema, Mesh, Visibility};
+use cssimpler::renderer::gpu::usd::{UsdCameraMode, UsdRenderer, UsdStudioLighting};
+use cssimpler::renderer::{self, FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
 
 #[allow(clippy::type_complexity)]
@@ -63,9 +65,7 @@ pub fn create_runner_app<'a>(
     .with_continuous_updates(true)
     .with_exit_when(|state| state.smoke_done.get() || state.should_exit);
 
-    let cam_mode = cssimpler::renderer::gpu::usd::UsdCameraMode::Authored(
-        clothcraft::usd_scene::VIEWPORT_CAMERA_PATH.into(),
-    );
+    let cam_mode = UsdCameraMode::Authored(clothcraft::usd_scene::VIEWPORT_CAMERA_PATH.into());
     app.with_gpu_viewport(
         "runner-viewport-3d-scene",
         Default::default(),
@@ -73,8 +73,20 @@ pub fn create_runner_app<'a>(
             let redraw = init.redraw.clone();
             *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
             let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
-            let renderer =
-                cssimpler::renderer::gpu::usd::UsdRenderer::new(init, usd_scene, cam_mode)?;
+            let mut renderer = UsdRenderer::new(init, usd_scene.clone(), cam_mode)?;
+            if renderer.supports_shadow_mapping() {
+                // The large cove would cast into the light and dominate its bounds.
+                // Use the studio floor, which receives shadows without casting them.
+                let cove = Mesh::get(usd_scene.stage(), "/InfinityCove")
+                    .map_err(|error| renderer::RendererError::Surface(error.to_string()))?
+                    .ok_or_else(|| {
+                        renderer::RendererError::Surface("Missing studio cove".into())
+                    })?;
+                cove.create_visibility_attr()
+                    .and_then(|attribute| attribute.set(Visibility::Invisible))
+                    .map_err(|error| renderer::RendererError::Surface(error.to_string()))?;
+                renderer.set_studio_lighting(Some(UsdStudioLighting::default()))?;
+            }
             let viewport = viewport_wireframe::RunnerViewport::new(
                 renderer, wireframe, cube, camera, cube_hover,
             );
