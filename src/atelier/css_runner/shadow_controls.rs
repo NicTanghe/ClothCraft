@@ -9,8 +9,8 @@ use cssimpler::ui;
 
 pub(super) const HEIGHT: f32 = 28.0;
 const ROW_HEIGHT: f32 = HEIGHT / 2.0;
-const LABEL_WIDTH: f32 = 55.0;
-const SIDE_PADDING: f32 = 10.0;
+const LABEL_WIDTH: f32 = 76.0;
+const SIDE_PADDING: f32 = 6.0;
 const MAX_WIDTH: f32 = 225.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
