@@ -895,7 +895,13 @@ fn view_cube_clicks_use_native_viewport_coordinates() {
         app.set_viewport(size);
         handle_runner_event(
             app.state_mut(),
-            &cssimpler::renderer::EngineEvent::ViewportChanged(size),
+            &cssimpler::renderer::EngineEvent::ViewportChanged(
+                cssimpler::renderer::ViewportEvent {
+                    width,
+                    height,
+                    scale_factor: 1.0,
+                },
+            ),
         );
         app.frame(FrameInfo {
             delta: Duration::from_millis(16),
