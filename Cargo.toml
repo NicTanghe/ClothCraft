@@ -29,7 +29,7 @@ wgpu = { version = "30.0.1", optional = true }
 bytemuck = { version = "1", optional = true }
 pollster = { version = "1.0.1", optional = true }
 image = { version = "0.25.10", optional = true, default-features = false, features = ["png"] }
-cssimpler = { git = "https://github.com/NicTanghe/cssimpler.git", rev = "5899f9f6a28e3ccd523e391815290c8336fbe245", optional = true }
+cssimpler = { git = "https://github.com/NicTanghe/cssimpler.git", branch = "main", optional = true }
 openusd = { version = "0.8", default-features = false }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 ron = { version = "0.12.3", optional = true }
