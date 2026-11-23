@@ -942,3 +942,110 @@ fn view_cube_clicks_use_native_viewport_coordinates() {
         assert_eq!(state.viewport_cube_hover.get(), None);
     }
 }
+
+#[test]
+fn shadow_sliders_live_in_settings_and_update_independently() {
+    use super::super::input::handle_runner_event;
+    use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
+    use cssimpler::core::RenderNode;
+    use cssimpler::renderer::{
+        EngineEvent, SceneProvider, ViewportEvent, ViewportSize, gpu::usd::UsdShadowSettings,
+    };
+
+    fn node<'a>(roots: &'a [RenderNode], id: &str) -> Option<&'a RenderNode> {
+        roots.iter().find_map(|root| {
+            if root.id() == Some(id) {
+                Some(root)
+            } else {
+                node(&root.children, id)
+            }
+        })
+    }
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let stylesheet = load_studio_stylesheet().unwrap();
+    let state = selection_test_state(dir.path());
+    let mut app = create_runner_app(state, &stylesheet);
+    let (wake, updates) = std::sync::mpsc::channel();
+    app.install_update_wake(std::sync::Arc::new(move || {
+        let _ = wake.send(());
+    }));
+    let frame = FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 0,
+    };
+    app.set_viewport(ViewportSize::new(1600, 980));
+    app.frame(frame);
+    assert!(
+        app.find_element_bounds_by_id("#shadow-softness-slider")
+            .is_none()
+    );
+
+    for (width, height) in [(1600, 980), (1024, 768), (800, 600)] {
+        app.set_viewport(ViewportSize::new(width, height));
+        handle_runner_event(
+            app.state_mut(),
+            &EngineEvent::ViewportChanged(ViewportEvent {
+                width,
+                height,
+                scale_factor: 1.0,
+            }),
+        );
+        app.state_mut().settings_open = true;
+        app.invalidate(cssimpler::app::Invalidation::Structure);
+        app.frame(frame);
+        let panel = app.find_element_bounds_by_id("#settings-panel").unwrap();
+
+        let defaults = || UsdShadowSettings {
+            resolution: 2048,
+            ..Default::default()
+        };
+        for (id, drag_outside) in [
+            ("shadow-softness-slider", false),
+            ("shadow-strength-slider", true),
+        ] {
+            let track = node(app.scene(), id).unwrap().layout;
+            assert!(track.x >= panel.x && track.x + track.width <= panel.x + panel.width);
+            assert!(track.y >= panel.y && track.y + track.height <= panel.y + panel.height);
+            let y = track.y + track.height / 2.0;
+            handle_runner_event(
+                app.state_mut(),
+                &pointer_move_ev(track.x + track.width * 0.5, y),
+            );
+            handle_runner_event(app.state_mut(), &pointer_btn_ev(true));
+            while updates.try_recv().is_ok() {}
+            node(app.scene(), id).unwrap().handlers.mousedown().unwrap()();
+            assert!(
+                updates.try_recv().is_ok(),
+                "slider press should wake the paused editor"
+            );
+            app.frame(frame);
+            let settings = app.state().viewport_shadow_levels.get().apply(defaults());
+            if drag_outside {
+                assert!(
+                    (settings.strength - 0.50).abs() <= 0.01,
+                    "{track:?} {settings:?}"
+                );
+                handle_runner_event(app.state_mut(), &pointer_move_ev(track.x - 20.0, y));
+                assert!(
+                    updates.try_recv().is_ok(),
+                    "slider drag should wake the paused editor"
+                );
+                app.frame(frame);
+            } else {
+                assert!(
+                    (settings.light_radius - 0.20).abs() < 0.005,
+                    "{track:?} {settings:?}"
+                );
+            }
+            assert!(handle_runner_event(app.state_mut(), &pointer_btn_ev(false)));
+        }
+        let settings = app.state().viewport_shadow_levels.get().apply(defaults());
+        assert_eq!(settings.strength, 0.0);
+        assert!((settings.light_radius - 0.20).abs() < 0.005);
+        assert!(!app.state().dragging_3d && !app.state().pointer_down);
+    }
+}

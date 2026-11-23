@@ -59,6 +59,10 @@ pub(in super::super) fn build_runner_settings(state: &CssRunnerState) -> Option<
                     <span class="settings-hint">"Mouse wheel and trackpad"</span>
                 </div>
                 <div class="settings-entry">
+                    <span class="settings-label">"3D shadows"</span>
+                    {super::super::shadow_controls::build(state)}
+                </div>
+                <div class="settings-entry">
                     <button id="settings-body-section" class="cad-2d-pill settings-body-toggle"
                         aria-expanded={state.body_settings_open.to_string()}
                         onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleBodySettings)}>

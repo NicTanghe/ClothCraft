@@ -5,7 +5,10 @@
 //! (collider, avatars) shaded only. This replaces the former `/ClothWire`
 //! ribbon mesh, which had to be re-authored into the stage on every step.
 
-use cssimpler::renderer::gpu::usd::{UsdRenderer, Wireframe, WireframeMode, WireframeStyle};
+use super::css_runner::shadow_controls::ShadowLevels;
+use cssimpler::renderer::gpu::usd::{
+    UsdMaterial, UsdRenderer, UsdSurface, Wireframe, WireframeMode, WireframeStyle,
+};
 use cssimpler::renderer::{
     self, EngineEvent,
     gpu::{GpuContext, GpuViewportFrame, GpuViewportInfo, GpuViewportRenderer},
@@ -153,6 +156,7 @@ pub struct RunnerViewport {
     cube: super::view_cube::ViewCube,
     camera: Rc<RefCell<clothcraft::render::Camera>>,
     cube_hover: Rc<Cell<Option<glam::Vec3>>>,
+    shadow_levels: Rc<Cell<ShadowLevels>>,
 }
 
 impl RunnerViewport {
@@ -162,6 +166,7 @@ impl RunnerViewport {
         cube: super::view_cube::ViewCube,
         camera: Rc<RefCell<clothcraft::render::Camera>>,
         cube_hover: Rc<Cell<Option<glam::Vec3>>>,
+        shadow_levels: Rc<Cell<ShadowLevels>>,
     ) -> Self {
         Self {
             renderer,
@@ -169,6 +174,7 @@ impl RunnerViewport {
             cube,
             camera,
             cube_hover,
+            shadow_levels,
         }
     }
 }
@@ -182,6 +188,35 @@ impl GpuViewportRenderer for RunnerViewport {
     }
     fn render(&mut self, gpu: &GpuContext, frame: GpuViewportFrame<'_>) -> renderer::Result<()> {
         self.sync.sync(&mut self.renderer);
+        if let Some(settings) = self.renderer.shadow_settings() {
+            let updated = self.shadow_levels.get().apply(settings);
+            if settings != updated {
+                self.renderer.set_shadow_settings(updated)?;
+            }
+        }
+        if self.renderer.supports_shadow_mapping() {
+            let unassigned_panels: Vec<_> = self
+                .renderer
+                .models()
+                .iter()
+                .filter(|path| {
+                    is_garment_model(path) && self.renderer.model_material(path).is_none()
+                })
+                .cloned()
+                .collect();
+            for path in unassigned_panels {
+                self.renderer.set_model_material(
+                    &path,
+                    UsdMaterial {
+                        surface: UsdSurface::Fabric,
+                        // Garment UVs are in metres. Keep the weave fine enough
+                        // to fade from view at fitting distance.
+                        weave_frequency: 256.0,
+                        ..UsdMaterial::default()
+                    },
+                )?;
+            }
+        }
         self.renderer.render(
             gpu,
             GpuViewportFrame {
