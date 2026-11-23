@@ -22,6 +22,7 @@ use clothcraft::render::Camera;
 use clothcraft::usd_scene::StudioBackdropTheme;
 use clothcraft::vbd::{VbdMetrics, VbdSettings};
 use cssimpler::ActionQueue;
+use cssimpler::app::UpdateHandle;
 use cssimpler::frame_drag::FrameAlignedDrag;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -48,6 +49,7 @@ pub enum ObjectCategory {
 pub struct CssRunnerState {
     pub(super) actions: ActionQueue<RunnerAction>,
     pub(super) action_batch: Vec<RunnerAction>,
+    pub(super) update_handle: UpdateHandle,
     pub(super) frame_drag: FrameAlignedDrag,
     pub(super) input_dirty: bool,
     pub wireframe: bool,
@@ -179,6 +181,7 @@ impl CssRunnerState {
         Self {
             actions: ActionQueue::new(),
             action_batch: Vec::new(),
+            update_handle: UpdateHandle::default(),
             frame_drag: FrameAlignedDrag::new(),
             input_dirty: false,
             wireframe: false,
@@ -357,6 +360,7 @@ impl CssRunnerState {
     }
 
     pub fn send_control_state(&mut self, once: bool) {
+        let update = self.update_handle.clone();
         let work = Work {
             generation: self.generation,
             scene: self.scene.clone(),
@@ -364,7 +368,7 @@ impl CssRunnerState {
             grab: None,
             gpu: self.gpu_sim,
             contact_method: self.contact_method,
-            signal: worker::RepaintSignal::noop(),
+            signal: worker::RepaintSignal::new(move || update.request_update()),
             playing: self.playing,
             once,
         };
@@ -508,6 +512,14 @@ impl CssRunnerState {
             self.project.template.measurement_bits = Some(preferences.measurement_bits);
         }
         self.sync_usd_wireframe();
+    }
+
+    pub(super) fn next_update_at(&self) -> Option<Instant> {
+        let save_at = self
+            .preference_dirty_since
+            .map(|since| since + PREFERENCE_SAVE_DEBOUNCE);
+        let sample_at = self.number_drag.lock().unwrap().next_sample_at();
+        save_at.into_iter().chain(sample_at).min()
     }
 
     /// Write changed preferences after a short debounce, or immediately when

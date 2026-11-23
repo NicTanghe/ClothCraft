@@ -115,6 +115,7 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
             "settings-shadow-track"
         };
         let pointer = state.shadow_input.clone();
+        let update = state.update_handle.clone();
         let track: Node = Node::element("div")
             .with_id(id)
             .with_class(class)
@@ -134,6 +135,8 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
                         left,
                         width,
                     });
+                    drop(input);
+                    update.request_update();
                 }
             })
             .with_children([
@@ -201,7 +204,12 @@ pub(super) fn handle_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
     }
     match event {
         EngineEvent::PointerMoved { position, .. } => {
-            state.shadow_input.lock().unwrap().x = position.x;
+            let mut input = state.shadow_input.lock().unwrap();
+            input.x = position.x;
+            if input.drag.is_some() {
+                state.last_pointer_pos = (position.x, position.y);
+                return true;
+            }
         }
         EngineEvent::PointerButton {
             button: PointerButton::Primary,

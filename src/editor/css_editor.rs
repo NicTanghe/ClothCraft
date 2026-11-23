@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Instant;
 
-use cssimpler::app::{App, Invalidation, RenderMode};
+use cssimpler::app::{App, Invalidation, RenderMode, UpdateHandle};
 use cssimpler::core::Node;
 use cssimpler::renderer::{EngineEvent, FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
@@ -98,6 +98,7 @@ pub struct RefWork {
     pub sphere: Option<clothcraft::contact::Sphere>,
     pub playing: bool,
     pub once: bool,
+    update_handle: UpdateHandle,
 }
 
 pub enum EditorMetrics {
@@ -209,6 +210,8 @@ fn start_editor_worker(
                         generation,
                         result: outcome,
                     });
+                    drop(slot);
+                    work.update_handle.request_update();
                 }
                 if !was_once {
                     let dt = work.solver.dt.max(0.001);
@@ -242,6 +245,7 @@ fn accept_ref(active: &mut Option<RefWork>, mut new: RefWork, deadline: &mut Ins
 #[derive(Clone)]
 pub struct CssEditorState {
     actions: Arc<AtomicU64>,
+    update_handle: UpdateHandle,
     pub usd_scene: Option<cssimpler::renderer::gpu::usd::UsdScene>,
     pub active: Project,
     pub mesh: Arc<Mesh>,
@@ -320,6 +324,7 @@ impl CssEditorState {
 
         Self {
             actions: Arc::new(AtomicU64::new(0)),
+            update_handle: UpdateHandle::default(),
             usd_scene: None,
             active: project,
             mesh: Arc::new(mesh),
@@ -372,6 +377,7 @@ impl CssEditorState {
             sphere: self.active.sphere.clone(),
             playing: self.playing,
             once,
+            update_handle: self.update_handle.clone(),
         };
         let _ = self.worker_tx.send(work);
     }
@@ -595,9 +601,9 @@ pub fn update_editor(state: &mut CssEditorState, _frame: FrameInfo) -> Invalidat
     if let Some(done) = done
         && done.generation == state.generation
     {
+        had_result = true;
         match done.result {
             Ok((new_state, m)) => {
-                had_result = true;
                 state.accept_step(new_state, m);
             }
             Err(e) => {
@@ -1660,6 +1666,7 @@ pub fn create_editor_app<'a>(
     }
     state.usd_scene = Some(usd_scene.clone());
 
+    let update = state.update_handle.clone();
     let app = App::new(
         state,
         stylesheet,
@@ -1668,7 +1675,7 @@ pub fn create_editor_app<'a>(
     )
     .with_event_handler(handle_editor_event)
     .with_render_mode(RenderMode::OnInvalidation)
-    .with_continuous_updates(true);
+    .with_update_handle(update);
 
     #[cfg(feature = "desktop")]
     let app = app.with_usd_viewport(
@@ -1765,6 +1772,40 @@ mod tests {
             assert!((state.state.time - (index + 1) as f64 * dt).abs() < 1e-12);
             assert_eq!(state.metrics.is_none(), gpu);
         }
+    }
+
+    #[test]
+    fn paused_reference_step_wakes_the_ui() {
+        use cssimpler::renderer::{RedrawSchedule, SceneProvider};
+
+        let mut project = Project {
+            sphere: None,
+            ..Default::default()
+        };
+        project.pattern.nx = 2;
+        project.pattern.ny = 2;
+        let dir = tempfile::tempdir().unwrap();
+        let sheet = load_studio_stylesheet().unwrap();
+        let state = CssEditorState::new(project, dir.path().to_path_buf());
+        let mut app = create_editor_app(state, &sheet);
+        let (wake, notifications) = mpsc::channel();
+        app.install_update_wake(Arc::new(move || {
+            let _ = wake.send(());
+        }));
+        app.frame(FrameInfo {
+            delta: Duration::ZERO,
+            frame_index: 0,
+        });
+        assert_eq!(app.redraw_schedule(), RedrawSchedule::OnInvalidation);
+
+        app.state_mut().send_control_state(true);
+        notifications.recv_timeout(Duration::from_secs(10)).unwrap();
+        app.frame(FrameInfo {
+            delta: Duration::ZERO,
+            frame_index: 1,
+        });
+        assert_eq!(app.state().step_count, 1, "{}", app.state().status_message);
+        assert!(!app.state().playing);
     }
 
     #[test]

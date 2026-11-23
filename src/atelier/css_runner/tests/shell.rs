@@ -949,7 +949,7 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
     use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
     use cssimpler::core::RenderNode;
     use cssimpler::renderer::{
-        EngineEvent, ViewportEvent, ViewportSize, gpu::usd::UsdShadowSettings,
+        EngineEvent, SceneProvider, ViewportEvent, ViewportSize, gpu::usd::UsdShadowSettings,
     };
 
     fn node<'a>(roots: &'a [RenderNode], id: &str) -> Option<&'a RenderNode> {
@@ -969,6 +969,10 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
     let stylesheet = load_studio_stylesheet().unwrap();
     let state = selection_test_state(dir.path());
     let mut app = create_runner_app(state, &stylesheet);
+    let (wake, updates) = std::sync::mpsc::channel();
+    app.install_update_wake(std::sync::Arc::new(move || {
+        let _ = wake.send(());
+    }));
     let frame = FrameInfo {
         delta: Duration::from_millis(16),
         frame_index: 0,
@@ -1012,7 +1016,12 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                 &pointer_move_ev(track.x + track.width * 0.5, y),
             );
             handle_runner_event(app.state_mut(), &pointer_btn_ev(true));
+            while updates.try_recv().is_ok() {}
             node(app.scene(), id).unwrap().handlers.mousedown().unwrap()();
+            assert!(
+                updates.try_recv().is_ok(),
+                "slider press should wake the paused editor"
+            );
             app.frame(frame);
             let settings = app.state().viewport_shadow_levels.get().apply(defaults());
             if drag_outside {
@@ -1021,6 +1030,11 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                     "{track:?} {settings:?}"
                 );
                 handle_runner_event(app.state_mut(), &pointer_move_ev(track.x - 20.0, y));
+                assert!(
+                    updates.try_recv().is_ok(),
+                    "slider drag should wake the paused editor"
+                );
+                app.frame(frame);
             } else {
                 assert!(
                     (settings.light_radius - 0.20).abs() < 0.005,

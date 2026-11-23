@@ -34,6 +34,7 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
         )
     {
         state.input_dirty = true;
+        state.update_handle.request_update();
         false
     } else {
         handled

@@ -161,9 +161,9 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         && done.generation == state.generation
     {
         state.worker_pending = false;
+        had_result = true;
         match done.result {
             Ok((new_state, metrics)) => {
-                had_result = true;
                 state.scene.state = new_state;
                 state.step_count += 1;
                 state.step_ms = metrics.step_ms;

@@ -6,11 +6,11 @@ use super::super::app::create_runner_app;
 use super::super::board::geometry::viewport_3d_rect;
 use super::super::input::handle_runner_event;
 use super::super::state::CssRunnerState;
-use super::support::{pointer_btn_ev, pointer_move_ev};
+use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
 use clothcraft::css_ui::load_studio_stylesheet;
 use clothcraft::fitting::FittingProject;
 use clothcraft::garment::presets::GarmentKind;
-use cssimpler::renderer::{EngineEvent, FrameInfo};
+use cssimpler::renderer::{EngineEvent, FrameInfo, RedrawSchedule, SceneProvider};
 use std::time::Duration;
 
 #[test]
@@ -88,4 +88,34 @@ fn test_3d_camera_orbit_zoom_and_reset_usd() {
     assert!((app.state().camera.yaw - initial_yaw).abs() < 1e-6);
     assert!((app.state().camera.distance - initial_dist).abs() < 1e-6);
     assert_eq!(read_xform(app.state()), initial_xf);
+}
+
+#[test]
+fn paused_fitting_step_wakes_the_ui() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let sheet = load_studio_stylesheet().unwrap();
+    let mut app = create_runner_app(selection_test_state(dir.path()), &sheet);
+    let (wake, notifications) = std::sync::mpsc::channel();
+    app.install_update_wake(std::sync::Arc::new(move || {
+        let _ = wake.send(());
+    }));
+    app.frame(FrameInfo {
+        delta: Duration::ZERO,
+        frame_index: 0,
+    });
+    assert_eq!(app.redraw_schedule(), RedrawSchedule::OnInvalidation);
+    assert_eq!(app.next_update_at(), None);
+
+    app.state_mut().trigger_worker_step(true);
+    notifications.recv_timeout(Duration::from_secs(10)).unwrap();
+    app.frame(FrameInfo {
+        delta: Duration::ZERO,
+        frame_index: 1,
+    });
+    assert_eq!(app.state().step_count, 1, "{}", app.state().status_message);
+    assert!(!app.state().playing);
+    assert_eq!(app.next_update_at(), None);
 }
