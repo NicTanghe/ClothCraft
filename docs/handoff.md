@@ -71,6 +71,14 @@ preview and no failures, including fifteen `avatar_formats` tests; the eleven
 desktop import UI tests passed; CPU-only and desktop all-target Clippy with
 warnings denied, the desktop build and formatting passed. No GPU or window run.
 
+## Paused editor scheduling
+
+Both native editors request UI updates on input and when their worker publishes
+a result to the existing latest-result slot. The fitting editor also requests
+deadlines for debounced preference writes and native cursor sampling during a
+numeric drag. Its opt-in smoke and performance harnesses retain frame cadence.
+CPU-only worker tests cover paused single-step delivery without pointer input.
+
 ## Saved user preferences — 20 November 2026
 
 The native runner now writes its Settings panel and workspace preferences to a

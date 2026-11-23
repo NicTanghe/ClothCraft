@@ -51,6 +51,8 @@ pub fn create_runner_app<'a>(
     // Clone the viewport handles before `state` moves into the application.
     let wireframe = state.viewport_wireframe.clone();
     let redraw_slot = state.viewport_redraw.clone();
+    let update = state.update_handle.clone();
+    let continuous = smoke || state.perf_test;
     let app = App::new(
         state,
         stylesheet,
@@ -60,7 +62,9 @@ pub fn create_runner_app<'a>(
     .with_event_handler(handle_runner_event)
     .with_render_mode(RenderMode::OnInvalidation)
     .with_frame_aligned_input(true)
-    .with_continuous_updates(true)
+    .with_update_handle(update)
+    .with_update_deadline(CssRunnerState::next_update_at)
+    .with_continuous_updates(continuous)
     .with_exit_when(|state| state.smoke_done.get() || state.should_exit);
 
     let cam_mode = cssimpler::renderer::gpu::usd::UsdCameraMode::Authored(

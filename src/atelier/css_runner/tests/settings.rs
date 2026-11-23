@@ -311,7 +311,12 @@ fn settings_survive_a_restart_through_the_preference_file() {
     state.wireframe_colour = 3;
     state.wireframe_width_px = 6.0;
     state.project.template.measurement_bits = Some(16);
+    assert_eq!(state.next_update_at(), None);
+    state.flush_preferences(false);
+    assert!(state.next_update_at().is_some());
+    assert!(!path.exists());
     state.flush_preferences(true);
+    assert_eq!(state.next_update_at(), None);
     assert!(path.exists(), "flush should create {}", path.display());
 
     // A second session starts from the defaults and then loads the file.
