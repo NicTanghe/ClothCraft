@@ -1,6 +1,7 @@
 # cssimpler integration
 
-Both native desktop editors use cssimpler revision `081fe94`, which includes
+Both native desktop editors use cssimpler's `main` branch at the revision
+recorded in `Cargo.lock`. This includes
 captured event handlers, typed UI actions, frame-aligned pointer scheduling, the
 transition update described in cssimpler's `docs/`, per-mesh wireframe strokes
 (PR #41) and GPU viewports embedded as Wayland subsurfaces (PR #40). The fitting
@@ -79,6 +80,21 @@ the runner enables it on the `/World/Garment/*` panel meshes only and leaves
 avatars, colliders and other display geometry shaded. No overlay mesh is authored
 into the stage, so accepted solver steps update only the panel points. Both are
 view-only state and are not saved in the document.
+
+## Shader builds
+
+With `desktop` enabled, cssimpler compiles the USD viewport shader with WESL and
+validates the shadow and fallback WGSL with Naga. ClothCraft uses the same build
+workflow for its AVBD and VBD compute shaders. WESL 0.6 requires Rust 1.97.1 or newer.
+
+The AVBD modules under `src/gpu_avbd/` declare their dependencies with imports.
+The VBD source in `src/gpu_vbd/vbd.wesl` uses the `subgroups` flag to select the
+reduction module and the corresponding lane builtin. At runtime, VBD selects the
+subgroup variant only when the device enables subgroups and guarantees a width of 32.
+
+`cargo check --locked --features desktop` rebuilds the WGSL when the shader
+sources change and validates every variant on the CPU. Edit the `.wesl` sources
+to change a shader. The generated WGSL lives in Cargo's build output directory.
 
 ## Wayland viewports
 

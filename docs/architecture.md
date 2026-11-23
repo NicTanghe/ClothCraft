@@ -92,7 +92,7 @@ restart/release protocols. See [its evidence and limitations](settling-zoo.md).
 | `vbd/audit.rs` | Explicit offline energy and accepted-step accounting | read-only f64 terms, frozen-contact balance and final residual; no automatic runtime cost; [scope](energy-and-release.md) |
 | `vbd/coloring.rs` | Deterministic greedy coloring and dependency-preserving precision levels | same colors/vertex order with a small-palette mask; unrestricted fallback; only independent f64 minimizations run together |
 | `garment/diagnostics.rs` | Stretch measurements independent of rendering | Material rest + state → area-weighted percentile and maximum |
-| `gpu_vbd.rs`, `vbd.wgsl` | Local f32 solve, exact gradients, approximate positive Hessians | CPU candidates/bounds → GPU compute → validated state |
+| `gpu_vbd.rs`, `gpu_vbd/vbd.wesl` | Local f32 solve, exact gradients, approximate positive Hessians | CPU candidates/bounds → GPU compute → validated state |
 | `ogc/filter.rs`, `gpu_vbd/contact_filter/` | Conservative GPU BVH refit/search and separating-axis rejection | current positions → candidate IDs → unchanged f64 contact geometry/bounds; [contract](gpu-contact-search.md) |
 | `picking.rs` | Rays and barycentric attachments | Mouse → grab force, no teleportation |
 | `bin/cloth-fit.rs`, `atelier.rs`, `gpu_bench.rs` | CLI, workspace and rendering measurements | Projects / reports / opt-in captures |

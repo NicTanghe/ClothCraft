@@ -1,3 +1,9 @@
+import package::al::contact_value;
+import package::contact::{closest, scalar_barrier, triangle_closest};
+import package::jet::{I, factor};
+import package::main::{at, config, contacts, control, geometry, heads, particles, positions, primitive, terms};
+import package::solve::{assemble_vertex, material_row};
+
 // Inexact PCG of the coupled positive AVBD/Gauss-Newton curvature.
 // No host iteration decisions, floating atomics, or changes to physical energy.
 @compute @workgroup_size(64)
@@ -119,7 +125,7 @@ fn cg_search(@builtin(global_invocation_id) id:vec3u) {
     particles[v].cg[2]=particles[v].cg[1]+bitcast<f32>(control.pad2)*particles[v].cg[2];
 }
 
-fn sphere_slot(face:u32)->u32 {return (1u+config.method.x)*config.sizes.z+face;}
+public fn sphere_slot(face:u32)->u32 {return (1u+config.method.x)*config.sizes.z+face;}
 // The iterate and AL variables stay frozen throughout PCG. Recompute once per
 // nonlinear sweep; line search/CCD still evaluate their actual trial geometry.
 @compute @workgroup_size(64)

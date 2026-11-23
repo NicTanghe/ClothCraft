@@ -103,22 +103,11 @@ impl GpuVbd {
         let subgroups = device.features().contains(wgpu::Features::SUBGROUP)
             && info.subgroup_min_size == 32
             && info.subgroup_max_size == 32;
-        let source = format!(
-            "{}\n{}",
-            include_str!("vbd.wgsl").replace(
-                "@builtin(local_invocation_index)",
-                if subgroups {
-                    "@builtin(subgroup_invocation_id)"
-                } else {
-                    "@builtin(local_invocation_index)"
-                },
-            ),
-            if subgroups {
-                include_str!("gpu_vbd/reduce_subgroup.wgsl")
-            } else {
-                include_str!("gpu_vbd/reduce_portable.wgsl")
-            }
-        );
+        let source = if subgroups {
+            include_str!(concat!(env!("OUT_DIR"), "/vbd_subgroup.wgsl"))
+        } else {
+            include_str!(concat!(env!("OUT_DIR"), "/vbd_portable.wgsl"))
+        };
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("VBD + OGC compute"),
             source: wgpu::ShaderSource::Wgsl(source.into()),

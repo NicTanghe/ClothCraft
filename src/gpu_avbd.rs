@@ -185,18 +185,11 @@ impl GpuAvbd {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let source = [
-            include_str!("gpu_avbd/main.wgsl"),
-            include_str!("gpu_avbd/jet.wgsl"),
-            include_str!("gpu_avbd/contact.wgsl"),
-            include_str!("gpu_avbd/solve.wgsl"),
-            include_str!("gpu_avbd/al.wgsl"),
-            include_str!("gpu_avbd/coupled.wgsl"),
-        ]
-        .join("\n");
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(BACKEND),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!(concat!(env!("OUT_DIR"), "/avbd.wgsl")).into(),
+            ),
         });
         let pipelines = ENTRIES
             .iter()

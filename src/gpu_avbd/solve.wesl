@@ -1,9 +1,15 @@
+import package::al::contact_value;
+import package::contact::{closest, scalar_barrier, triangle_closest};
+import package::coupled::sphere_slot;
+import package::jet::{I, Jet, factor, factor_value, outer};
+import package::main::{at, config, contacts, control, geometry, heads, particles, positions, primitive, proposal_radius, terms};
+
 struct System {e:f32,g:vec3f,h:mat3x3f}
-fn material_row(v:u32)->vec2u {
+public fn material_row(v:u32)->vec2u {
     return vec2u(geometry[config.offsets.w+v],geometry[config.offsets.w+v+1u]);
 }
 fn sphere_distance(v:u32,alpha:f32)->f32 {return length(at(v,alpha)-config.sphere.xyz)-config.sphere.w;}
-fn assemble_vertex(v:u32,alpha:f32,original:bool)->System {
+public fn assemble_vertex(v:u32,alpha:f32,original:bool)->System {
     let p=at(v,alpha);let q=p-particles[v].inertia_target.xyz;let inertia=particles[v].inertia_target.w;
     var system=System(0.5*inertia*dot(q,q),inertia*q,I*inertia);
     let row=material_row(v);
