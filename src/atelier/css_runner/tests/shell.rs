@@ -993,6 +993,14 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
         app.find_element_bounds_by_id("#shadow-softness-slider")
             .is_none()
     );
+    assert_eq!(
+        app.state()
+            .viewport_shadow_levels
+            .get()
+            .apply(UsdShadowSettings::default())
+            .coverage,
+        0.0
+    );
 
     for (width, height) in [(1600, 980), (1024, 768), (800, 600)] {
         app.set_viewport(ViewportSize::new(width, height));
@@ -1013,9 +1021,10 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
             resolution: 2048,
             ..Default::default()
         };
-        for (id, drag_outside) in [
-            ("shadow-softness-slider", false),
-            ("shadow-strength-slider", true),
+        for id in [
+            "shadow-softness-slider",
+            "shadow-strength-slider",
+            "shadow-coverage-slider",
         ] {
             let track = node(app.scene(), id).unwrap().layout;
             assert!(track.x >= panel.x && track.x + track.width <= panel.x + panel.width);
@@ -1034,27 +1043,42 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
             );
             app.frame(frame);
             let settings = app.state().viewport_shadow_levels.get().apply(defaults());
-            if drag_outside {
-                assert!(
-                    (settings.strength - 0.50).abs() <= 0.01,
-                    "{track:?} {settings:?}"
-                );
-                handle_runner_event(app.state_mut(), &pointer_move_ev(track.x - 20.0, y));
+            let drag_x = match id {
+                "shadow-strength-slider" => {
+                    assert!(
+                        (settings.strength - 0.50).abs() <= 0.01,
+                        "{track:?} {settings:?}"
+                    );
+                    Some(track.x - 20.0)
+                }
+                "shadow-coverage-slider" => {
+                    assert!(
+                        (settings.coverage - 0.50).abs() <= 0.01,
+                        "{track:?} {settings:?}"
+                    );
+                    Some(track.x + track.width + 20.0)
+                }
+                _ => {
+                    assert!(
+                        (settings.light_radius - 0.20).abs() < 0.005,
+                        "{track:?} {settings:?}"
+                    );
+                    None
+                }
+            };
+            if let Some(x) = drag_x {
+                handle_runner_event(app.state_mut(), &pointer_move_ev(x, y));
                 assert!(
                     updates.try_recv().is_ok(),
                     "slider drag should wake the paused editor"
                 );
                 app.frame(frame);
-            } else {
-                assert!(
-                    (settings.light_radius - 0.20).abs() < 0.005,
-                    "{track:?} {settings:?}"
-                );
             }
             assert!(handle_runner_event(app.state_mut(), &pointer_btn_ev(false)));
         }
         let settings = app.state().viewport_shadow_levels.get().apply(defaults());
         assert_eq!(settings.strength, 0.0);
+        assert_eq!(settings.coverage, 1.0);
         assert!((settings.light_radius - 0.20).abs() < 0.005);
         assert!(!app.state().dragging_3d && !app.state().pointer_down);
     }

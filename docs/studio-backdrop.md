@@ -38,12 +38,12 @@ or reloading the scene.
 
 ## Rendering limits
 
-The cssimpler USD viewport shades meshes with one fixed studio key light, rim
-term and no shadow map. The cove therefore receives that shading but does not
-receive cast shadows; a real shadow pass is separate renderer work. Per-mesh
-opacity is not available either, so issue #68's "within ±5 cm of the bottom,
-fade the cove and fade in a sidewall" behaviour is deferred rather than faked
-with an unsupported material.
+The cove receives the studio key's shadows on devices with sampled-depth
+support. The 2048×2048 map fits the casters in light space by default. Settings
+→ 3D shadows → Coverage widens that fit up to the entire cove. Wider coverage
+spreads the same texels over more space and softens fine shadow detail. The
+cove stays out of the depth pass at all settings. The sidewall fade described
+in issue #68 would require per-mesh opacity and remains deferred.
 
 Tests in `tests/usd_scene.rs` cover the cove bounds, topology and normals, the
 two theme colours, live display-colour updates, and that the cove is absent from
