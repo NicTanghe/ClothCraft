@@ -196,6 +196,11 @@ support for every OpenUSD schema, Hydra renderer, asset resolver or DCC extensio
 
 ## Native viewport rendering
 
+The fitting workspace authors navigation on a separate in-memory USD camera
+stage. Orbiting, zooming and resetting the camera refresh the view while the
+renderer reuses geometry buffers and the existing shadow map. Updates to garment
+geometry still invalidate the scene buffers and shadow map.
+
 Both cssimpler editors use the registered USD viewport as their sole 3D renderer.
 The previous CPU-projected SVG triangle overlay has been removed; the 2D pattern
 boards still use SVG. This removes duplicate mesh projection and DOM construction

@@ -815,12 +815,7 @@ fn viewport_wireframe_toggle_strokes_only_garment_panels() {
     let stage = scene.stage();
     assert!(stage.root_layer().is_anonymous());
     assert!(!output.join("runner_preview.usda").exists());
-    for path in [
-        "/World/Garment",
-        "/Collider",
-        "/InfinityCove",
-        clothcraft::usd_scene::VIEWPORT_CAMERA_PATH,
-    ] {
+    for path in ["/World/Garment", "/Collider", "/InfinityCove"] {
         assert!(
             stage.prim(path).unwrap().is_valid().unwrap(),
             "missing {path}"

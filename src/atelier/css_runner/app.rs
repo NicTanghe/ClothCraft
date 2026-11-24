@@ -11,9 +11,7 @@ use clothcraft::fitting::{FittingProject, FittingScene};
 use clothcraft::gpu_avbd::ContactMethod;
 use cssimpler::app::{App, Invalidation, RenderMode};
 use cssimpler::core::Node;
-use cssimpler::renderer::gpu::usd::{
-    UsdCameraMode, UsdRenderer, UsdShadowSettings, UsdStudioLighting,
-};
+use cssimpler::renderer::gpu::usd::{UsdRenderer, UsdShadowSettings, UsdStudioLighting};
 use cssimpler::renderer::{FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
 
@@ -35,9 +33,10 @@ pub fn create_runner_app<'a>(
     let usda = usd_scene::append_viewport_surface(usda, state.avatar_display_surface());
     let usda = usd_scene::append_infinity_cove(usda, state.studio_backdrop_theme());
     let usd_scene = usd_scene::viewport_scene_from_usda(&usda).expect("create USD viewport scene");
-    if let Err(err) = clothcraft::usd_scene::init_viewport_camera(&usd_scene, &state.camera) {
-        state.status_message = format!("USD camera init error: {err}");
-    }
+    let camera_scene =
+        usd_scene::viewport_camera_scene(&state.camera).expect("create USD viewport camera");
+    let camera_stage = camera_scene.stage().clone();
+    state.usd_camera_scene = Some(camera_scene);
     state.usd_scene = Some(usd_scene.clone());
     state.viewport_camera.replace(state.camera.clone());
     let camera = state.viewport_camera.clone();
@@ -67,7 +66,6 @@ pub fn create_runner_app<'a>(
     .with_continuous_updates(continuous)
     .with_exit_when(|state| state.smoke_done.get() || state.should_exit);
 
-    let cam_mode = UsdCameraMode::Authored(clothcraft::usd_scene::VIEWPORT_CAMERA_PATH.into());
     app.with_gpu_viewport(
         "runner-viewport-3d-scene",
         Default::default(),
@@ -75,7 +73,12 @@ pub fn create_runner_app<'a>(
             let redraw = init.redraw.clone();
             *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
             let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
-            let mut renderer = UsdRenderer::new(init, usd_scene, cam_mode)?;
+            let mut renderer = UsdRenderer::new_with_authored_camera(
+                init,
+                usd_scene,
+                camera_stage,
+                usd_scene::VIEWPORT_CAMERA_PATH,
+            )?;
             shadow_supported.set(renderer.supports_shadow_mapping());
             if shadow_supported.get() {
                 renderer.set_studio_lighting(Some(UsdStudioLighting {
