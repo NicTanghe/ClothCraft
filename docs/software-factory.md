@@ -116,3 +116,11 @@ python3 scripts/factory.py check
 
 These are small CPU-only checks. Rust, desktop and packaging workflows remain
 independent of queue ownership. No GPU test is added to the default suite.
+
+## Package versions
+
+A push to `main` advances the ClothCraft patch version once per new first-parent
+commit. A PR merge counts once, and a direct push with multiple commits counts
+each commit. The workflow commits `Cargo.toml` and `Cargo.lock` together.
+An explicit package version change sets the baseline for later bumps.
+Build workflows remain tied to the revision that triggered them.
