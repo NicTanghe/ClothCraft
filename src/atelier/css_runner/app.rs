@@ -32,7 +32,13 @@ pub fn create_runner_app<'a>(
         .expect("publish garment viewport geometry");
     let usda = usd_scene::append_viewport_surface(usda, state.avatar_display_surface());
     let usda = usd_scene::append_infinity_cove(usda, state.studio_backdrop_theme());
-    let usd_scene = usd_scene::viewport_scene_from_usda(&usda).expect("create USD viewport scene");
+    let usd_scene = usd_scene::viewport_scene_from_usda(&usda)
+        .and_then(|scene| {
+            scene
+                .with_deforming_meshes(usd_scene::VIEWPORT_GARMENT_PATH)
+                .map_err(|error| error.to_string())
+        })
+        .expect("create USD viewport scene");
     let camera_scene =
         usd_scene::viewport_camera_scene(&state.camera).expect("create USD viewport camera");
     let camera_stage = camera_scene.stage().clone();

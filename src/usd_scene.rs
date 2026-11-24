@@ -469,8 +469,11 @@ pub fn update_viewport_points(
 /// Transient USD mesh path derived from a semantic panel ID.
 #[cfg(feature = "desktop")]
 pub fn viewport_panel_path(id: &str) -> String {
-    format!("/World/Garment/{}", prim_name(id))
+    format!("{VIEWPORT_GARMENT_PATH}/{}", prim_name(id))
 }
+
+#[cfg(feature = "desktop")]
+pub const VIEWPORT_GARMENT_PATH: &str = "/World/Garment";
 
 /// Author display normals for `path` under `mode`.
 ///
@@ -616,6 +619,36 @@ pub fn update_panel_viewport_positions(
     }
     for panel in &garment.panels {
         set_panel_positions_and_normals(scene, garment, state, panel, mode)?;
+    }
+    Ok(())
+}
+
+/// Publish a solver pose without authoring normals or rebuilding panel topology.
+#[cfg(feature = "desktop")]
+pub fn update_panel_viewport_pose(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    garment: &CompiledGarment,
+    state: &State,
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::gf;
+    if state.x.len() != garment.mesh.uv.len() {
+        return Err("USD mesh sync requires matching state and UV vertex counts".into());
+    }
+    if state
+        .x
+        .iter()
+        .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+    {
+        return Err("USD display positions must be finite f32 values".into());
+    }
+    for panel in &garment.panels {
+        let points = state.x[panel.vertices.clone()]
+            .iter()
+            .map(|point| gf::vec3f(point.x as f32, point.y as f32, point.z as f32))
+            .collect();
+        scene
+            .set_deformed_mesh_points(&viewport_panel_path(&panel.id), points)
+            .map_err(|error| error.to_string())?;
     }
     Ok(())
 }

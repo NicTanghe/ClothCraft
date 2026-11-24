@@ -408,6 +408,18 @@ impl CssRunnerState {
         }
     }
 
+    pub(super) fn sync_usd_simulation_pose(&mut self) {
+        if let Some(scene) = &self.usd_scene
+            && let Err(error) = clothcraft::usd_scene::update_panel_viewport_pose(
+                scene,
+                &self.scene.garment,
+                &self.scene.state,
+            )
+        {
+            self.status_message = format!("USD pose update error: {error}");
+        }
+    }
+
     /// Current wireframe toggle, colour and width, clamped to supported ranges.
     pub fn wireframe_settings(&self) -> WireframeSettings {
         WireframeSettings {
