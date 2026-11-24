@@ -5,7 +5,7 @@
 //! - Left Asset & Piece Browser (`render_left_browser`):
 //!   - Bundled templates browser (T-shirt, Dress, Apron, Two-panel, Local-ease, Curved-panels, Partial-chain)
 //!   - Dirty-document confirmation state
-//!   - Import/Export quick actions (DXF, SVG, Avatar OBJ/glTF/GLB, Export OBJ, True-Scale SVG with 100 mm ruler note)
+//!   - Import/Export quick actions (DXF, SVG, Avatar OBJ/glTF/GLB/FBX/USD, Export OBJ, True-Scale SVG with 100 mm ruler note)
 //!   - Pattern Piece cards list (stable `panel.id`, vertex/triangle counts, mirror badges, fabric, selection highlight)
 //! - Right 5-Category Object Browser (`render_object_browser`):
 //!   - Category tabs: 2D Pattern, Sewing, 3D Form, Material, Environment
@@ -186,7 +186,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 4,
         license: "MIT",
-        source: "ClothCraft / examples/templates/tshirt.json",
+        source: "ClothCraft / examples/templates/tshirt.usda",
     },
     BundledTemplateEntry {
         id: "dress",
@@ -195,7 +195,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 4,
         license: "MIT",
-        source: "ClothCraft / examples/templates/dress.json",
+        source: "ClothCraft / examples/templates/dress.usda",
     },
     BundledTemplateEntry {
         id: "apron",
@@ -204,7 +204,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 3,
         seam_count: 4,
         license: "MIT",
-        source: "ClothCraft / examples/templates/apron.json",
+        source: "ClothCraft / examples/templates/apron.usda",
     },
     BundledTemplateEntry {
         id: "two-panel",
@@ -213,7 +213,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 1,
         license: "MIT",
-        source: "ClothCraft / examples/templates/two-panel.json",
+        source: "ClothCraft / examples/templates/two-panel.usda",
     },
     BundledTemplateEntry {
         id: "local-ease",
@@ -222,7 +222,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 1,
         license: "MIT",
-        source: "ClothCraft / examples/templates/local-ease.json",
+        source: "ClothCraft / examples/templates/local-ease.usda",
     },
     BundledTemplateEntry {
         id: "curved-panels",
@@ -231,7 +231,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 2,
         license: "MIT",
-        source: "ClothCraft / examples/templates/curved-panels.json",
+        source: "ClothCraft / examples/templates/curved-panels.usda",
     },
     BundledTemplateEntry {
         id: "partial-chain",
@@ -240,7 +240,7 @@ pub static BUNDLED_TEMPLATES: &[BundledTemplateEntry] = &[
         panel_count: 2,
         seam_count: 2,
         license: "MIT",
-        source: "ClothCraft / examples/templates/partial-chain.json",
+        source: "ClothCraft / examples/templates/partial-chain.usda",
     },
 ];
 
@@ -414,7 +414,7 @@ fn render_import_export_section(state: &LeftBrowserState) -> Node {
                         "Import SVG"
                     </button>
                     <button id="btn-import-avatar" class="btn btn-action">
-                        "Import Avatar (OBJ/glTF/GLB)"
+                        "Import Avatar (OBJ/glTF/GLB/FBX/USD)"
                     </button>
                 </div>
             </div>
@@ -1270,7 +1270,7 @@ fn render_category_environment(
                     </div>
                     <div class="avatar-row">
                         <span class="meta-label">"Type:"</span>
-                        <span class="meta-val">"Static OBJ / glTF / GLB Mannequin"</span>
+                        <span class="meta-val">"Static OBJ / glTF / GLB / FBX / USD Mannequin"</span>
                     </div>
                     <div class="avatar-row">
                         <span class="meta-label">"Collision:"</span>

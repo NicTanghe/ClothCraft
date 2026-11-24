@@ -6,6 +6,7 @@ use super::super::{
 };
 use super::cursor_wrap::CursorWrap;
 use cssimpler::renderer::{ButtonState, EngineEvent, KeyIdentity, PointerButton};
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 pub(in super::super) struct NumberDragState {
@@ -13,7 +14,16 @@ pub(in super::super) struct NumberDragState {
     pub shift: bool,
     pub control: bool,
     pub active: Option<NumberDrag>,
+    last_sample_at: Option<Instant>,
 }
+impl NumberDragState {
+    pub(in super::super) fn next_sample_at(&self) -> Option<Instant> {
+        self.active.as_ref()?.cursor.as_ref()?;
+        self.last_sample_at
+            .map(|last_sample_at| last_sample_at + Duration::from_millis(16))
+    }
+}
+
 pub(in super::super) struct NumberDrag {
     pub field: NumberField,
     pub last_y: f32,
@@ -130,6 +140,7 @@ pub(in super::super) fn handle_number_event(
                 state
                     .actions
                     .push(RunnerAction::Ui(RunnerUiOp::CancelPlacement));
+                state.update_handle.request_update();
                 consumed = false;
             }
         }
@@ -159,6 +170,7 @@ pub(in super::super) fn tick_number_drag(state: &mut CssRunnerState) -> bool {
     let mut drag = state.number_drag.lock().unwrap();
     let (shift, control) = (drag.shift, drag.control);
     let pointer_y = drag.pointer_y;
+    drag.last_sample_at = Some(Instant::now());
     let edit = drag.active.as_mut().and_then(|active| {
         if let Some(cursor) = active.cursor.as_mut() {
             let dy = cursor.sample()?;

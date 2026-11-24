@@ -58,3 +58,8 @@ pub fn run(
 
 #[path = "atelier/usd_smoke.rs"]
 mod usd_smoke;
+
+#[path = "atelier/view_cube.rs"]
+mod view_cube;
+#[path = "atelier/viewport_wireframe.rs"]
+mod viewport_wireframe;

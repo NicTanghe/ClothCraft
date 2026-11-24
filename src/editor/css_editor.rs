@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Instant;
 
-use cssimpler::app::{App, Invalidation, RenderMode};
+use cssimpler::app::{App, Invalidation, RenderMode, UpdateHandle};
 use cssimpler::core::Node;
 use cssimpler::renderer::{EngineEvent, FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
@@ -98,6 +98,7 @@ pub struct RefWork {
     pub sphere: Option<clothcraft::contact::Sphere>,
     pub playing: bool,
     pub once: bool,
+    update_handle: UpdateHandle,
 }
 
 pub enum EditorMetrics {
@@ -209,6 +210,8 @@ fn start_editor_worker(
                         generation,
                         result: outcome,
                     });
+                    drop(slot);
+                    work.update_handle.request_update();
                 }
                 if !was_once {
                     let dt = work.solver.dt.max(0.001);
@@ -242,6 +245,7 @@ fn accept_ref(active: &mut Option<RefWork>, mut new: RefWork, deadline: &mut Ins
 #[derive(Clone)]
 pub struct CssEditorState {
     actions: Arc<AtomicU64>,
+    update_handle: UpdateHandle,
     pub usd_scene: Option<cssimpler::renderer::gpu::usd::UsdScene>,
     pub active: Project,
     pub mesh: Arc<Mesh>,
@@ -320,6 +324,7 @@ impl CssEditorState {
 
         Self {
             actions: Arc::new(AtomicU64::new(0)),
+            update_handle: UpdateHandle::default(),
             usd_scene: None,
             active: project,
             mesh: Arc::new(mesh),
@@ -372,6 +377,7 @@ impl CssEditorState {
             sphere: self.active.sphere.clone(),
             playing: self.playing,
             once,
+            update_handle: self.update_handle.clone(),
         };
         let _ = self.worker_tx.send(work);
     }
@@ -595,9 +601,9 @@ pub fn update_editor(state: &mut CssEditorState, _frame: FrameInfo) -> Invalidat
     if let Some(done) = done
         && done.generation == state.generation
     {
+        had_result = true;
         match done.result {
             Ok((new_state, m)) => {
-                had_result = true;
                 state.accept_step(new_state, m);
             }
             Err(e) => {
@@ -1637,12 +1643,8 @@ pub fn create_editor_app<'a>(
     fn(&CssEditorState) -> Node,
     Invalidation,
 > {
-    let preview_path = state.output_dir.join("editor_preview.usda");
-    if let Some(parent) = preview_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let usda =
-        clothcraft::usd_scene::mesh_stage_usda(&state.mesh, &state.state).unwrap_or_default();
+    let usda = clothcraft::usd_scene::mesh_stage_usda(&state.mesh, &state.state)
+        .expect("publish Project v1 viewport geometry");
     let usda = if let Some(sphere) = &state.active.sphere {
         clothcraft::usd_scene::append_viewport_surface(
             usda,
@@ -1651,15 +1653,14 @@ pub fn create_editor_app<'a>(
     } else {
         usda
     };
-    let _ = std::fs::write(&preview_path, usda);
-
-    let usd_scene = cssimpler::renderer::gpu::usd::UsdScene::open(&preview_path)
-        .expect("load generated USD viewport scene");
+    let usd_scene =
+        clothcraft::usd_scene::viewport_scene_from_usda(&usda).expect("create USD viewport scene");
     if let Err(err) = clothcraft::usd_scene::init_viewport_camera(&usd_scene, &state.camera) {
         state.status_message = format!("USD camera init error: {err}");
     }
     state.usd_scene = Some(usd_scene.clone());
 
+    let update = state.update_handle.clone();
     let app = App::new(
         state,
         stylesheet,
@@ -1668,7 +1669,7 @@ pub fn create_editor_app<'a>(
     )
     .with_event_handler(handle_editor_event)
     .with_render_mode(RenderMode::OnInvalidation)
-    .with_continuous_updates(true);
+    .with_update_handle(update);
 
     #[cfg(feature = "desktop")]
     let app = app.with_usd_viewport(
@@ -1768,10 +1769,45 @@ mod tests {
     }
 
     #[test]
+    fn paused_reference_step_wakes_the_ui() {
+        use cssimpler::renderer::{RedrawSchedule, SceneProvider};
+
+        let mut project = Project {
+            sphere: None,
+            ..Default::default()
+        };
+        project.pattern.nx = 2;
+        project.pattern.ny = 2;
+        let dir = tempfile::tempdir().unwrap();
+        let sheet = load_studio_stylesheet().unwrap();
+        let state = CssEditorState::new(project, dir.path().to_path_buf());
+        let mut app = create_editor_app(state, &sheet);
+        let (wake, notifications) = mpsc::channel();
+        app.install_update_wake(Arc::new(move || {
+            let _ = wake.send(());
+        }));
+        app.frame(FrameInfo {
+            delta: Duration::ZERO,
+            frame_index: 0,
+        });
+        assert_eq!(app.redraw_schedule(), RedrawSchedule::OnInvalidation);
+
+        app.state_mut().send_control_state(true);
+        notifications.recv_timeout(Duration::from_secs(10)).unwrap();
+        app.frame(FrameInfo {
+            delta: Duration::ZERO,
+            frame_index: 1,
+        });
+        assert_eq!(app.state().step_count, 1, "{}", app.state().status_message);
+        assert!(!app.state().playing);
+    }
+
+    #[test]
     fn test_css_editor_headless_frame_and_rendering() {
         let stylesheet = load_studio_stylesheet().expect("load studio stylesheet");
         let project = Project::default();
-        let state = CssEditorState::new(project, PathBuf::from("target/test_editor_out"));
+        let output = tempfile::tempdir().unwrap();
+        let state = CssEditorState::new(project, output.path().into());
         let mut app = create_editor_app(state, &stylesheet);
         app.set_viewport(cssimpler::renderer::ViewportSize::new(1600, 980));
 
@@ -1782,12 +1818,10 @@ mod tests {
         });
         assert!(!scene.is_empty(), "scene nodes should not be empty");
 
-        let collider_points = app
-            .state()
-            .usd_scene
-            .as_ref()
-            .unwrap()
-            .stage()
+        let stage = app.state().usd_scene.as_ref().unwrap().stage();
+        assert!(stage.root_layer().is_anonymous());
+        assert!(!output.path().join("editor_preview.usda").exists());
+        let collider_points = stage
             .attribute("/Collider.points")
             .unwrap()
             .get::<Vec<cssimpler::renderer::gpu::openusd::gf::Vec3f>>()

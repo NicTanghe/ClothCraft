@@ -6,6 +6,21 @@ use crate::{
 };
 
 #[test]
+fn resident_shader_entry_points_match_dispatch_table() {
+    let source = include_str!(concat!(env!("OUT_DIR"), "/avbd.wgsl"));
+    let shader = naga::front::wgsl::parse_str(source).unwrap();
+    let mut entries: Vec<_> = shader
+        .entry_points
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect();
+    entries.sort_unstable();
+    let mut expected = ENTRIES.to_vec();
+    expected.sort_unstable();
+    assert_eq!(entries, expected);
+}
+
+#[test]
 #[ignore = "requires explicit coordination and a hardware GPU"]
 fn gpu_factor_gradients_match_f64_at_identical_rounded_geometry() {
     let (device, queue) = request_device().unwrap();
@@ -848,14 +863,13 @@ fn separating_axis_filter_retains_close_vf_ee_and_nearly_parallel_pairs() {
     let state = garment.initial_state.clone();
     let solver = VbdSolver::new(garment, None, &state).unwrap();
     let r = gpu.allocate(&solver, &state, None, 1024).unwrap();
-    let source=[include_str!("main.wgsl"),include_str!("jet.wgsl"),include_str!("contact.wgsl"),
-        include_str!("solve.wgsl"),include_str!("al.wgsl"),include_str!("coupled.wgsl"),
-        "@compute @workgroup_size(64) fn probe_filter(@builtin(global_invocation_id) id:vec3u) { if id.x<64u {contacts.pairs[id.x].normal_curvature.w=select(0.0,1.0,separated_beyond_envelope(contacts.pairs[id.x]));}}"].join("\n");
     let module = gpu
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("pair-filter oracle"),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!(concat!(env!("OUT_DIR"), "/avbd_filter_probe.wgsl")).into(),
+            ),
         });
     let layout = gpu
         .device

@@ -79,7 +79,7 @@ Use **Space** to start or pause, **Grab** to pull the cloth and **Ctrl+S** to sa
 - **Arrangement:** translation and rotation in 3D; a separate 2D board layout; undo/redo and semantic copy/paste.
 - **Simulation:** resident WGSL finite AVBD with IPC-style contact by default on this branch; explicit CPU and hybrid VBD/OGC controls remain available. The floor is currently a visual reference, not a physical collider.
 - **Documents:** Open, Save, Save As, portable avatar assets and local recovery. Keep a saved JSON and its adjacent `.assets` folder together.
-- **Starting assets:** six bundled pattern templates, native template JSON import, and static OBJ/glTF/GLB avatars through the fitting editor's **Assets & Pieces → Import → Avatar** action. Avatar replacement preserves authored patterns but resets the drape and undo history; [supported geometry and limits](docs/avatar-import.md).
+- **Starting assets:** six bundled pattern templates, native template JSON import, and static OBJ/glTF/GLB/FBX/USD avatars through the fitting editor's **Assets & Pieces → Import → Avatar** action. Avatar replacement preserves authored patterns but resets the drape and undo history; [supported geometry and limits](docs/avatar-import.md).
 - **Avatar inspection:** Properties → Simulation reports the actual collision mesh and can check the current arrangement through the CPU solver's initialization gate. [Coverage and limits](docs/avatar-diagnostics.md): topology warnings are not an intersection or global containment certificate.
 - **DXF outlines:** The fitting editor's **Assets & Pieces → Import → DXF** action previews units, layers and excluded data before adding selected closed outlines as editable pieces. Existing unchanged panels retain their drape. This is a [generic planar subset](docs/pattern-import.md), not industrial DXF-AAMA/ASTM.
 - **SVG outlines:** The fitting editor's **Assets & Pieces → Import → SVG** action adds selected closed outlines from a [physically scaled SVG subset](docs/svg-import.md). Curves are sampled into polygon edges; unsupported artwork and nested or overlapping selected outlines are rejected rather than interpreted as sewing or holes.
@@ -108,12 +108,12 @@ The long-term goal is interchangeable physics behind a stable document and autho
 | Data | Input | Output |
 |---|---|---|
 | Editable garment | ClothCraft project / template JSON | Project / template JSON |
-| Static avatar | OBJ, static glTF / GLB geometry | — |
+| Static avatar | OBJ, static glTF / GLB, FBX 7.x ASCII/binary, USD (USDA/USDC/USDZ) geometry; multi-mesh sources can exclude helper meshes from the collider | — |
 | Simulated garment mesh | — | OBJ geometry and material-space UVs |
 | 2D patterns | Selected closed outlines from generic planar ASCII DXF and physically scaled SVG subsets | Annotated SVG preview and millimetre-scale sewing outlines with stored seam allowances and sewing-line notches when present, and a 100 mm ruler; notches are not duplicated onto cutting lines; no tiling or cutting certification |
 | Research data | — | Metrics, fiber frames and geometric grain guides |
 
-DXF-AAMA/ASTM, MTL round trips, glTF/GLB export, animated avatars, Alembic, USD, FBX, PDF printing and grading rules remain planned. Native project files from other draping software are not supported. Save preserves the editable document; Export writes separate interchange artifacts. See the [input/output contracts](docs/interoperability.md).
+DXF-AAMA/ASTM, MTL round trips, glTF/GLB mesh export, animated avatars, Alembic, USD/FBX mesh export and skinning/material interchange, PDF printing and grading rules remain planned. FBX and USD currently cover static avatar mesh import only; editable USDA template and project documents are a separate capability. Native project files from other draping software are not supported. Save preserves the editable document; Export writes separate interchange artifacts. See the [input/output contracts](docs/interoperability.md).
 
 ## Help build it
 

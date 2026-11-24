@@ -1,5 +1,201 @@
 # Repository handoff
 
+## cssimpler studio viewport preview
+
+The native 3D viewport uses a slightly warm shadow-casting key and a cool
+directional fill. A 2048² depth map and a contact-hardening filter keep shadow
+edges tighter near contact and widen them farther from the caster. Meshes and
+the infinity cove receive these shadows on devices with sampled-depth support.
+The cove stays out of the light-space pass and its bounds. Other devices keep
+the original lighting and cove. The Softness and Strength sliders in Settings → 3D shadows
+adjust the penumbra and blocked key light independently for the current session.
+
+Garment panel meshes preview a fine fabric weave using their USD display
+colour. Avatar meshes keep the default surface response. The viewport changes
+apply to display geometry and do not change the collider or solver.
+
+
+## Native viewport view cube
+
+The cube in the upper-right corner follows the 3D camera. Click a face centre
+to align to that axis, an edge rectangle to look between its two faces, or a
+corner square to look between its three faces. Snapping preserves the camera
+target and distance. The cube draws after the USD scene in the same native
+viewport and uses the existing 3D pointer handler. Hover brightens the target.
+The cube pass supersamples its own coverage and measures the grid strokes in
+screen pixels so their width stays consistent as the cube turns. The letters
+foreshorten with each face, and U and D stay upright during camera orbit.
+
+## Dressform GLB collider import — 20 November 2026
+
+Follow-up to the avatar-import fixes. The `fold-craft-dressform-us8.glb`
+dressform imported as one merged mesh containing the form and its entire stand
+(27 node meshes, 305,710 triangles) with the stand authored below Y = 0, so the
+dressform sat at floor level while the authored garment floated around 0.84–1.5
+m, and the form's split seam vertices left the collider topologically open.
+Simulated cloth could then penetrate the form far outside the contact envelope.
+
+- glTF/GLB now expose named per-node meshes like FBX and USD. The review modal
+  lists them with counts and surface area, and selects the largest area by
+  default; for this asset that is `DressForm` (0.71 m²) rather than the 0.09 m²
+  wire cage or the heavy stand.
+- Exactly coincident vertices are welded inside each source mesh, with a
+  non-manifold weld reverted for that mesh. The dressform form closes from
+  10,891 to 8,339 vertices (2,552 merged) and becomes a watertight manifold, so
+  contact signs and coverage are defined.
+- Assets whose geometry extends below Y = 0 are raised to the floor using the
+  whole source asset (not only the selected meshes), so deselecting the stand
+  still leaves the form at standing height. The shift is reported.
+- Observed locally with the supplied GLB and the T-shirt preset: `DressForm`
+  selected, raised 834 mm, solver initialises and 240 CPU steps keep cloth at
+  the ~3 mm contact envelope (`min signed distance` 3.0–3.4 mm) instead of the
+  previous −115 mm penetration.
+- The 3D viewport publishes every imported mesh; meshes disabled in the review
+  remain visible but do not contribute contacts. After a document reload only
+  the saved collider mesh exists, because project v1 stores one avatar OBJ.
+
+Validation: the CPU-only suite passed 721 tests with one ignored preview,
+including seventeen `avatar_formats` tests; the twelve desktop import UI tests
+passed; CPU-only and desktop all-target Clippy with warnings denied; the desktop
+build and formatting passed. No native window was opened.
+
+## Avatar import: multi-mesh colliders and arrangement preflight — 20 November 2026
+
+Fixes [#57](https://github.com/NicTanghe/ClothCraft/issues/57). Replacing the
+avatar with a multi-mesh FBX (Mixamo Y Bot has `Alpha_Surface` plus the invisible
+`Alpha_Joints` overlay) used to import every mesh as collider geometry with no
+review step, so a garment fitted to the visible body could hit helper geometry.
+The import modal now lists each source mesh with its counts, preselects the
+largest mesh as the collider and restages the canonical OBJ when the reviewer
+enables or disables meshes; the staged scene is recompiled so the reported
+conflicts track the selection.
+
+`avatar_import::Candidate::prepare` also compiles the candidate against the
+current project and runs the solver's initial-state check before installation.
+A panel reported by OGC is mapped back from its garment face and rigidly moved
+outward along Z in 1 cm steps (maximum 8 cm) until the state is separated, so
+the first Play after an avatar replacement actually starts; the confirmation and
+status report every moved panel. Authored pins or frozen panels are left alone
+and still report the conflict. The warning also states that `layout_2d` does not
+move cloth in 3D, which addresses the reported workflow where moving pieces on
+the 2D board could not clear the OGC `initial intersection between faces ...`
+rejection.
+
+Observed validation: the CPU-only suite passed 721 tests with one ignored
+preview and no failures, including fifteen `avatar_formats` tests; the eleven
+desktop import UI tests passed; CPU-only and desktop all-target Clippy with
+warnings denied, the desktop build and formatting passed. No GPU or window run.
+
+## Paused editor scheduling
+
+Both native editors request UI updates on input and when their worker publishes
+a result to the existing latest-result slot. The fitting editor also requests
+deadlines for debounced preference writes and native cursor sampling during a
+numeric drag. Its opt-in smoke and performance harnesses retain frame cadence.
+CPU-only worker tests cover paused single-step delivery without pointer input.
+
+## Saved user preferences — 20 November 2026
+
+The native runner now writes its Settings panel and workspace preferences to a
+per-user `settings.ron` and loads them at startup, instead of rebuilding
+hard-coded defaults every launch. The file uses RON (Rusty Object Notation) and
+holds the theme, view layout, 2D zoom speed, body-reference layers, wireframe
+toggle/colour/width and the default measurement precision. It is not part of a
+garment document and never changes geometry, fabrics, seams, history or solver
+settings.
+
+Locations: `%APPDATA%\ClothCraft\settings.ron` on Windows,
+`~/Library/Application Support/ClothCraft/settings.ron` on macOS, and
+`$XDG_CONFIG_HOME/clothcraft/settings.ron` (falling back to
+`~/.config/clothcraft/settings.ron`) on Linux/BSD. `CLOTHCRAFT_CONFIG_DIR`
+overrides the directory for portable builds and testing.
+
+`atelier/css_runner/preferences.rs` owns the versioned schema, per-platform
+path, clamping and atomic temporary-file replacement. Runner state captures the
+live values, writes after a 500 ms debounce while controls are dragged, and
+flushes on drop/window close. A missing, unreadable, invalid or unknown-version
+file falls back to defaults without blocking startup. An opened project keeps
+its own stored measurement precision; the preference is the default for a fresh
+session. Smoke and performance runs keep deterministic defaults and never touch
+the user profile.
+
+`src/atelier/css_runner/tests/settings.rs` covers a restart round trip and the
+document-precision precedence; the preferences module covers missing, corrupt,
+out-of-range and version-mismatched files plus the Windows, macOS and Linux
+paths.
+
+Observed validation: the desktop library suite passed 195 tests with 8 ignored;
+strict desktop all-target Clippy and formatting passed. No GPU or native window
+run was performed.))
+
+## Static FBX and USD avatar import — 19 November 2026
+
+Issue #55 widens static avatar intake beyond OBJ/glTF/GLB. `src/fbx_avatar.rs`
+reads FBX 7.x ASCII and binary (including zlib arrays) into the same
+`SurfaceMesh`, composing the `Model` hierarchy, `Lcl`/`PreRotation`/geometric
+transforms, `UnitScaleFactor` and the global axis basis. `src/usd_avatar.rs`
+composes `.usd`/`.usda`/`.usdc`/`.usdz` through the pure-Rust `openusd` 0.8
+crate and flattens visible `UsdGeom Mesh` prims, applying the static
+`xformOpOrder` subset, stage `metersPerUnit`/`upAxis`, left-handed winding and
+invisible-subtree skipping. Both adapters feed `avatar_import::Candidate`, so
+staging, confirmation, save/reload and worker-generation invalidation are
+unchanged. Losses and limits are in [avatar import](avatar-import.md);
+`tests/avatar_formats.rs` generates every fixture, including a zlib-compressed
+binary FBX (7.4 and the widened 7.5/7.7 records), USDA/USDC stages and a USDZ
+package.
+
+Observed validation: the CPU-only suite passed 715 tests with one ignored opt-in
+preview and no failures; CPU-only and desktop all-target Clippy passed with
+warnings denied; `cargo build --locked -j 2` passed; the nine desktop import UI
+tests passed; `cargo fmt --all --check` passed. No GPU work or native window was
+run.
+
+## Seam-aware boundary splitting — 18 November 2026
+
+Ported from [erythrofr/ClothCraft#244](https://github.com/erythrofr/ClothCraft/pull/244).
+Splitting a named contour boundary now migrates the seams that reference it:
+references move to the piece that contains their range, a seam that crosses the
+new point becomes two seams, and the boundary on the other side is split at the
+seam's paired position. The change is transactional and fails closed for seams
+with tails/notches, target-length boundaries and linked mirror pairs (which
+still require unlinking before topology changes; the old PR's mirrored-pair
+synchronization is deliberately not ported).
+
+`src/authoring/seam_split.rs` owns the seam migration; `authoring::split_boundary_polygon`
+is the shared polygon split used by the command and by partner boundaries.
+`tests/seam_split.rs` covers a sewn rectangle pair, an unrelated boundary split,
+linked-pair refusal and midpoint splits across the shipped presets.
+
+Observed validation: the full desktop suite passed, including 162 library tests
+with 8 ignored and the five new `seam_split` integration tests; strict all-target
+Clippy, formatting and the CPU-only check passed. No GPU or window run was performed.
+
+## Basic gray body silhouette on the 2D board — 18 November 2026 (experimental)
+
+The 2D pattern board can show a gray avatar silhouette behind the pieces, with a
+**Body** toggle in the board header. This is a deliberately small prototype:
+avatar world X/Y is projected orthographically, Y is flipped for the board's
+downward axis, and the result is anchored to the first panel's board layout and
+3D translation. The projected triangles form one coverage shape with a
+translucent light-gray fill and a subtle outline. The fill extends to the
+outer edge of the outline and keeps the same opacity where projected faces overlap. Interior mesh contour
+lines restore details such as the eyes. **Settings → Body reference** can
+collapse and contains independent **Body**, **Fill**, **Outline** and
+**Details** controls. The master Body toggle, also in the board header,
+keeps the individual layer choices for the session.
+
+Limits: this is not fitted to individual panels, does not use the 3D camera, and
+is recomputed only when the state is created or a static avatar is imported.
+Editing panel layout or moving pieces does not move the silhouette. It renders
+as native CSSimpler vector paths (the board's equivalent of gray SVG), not an
+SVG file or export. Rendering and the headless board capture were inspected;
+no GPU/window run was performed.
+
+Validation: 167 library tests passed with 8 ignored, including four outline
+regressions (projection fixture, empty input, uncached drawing-layer
+placement, toggle); strict
+all-target Clippy and formatting passed.
+
 ## Functional native import dialogs — 18 November 2026
 
 The fitting editor's left-browser **DXF**, **SVG** and **Avatar** import buttons

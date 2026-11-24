@@ -49,7 +49,7 @@ Old files load without conversion. Older builds denying unknown fields reject fi
 
 ## Native acceptance
 
-The 55-action native scenario passes on 16 October 2026: rectangle/Bezier creation, mixed 2D/3D sewing, range edits, M:N chain editing, deletion, undo/redo, transformations, fabric assignment, portable export/reload and actual motion of the added piece. [Report](document-sewing-validation.json). [Editable fixture](../examples/templates/partial-chain.json). The smoke uses real egui input but does not automate the OS file picker or force-kill recovery. Those remain manual acceptance cases; portable storage and failed-save behavior have CPU tests.
+The 55-action native scenario passes on 16 October 2026: rectangle/Bezier creation, mixed 2D/3D sewing, range edits, M:N chain editing, deletion, undo/redo, transformations, fabric assignment, portable export/reload and actual motion of the added piece. [Report](document-sewing-validation.json). [Editable fixture](../examples/templates/partial-chain.usda). The smoke uses real egui input but does not automate the OS file picker or force-kill recovery. Those remain manual acceptance cases; portable storage and failed-save behavior have CPU tests.
 
 Three explicit GPU steps on the exported 946-vertex chain scene passed the f64 force comparison on NVIDIA RTX 3090 / Vulkan; maximum absolute gradient errors were 6.533e-5, 5.016e-5 and 4.296e-5 N. This validates force assembly for this fixture, not convergence, fit quality or a general performance claim.
 

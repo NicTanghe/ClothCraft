@@ -227,6 +227,7 @@ fn unique_ids<'a>(ids: impl Iterator<Item = &'a str>, kind: &str) -> Result<(), 
     }
     Ok(())
 }
+
 impl GarmentTemplate {
     pub fn measurement_precision(&self) -> u8 {
         self.measurement_bits.unwrap_or(8)
@@ -234,14 +235,24 @@ impl GarmentTemplate {
     pub fn load(path: &Path) -> Result<Self, String> {
         let data = fs::read_to_string(path)
             .map_err(|e| format!("Cannot read template {}: {e}", path.display()))?;
-        let template: Self = serde_json::from_str(&data)
-            .map_err(|e| format!("Cannot parse template {}: {e}", path.display()))?;
+        let template: Self = if crate::document::is_usd_path(path) {
+            crate::usd_document::template_from_usda(&data)?
+        } else {
+            serde_json::from_str(&data)
+                .map_err(|e| format!("Cannot parse template {}: {e}", path.display()))?
+        };
         template.compile()?;
         Ok(template)
     }
     pub fn save(&self, path: &Path) -> Result<(), String> {
         self.compile()?;
-        let data = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+        if !crate::document::is_usd_path(path) {
+            return Err(
+                "ClothCraft templates are saved as USD; use a .usda path (JSON templates are import-only)"
+                    .into(),
+            );
+        }
+        let data = crate::usd_document::template_to_usda(self)?.into_bytes();
         crate::document::atomic_write(path, &data)
     }
     pub fn compile(&self) -> Result<CompiledGarment, String> {

@@ -20,6 +20,7 @@ pub use corner_tool::CornerRule;
 pub use cutout::{CutoutPolicy, CutoutSeamPolicy, CutoutShape, SynchronizedCutoutParams};
 mod geometry;
 mod linked;
+mod seam_split;
 use crate::garment::shapes::{BooleanOp, MirrorAxis, Primitive};
 
 /// A contour corner is the start of a named outgoing boundary, never a mesh index.
@@ -1253,6 +1254,152 @@ pub fn constructed_point(
     Ok(local)
 }
 
+/// Split one named boundary at a material arclength, without touching seams.
+/// The caller updates seam references and may split coupled boundaries.
+struct BoundarySplit {
+    child: String,
+    new_point: usize,
+}
+
+fn split_boundary_polygon(
+    template: &mut GarmentTemplate,
+    panel: &str,
+    edge: String,
+    at_m: f64,
+) -> Result<BoundarySplit, String> {
+    if !at_m.is_finite() || at_m <= 0.0 {
+        return Err("Insert position must be a positive finite length".into());
+    }
+    if template
+        .panels
+        .iter()
+        .find(|p| p.id == panel)
+        .and_then(|p| p.polygon.as_ref())
+        .is_some_and(|polygon| polygon.target_lengths.contains_key(&edge))
+    {
+        return Err(
+            "This boundary has a target length; clear the target before splitting it".into(),
+        );
+    }
+    let p = template
+        .panels
+        .iter_mut()
+        .find(|p| p.id == panel)
+        .ok_or("Panel not found")?;
+    let (new_point, child) = {
+        let polygon = p
+            .polygon
+            .as_mut()
+            .ok_or("This panel has no editable contour")?;
+        let index = polygon
+            .edges
+            .iter()
+            .position(|name| name == &edge)
+            .ok_or("Boundary not found")?;
+        let current = edge_length(polygon, &edge)?;
+        let previous_polygon = polygon.clone();
+        if at_m >= current {
+            return Err("Insert position is beyond the boundary".into());
+        }
+        if polygon.notches.get(&edge).is_some_and(|notches| {
+            notches
+                .iter()
+                .any(|notch| (notch.at * current - at_m).abs() < markings::end_clearance(notch))
+        }) {
+            return Err(
+                "Split would place a notch within 1 mm of a boundary end or inside its V span; move or remove it first"
+                    .into(),
+            );
+        }
+        let count = polygon.points.len();
+        let a = polygon.points[index];
+        let b = polygon.points[(index + 1) % count];
+        let controls = polygon.curves.get(&edge).copied();
+        let (point, first, second) = match controls {
+            // Any cubic parameter splits the outline exactly; the point
+            // is placed at the requested material arclength.
+            Some([c1, c2]) => {
+                let cubic = [a, c1, c2, b];
+                let parameter = parameter_at_arclength(cubic, at_m)?;
+                let (left, right) = split_cubic(cubic, parameter);
+                (left[3], [left[1], left[2]], [right[1], right[2]])
+            }
+            None => {
+                let t = at_m / current;
+                (a.lerp(b, t), [DVec2::ZERO; 2], [DVec2::ZERO; 2])
+            }
+        };
+        polygon.points.insert(index + 1, point);
+        let name = split_edge_name(&polygon.edges, &edge);
+        polygon.edges.insert(index + 1, name.clone());
+        if controls.is_some() {
+            polygon.curves.insert(edge.clone(), first);
+            polygon.curves.insert(name.clone(), second);
+        }
+        // Resolve old stations before replacing their boundary. Curved
+        // halves have independent flattening, so project onto the known
+        // child and bound the geometric drift by two flatten tolerances.
+        let split_geometry = polygon.clone();
+        for measurement in &mut polygon.measurements {
+            for anchor in [&mut measurement.a, &mut measurement.b] {
+                if let crate::garment::polygon::MeasurementAnchor::Barycentric {
+                    vertices, ..
+                } = anchor
+                {
+                    for v in vertices.iter_mut() {
+                        if v.edge == edge && v.end {
+                            v.edge = name.clone();
+                        }
+                    }
+                } else if anchor.uses_edge(&edge) {
+                    *anchor = geometry::split_measurement_anchor(
+                        &previous_polygon,
+                        &split_geometry,
+                        anchor,
+                        [&edge, &name],
+                        at_m,
+                        current,
+                    )?;
+                }
+            }
+        }
+        // Carry draft markings across the split. The two halves are the
+        // same physical boundary, so the allowance applies to both, and
+        // each notch keeps its material arclength position.
+        if let Some(width) = polygon.seam_allowances.get(&edge).copied() {
+            polygon.seam_allowances.insert(name.clone(), width);
+        }
+        if let Some(notches) = polygon.notches.remove(&edge) {
+            // The split point is exact on a cubic, but the two halves are
+            // sampled as separate boundaries. Use their actual sampled
+            // lengths, not the requested split length, so a curved-edge
+            // notch keeps its material arclength position.
+            let left_len = edge_length(polygon, &edge)?;
+            let right_len = edge_length(polygon, &name)?;
+            let (mut left, mut right) = (Vec::new(), Vec::new());
+            for mut notch in notches {
+                let along = notch.at * current;
+                if along < at_m {
+                    notch.at = along / left_len;
+                    left.push(notch);
+                } else {
+                    notch.at = (along - at_m) / right_len;
+                    right.push(notch);
+                }
+            }
+            for (target, list) in [(edge.clone(), left), (name.clone(), right)] {
+                if !list.is_empty() {
+                    polygon.notches.insert(target, list);
+                }
+            }
+        }
+        // Splitting keeps the same outline, so keep its material frame
+        // and dimensions even though the control polygon has changed.
+        (index + 1, name)
+    };
+    Ok(BoundarySplit { child, new_point })
+}
+
 /// Run a staged ruler through the same operation-specific migrations and
 /// rejection gates as saved measurements. The temporary record exists only in
 /// the candidate transaction, never in the returned document or history.
@@ -2061,145 +2208,10 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             selected = Some(panel);
         }
         Command::SplitBoundary { panel, edge, at_m } => {
-            if !at_m.is_finite() || at_m <= 0. {
-                return Err("Insert position must be a positive finite length".into());
-            }
-            if seam_uses(&template, &panel, &edge) {
-                return Err(
-                    "This boundary belongs to a seam; delete the seam before splitting it".into(),
-                );
-            }
-            if template
-                .panels
-                .iter()
-                .find(|p| p.id == panel)
-                .and_then(|p| p.polygon.as_ref())
-                .is_some_and(|polygon| polygon.target_lengths.contains_key(&edge))
-            {
-                return Err(
-                    "This boundary has a target length; clear the target before splitting it"
-                        .into(),
-                );
-            }
-            let p = template
-                .panels
-                .iter_mut()
-                .find(|p| p.id == panel)
-                .ok_or("Panel not found")?;
-            let index = {
-                let polygon = p
-                    .polygon
-                    .as_mut()
-                    .ok_or("This panel has no editable contour")?;
-                let index = polygon
-                    .edges
-                    .iter()
-                    .position(|name| name == &edge)
-                    .ok_or("Boundary not found")?;
-                let current = edge_length(polygon, &edge)?;
-                let previous_polygon = polygon.clone();
-                if at_m >= current {
-                    return Err("Insert position is beyond the boundary".into());
-                }
-                if polygon.notches.get(&edge).is_some_and(|notches| {
-                    notches.iter().any(|notch| {
-                        (notch.at * current - at_m).abs() < markings::end_clearance(notch)
-                    })
-                }) {
-                    return Err(
-                        "Split would place a notch within 1 mm of a boundary end or inside its V span; move or remove it first"
-                            .into(),
-                    );
-                }
-                let count = polygon.points.len();
-                let a = polygon.points[index];
-                let b = polygon.points[(index + 1) % count];
-                let controls = polygon.curves.get(&edge).copied();
-                let (point, first, second) = match controls {
-                    // Any cubic parameter splits the outline exactly; the point
-                    // is placed at the requested material arclength.
-                    Some([c1, c2]) => {
-                        let cubic = [a, c1, c2, b];
-                        let parameter = parameter_at_arclength(cubic, at_m)?;
-                        let (left, right) = split_cubic(cubic, parameter);
-                        (left[3], [left[1], left[2]], [right[1], right[2]])
-                    }
-                    None => {
-                        let t = at_m / current;
-                        (a.lerp(b, t), [DVec2::ZERO; 2], [DVec2::ZERO; 2])
-                    }
-                };
-                polygon.points.insert(index + 1, point);
-                let name = split_edge_name(&polygon.edges, &edge);
-                polygon.edges.insert(index + 1, name.clone());
-                if controls.is_some() {
-                    polygon.curves.insert(edge.clone(), first);
-                    polygon.curves.insert(name.clone(), second);
-                }
-                // Resolve old stations before replacing their boundary. Curved
-                // halves have independent flattening, so project onto the known
-                // child and bound the geometric drift by two flatten tolerances.
-                let split_geometry = polygon.clone();
-                for measurement in &mut polygon.measurements {
-                    for anchor in [&mut measurement.a, &mut measurement.b] {
-                        if let crate::garment::polygon::MeasurementAnchor::Barycentric {
-                            vertices,
-                            ..
-                        } = anchor
-                        {
-                            for v in vertices.iter_mut() {
-                                if v.edge == edge && v.end {
-                                    v.edge = name.clone();
-                                }
-                            }
-                        } else if anchor.uses_edge(&edge) {
-                            *anchor = geometry::split_measurement_anchor(
-                                &previous_polygon,
-                                &split_geometry,
-                                anchor,
-                                [&edge, &name],
-                                at_m,
-                                current,
-                            )?;
-                        }
-                    }
-                }
-                // Carry draft markings across the split. The two halves are the
-                // same physical boundary, so the allowance applies to both, and
-                // each notch keeps its material arclength position.
-                if let Some(width) = polygon.seam_allowances.get(&edge).copied() {
-                    polygon.seam_allowances.insert(name.clone(), width);
-                }
-                if let Some(notches) = polygon.notches.remove(&edge) {
-                    // The split point is exact on a cubic, but the two halves are
-                    // sampled as separate boundaries. Use their actual sampled
-                    // lengths, not the requested split length, so a curved-edge
-                    // notch keeps its material arclength position.
-                    let left_len = edge_length(polygon, &edge)?;
-                    let right_len = edge_length(polygon, &name)?;
-                    let (mut left, mut right) = (Vec::new(), Vec::new());
-                    for mut notch in notches {
-                        let along = notch.at * current;
-                        if along < at_m {
-                            notch.at = along / left_len;
-                            left.push(notch);
-                        } else {
-                            notch.at = (along - at_m) / right_len;
-                            right.push(notch);
-                        }
-                    }
-                    for (target, list) in [(edge.clone(), left), (name.clone(), right)] {
-                        if !list.is_empty() {
-                            polygon.notches.insert(target, list);
-                        }
-                    }
-                }
-                index + 1
-            };
-            // Splitting keeps the same outline, so keep its material frame
-            // and dimensions even though the control polygon has changed.
+            let split = split_boundary_polygon(&mut template, &panel, edge.clone(), at_m)?;
+            seam_split::after_origin_split(&mut template, &panel, &edge, &split.child)?;
             selected = Some(panel);
-            new_point = Some(index);
+            new_point = Some(split.new_point);
         }
         Command::DartCutSew {
             panel,

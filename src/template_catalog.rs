@@ -14,7 +14,7 @@ pub struct Entry {
     pub description: &'static str,
     pub source: &'static str,
     pub license: &'static str,
-    json: &'static str,
+    document: &'static str,
 }
 macro_rules! entry {
     ($id:literal, $title:literal, $description:literal, $file:literal) => {
@@ -24,7 +24,7 @@ macro_rules! entry {
             description: $description,
             source: concat!("ClothCraft / examples/templates/", $file),
             license: "MIT",
-            json: include_str!(concat!("../examples/templates/", $file)),
+            document: include_str!(concat!("../examples/templates/", $file)),
         }
     };
 }
@@ -33,37 +33,37 @@ pub static ENTRIES: &[Entry] = &[
         "tshirt",
         "T-shirt",
         "Two-panel engineering fixture for the 1.75 m MakeHuman mannequin. Not a graded sewing pattern.",
-        "tshirt.json"
+        "tshirt.usda"
     ),
     entry!(
         "dress",
         "Dress",
         "Two-panel dress fixture for the 1.75 m MakeHuman mannequin. Check placement on other avatars.",
-        "dress.json"
+        "dress.usda"
     ),
     entry!(
         "curved",
         "Curved panels",
         "Cubic boundary example for editing and sewing experiments.",
-        "curved-panels.json"
+        "curved-panels.usda"
     ),
     entry!(
         "two-panel",
         "Two rectangles",
         "Simple nonmatching seam example. Panels may be pinned; inspect before simulating.",
-        "two-panel.json"
+        "two-panel.usda"
     ),
     entry!(
         "partial-chain",
         "Partial and chained seams",
         "Small fixture illustrating partial boundaries and ordered seam chains.",
-        "partial-chain.json"
+        "partial-chain.usda"
     ),
     entry!(
         "local-ease",
         "Local easing",
         "Nonuniform seam correspondence example with explicit easing.",
-        "local-ease.json"
+        "local-ease.usda"
     ),
 ];
 
@@ -94,15 +94,16 @@ impl Selection {
             .find(|e| e.id == id)
             .ok_or("Unknown bundled template")?;
         Self::parse(
-            entry.json.as_bytes(),
+            entry.document.as_bytes(),
             entry.title.into(),
             entry.source.into(),
             entry.license.into(),
             entry.description.into(),
         )
     }
-    /// User-supplied native template JSON. No claim is made about its license.
-    /// File picking and bounded file reading belong to the UI adapter.
+    /// User-supplied template document, USD (`.usda`) or legacy JSON. No claim
+    /// is made about its license. File picking and bounded file reading belong
+    /// to the UI adapter.
     pub fn external(bytes: &[u8], source: String) -> Result<Self, String> {
         Self::parse(
             bytes,
@@ -123,8 +124,14 @@ impl Selection {
         if bytes.len() > 8 * 1024 * 1024 {
             return Err("Template exceeds the 8 MiB import limit".into());
         }
-        let template: GarmentTemplate =
-            serde_json::from_slice(bytes).map_err(|e| format!("Invalid template: {e}"))?;
+        let template: GarmentTemplate = if bytes.starts_with(b"#usda") {
+            let text = std::str::from_utf8(bytes)
+                .map_err(|e| format!("Template is not valid UTF-8: {e}"))?;
+            crate::usd_document::template_from_usda(text)
+                .map_err(|e| format!("Invalid template: {e}"))?
+        } else {
+            serde_json::from_slice(bytes).map_err(|e| format!("Invalid template: {e}"))?
+        };
         let compiled = template.compile()?;
         let mut preview = Vec::new();
         for (index, panel) in template.panels.iter().enumerate() {

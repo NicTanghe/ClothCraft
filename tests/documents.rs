@@ -59,7 +59,7 @@ fn failed_save_preserves_previous_document() {
 #[test]
 fn template_accepts_current_format_and_rejects_unknown_format() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("template.json");
+    let path = directory.path().join("template.usda");
     let mut template = GarmentTemplate::two_panel_demo();
     assert_eq!(template.format, "clothcraft-template");
     template.save(&path).unwrap();
@@ -110,13 +110,15 @@ fn template_and_project_saves_replace_the_previous_file() {
         (file, link)
     };
 
-    let (file, link) = seed("template.json");
+    let (file, link) = seed("template.usda");
     let template = GarmentTemplate::two_panel_demo();
     template.save(&file).unwrap();
     assert_eq!(fs::read(&link).unwrap(), previous);
     assert_eq!(
         fs::read(&file).unwrap(),
-        serde_json::to_vec_pretty(&template).unwrap()
+        clothcraft::usd_document::template_to_usda(&template)
+            .unwrap()
+            .into_bytes()
     );
     GarmentTemplate::load(&file).unwrap();
 

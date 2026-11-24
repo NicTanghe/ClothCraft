@@ -12,7 +12,7 @@ try {
     cargo clippy --locked --no-default-features --all-targets -j $Jobs -- -D warnings
     if ($LASTEXITCODE -ne 0) { throw 'CPU clippy failed' }
     foreach ($name in @('two-panel', 'local-ease', 'tshirt', 'dress', 'curved-panels', 'partial-chain')) {
-        cargo run --locked --no-default-features -j $Jobs --bin cloth-template -- validate "examples/templates/$name.json"
+        cargo run --locked --no-default-features -j $Jobs --bin cloth-template -- validate "examples/templates/$name.usda"
         if ($LASTEXITCODE -ne 0) { throw "Template validation failed: $name" }
     }
 } finally {

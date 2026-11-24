@@ -8,7 +8,7 @@ A real native-window run exercises the new drafting workflow; the screenshots be
 
 - **68 CPU tests passed** with `scripts/check-cpu.ps1`: physical derivatives/contact invariants plus the authoring and new board/curve tests.
 - Rustfmt, CPU Clippy and desktop Clippy with `-D warnings` passed; release `cloth-fit` built.
-- Five template fixtures validated, including [curved-panels.json](../examples/templates/curved-panels.json), saved from the native workflow (946 vertices / 1,710 triangles / 2 panels / 1 seam).
+- Five template fixtures validated, including [curved-panels.json](../examples/templates/curved-panels.usda), saved from the native workflow (946 vertices / 1,710 triangles / 2 panels / 1 seam).
 - The first publication's Linux CI passed its 63 tests but failed on Rust 1.99's new `chunks_exact_to_as_chunks` lint. The indicated test expression is corrected here without changing its assertion; its 11-test suite was rerun locally. Check GitHub Actions for the current commit's Linux result.
 
 New properties: curve-to-chord error bounded against dense cubic samples, collinear overshoot retained, semantic edge identity/length/mass retained through remeshing, exact JSON round-trip topology, atomic rejection of incompatible sewing edits, and 2D layout changes preserving physical cache/state. Rebasing an edited contour preserves untouched world anchors.

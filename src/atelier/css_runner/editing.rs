@@ -96,6 +96,7 @@ pub(super) fn install_authoring_edit(
                 state.shading,
             );
         }
+        state.sync_usd_wireframe();
         state.send_control_state(false);
     }
 

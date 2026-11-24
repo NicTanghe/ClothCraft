@@ -381,7 +381,7 @@ fn test_css_runner_headless_frame_and_rendering() {
     // Save the visible accepted checkpoint, not the launch-time project cache.
     app.state_mut().save_project();
     let saved =
-        FittingProject::load(&app.state().files.output.join("fitting-project.json")).unwrap();
+        FittingProject::load(&app.state().files.output.join("fitting-project.usda")).unwrap();
     let checkpoint = saved.state.unwrap();
     assert_eq!(checkpoint.x, app.state().scene.state.x);
     assert_eq!(checkpoint.v, app.state().scene.state.v);
@@ -716,11 +716,11 @@ fn viewport_shading_toggle_rewrites_usd_normals() {
         app.state().scene.garment.panels[0].vertices.len()
     );
 
-    let flat_button = app.find_element_bounds_by_id("#shading-flat").unwrap();
+    let shading_button = app.find_element_bounds_by_id("#shading-toggle").unwrap();
     assert!(cssimpler::renderer::dispatch_click(
         app.scene(),
-        flat_button.x + flat_button.width * 0.5,
-        flat_button.y + flat_button.height * 0.5
+        shading_button.x + shading_button.width * 0.5,
+        shading_button.y + shading_button.height * 0.5
     ));
     app.frame(FrameInfo {
         delta: Duration::from_millis(16),
@@ -743,11 +743,10 @@ fn viewport_shading_toggle_rewrites_usd_normals() {
             .all(|corner| corner[0] == corner[1] && corner[1] == corner[2])
     );
 
-    let smooth_button = app.find_element_bounds_by_id("#shading-smooth").unwrap();
     assert!(cssimpler::renderer::dispatch_click(
         app.scene(),
-        smooth_button.x + smooth_button.width * 0.5,
-        smooth_button.y + smooth_button.height * 0.5
+        shading_button.x + shading_button.width * 0.5,
+        shading_button.y + shading_button.height * 0.5
     ));
     app.frame(FrameInfo {
         delta: Duration::from_millis(16),
@@ -774,4 +773,294 @@ fn viewport_shading_toggle_rewrites_usd_normals() {
     let (interpolation, moved) = read(app.state());
     assert_eq!(interpolation.as_str(), "vertex");
     assert_ne!(moved, smooth);
+}
+
+#[test]
+fn viewport_wireframe_toggle_strokes_only_garment_panels() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let stylesheet = load_studio_stylesheet().expect("load studio stylesheet");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let avatar = dir.path().join("avatar.obj");
+    std::fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").expect("write avatar");
+    let project = FittingProject::basic(GarmentKind::Tshirt, 1, avatar);
+    let scene = project.compile().expect("compile scene");
+    let output = dir.path().join("wireframe_out");
+    let files = DocumentFiles {
+        output: output.clone(),
+        source: None,
+        modified: false,
+    };
+    let (tx, latest) = worker::start_cpu().expect("start cpu worker");
+    let state = CssRunnerState::new(project, scene, files, tx, latest);
+    let toggle = state.viewport_wireframe.clone();
+    let mut app = create_runner_app(state, &stylesheet);
+    app.set_viewport(cssimpler::renderer::ViewportSize::new(1600, 980));
+    app.frame(FrameInfo {
+        delta: Duration::ZERO,
+        frame_index: 0,
+    });
+
+    let shared = || *toggle.lock().unwrap_or_else(|e| e.into_inner());
+
+    // The display stage carries the garment panels and the collider, and no
+    // longer a ribbon wireframe mesh: the stroke lives in the GPU renderer.
+    let scene = app
+        .state()
+        .usd_scene
+        .as_ref()
+        .expect("viewport scene")
+        .clone();
+    let stage = scene.stage();
+    assert!(stage.root_layer().is_anonymous());
+    assert!(!output.join("runner_preview.usda").exists());
+    for path in [
+        "/World/Garment",
+        "/Collider",
+        "/InfinityCove",
+        clothcraft::usd_scene::VIEWPORT_CAMERA_PATH,
+    ] {
+        assert!(
+            stage.prim(path).unwrap().is_valid().unwrap(),
+            "missing {path}"
+        );
+    }
+
+    assert!(!app.state().wireframe);
+    assert!(!shared().enabled);
+    assert_eq!(shared().colour, 0);
+    assert_eq!(shared().width_px, 2.0);
+    let ui = super::super::build_runner_ui(app.state());
+    assert_eq!(
+        find_title(&ui, "wireframe-toggle"),
+        Some("Show cloth wireframe")
+    );
+    assert_eq!(
+        find_title(&ui, "shading-toggle"),
+        Some("Smooth shading — click for flat shading")
+    );
+
+    let button = app.find_element_bounds_by_id("#wireframe-toggle").unwrap();
+    assert!(cssimpler::renderer::dispatch_click(
+        app.scene(),
+        button.x + button.width * 0.5,
+        button.y + button.height * 0.5
+    ));
+    app.frame(FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 1,
+    });
+    assert!(app.state().wireframe);
+    assert!(shared().enabled);
+    let ui = super::super::build_runner_ui(app.state());
+    assert_eq!(
+        find_title(&ui, "wireframe-toggle"),
+        Some("Hide cloth wireframe")
+    );
+
+    // Toggling the stroke must not re-author overlay geometry into the stage.
+    assert!(!stage.prim("/World/ClothWire").unwrap().is_valid().unwrap());
+
+    assert!(cssimpler::renderer::dispatch_click(
+        app.scene(),
+        button.x + button.width * 0.5,
+        button.y + button.height * 0.5
+    ));
+    app.frame(FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 2,
+    });
+    assert!(!app.state().wireframe);
+    assert!(!shared().enabled);
+}
+
+fn find_title<'a>(node: &'a cssimpler::core::Node, id: &str) -> Option<&'a str> {
+    match node {
+        cssimpler::core::Node::Element(element) => {
+            if element.id.as_deref() == Some(id) {
+                return element.attribute("title");
+            }
+            for child in &element.children {
+                if let Some(title) = find_title(child, id) {
+                    return Some(title);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+#[test]
+fn view_cube_clicks_use_native_viewport_coordinates() {
+    use super::super::input::handle_runner_event;
+    use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
+    use clothcraft::render::PresetView;
+    use glam::Vec3;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let stylesheet = load_studio_stylesheet().unwrap();
+    let mut app = create_runner_app(selection_test_state(dir.path()), &stylesheet);
+    for (width, height) in [(1600, 980), (1024, 768)] {
+        let size = cssimpler::renderer::ViewportSize::new(width, height);
+        app.set_viewport(size);
+        handle_runner_event(
+            app.state_mut(),
+            &cssimpler::renderer::EngineEvent::ViewportChanged(
+                cssimpler::renderer::ViewportEvent {
+                    width,
+                    height,
+                    scale_factor: 1.0,
+                },
+            ),
+        );
+        app.frame(FrameInfo {
+            delta: Duration::from_millis(16),
+            frame_index: 0,
+        });
+        let host = app
+            .find_element_bounds_by_id("#runner-viewport-3d-scene")
+            .unwrap();
+        let centre_x = host.x + host.width - 62.75;
+        let centre_y = host.y + 62.75;
+        let state = app.state_mut();
+        let target = state.camera.target;
+        let distance = state.camera.distance;
+        for (x, y, direction) in [
+            (centre_x, centre_y, Vec3::Z),
+            (centre_x + 25.0, centre_y, (Vec3::X + Vec3::Z).normalize()),
+            (centre_x + 25.0, centre_y - 25.0, Vec3::ONE.normalize()),
+        ] {
+            state.camera.apply_preset(PresetView::Front);
+            handle_runner_event(state, &pointer_move_ev(x, y));
+            state.sync_view_cube_hover();
+            assert!(
+                state
+                    .viewport_cube_hover
+                    .get()
+                    .unwrap()
+                    .abs_diff_eq(direction, 1e-5)
+            );
+            assert!(handle_runner_event(state, &pointer_btn_ev(true)));
+            handle_runner_event(state, &pointer_btn_ev(false));
+            assert!(state.camera.direction().abs_diff_eq(direction, 1e-5));
+            assert!(!state.dragging_3d);
+            assert_eq!(state.camera.target, target);
+            assert_eq!(state.camera.distance, distance);
+        }
+        handle_runner_event(state, &cssimpler::renderer::EngineEvent::PointerLeft);
+        state.sync_view_cube_hover();
+        assert_eq!(state.viewport_cube_hover.get(), None);
+    }
+}
+
+#[test]
+fn shadow_sliders_live_in_settings_and_update_independently() {
+    use super::super::input::handle_runner_event;
+    use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
+    use cssimpler::core::RenderNode;
+    use cssimpler::renderer::{
+        EngineEvent, SceneProvider, ViewportEvent, ViewportSize, gpu::usd::UsdShadowSettings,
+    };
+
+    fn node<'a>(roots: &'a [RenderNode], id: &str) -> Option<&'a RenderNode> {
+        roots.iter().find_map(|root| {
+            if root.id() == Some(id) {
+                Some(root)
+            } else {
+                node(&root.children, id)
+            }
+        })
+    }
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let stylesheet = load_studio_stylesheet().unwrap();
+    let state = selection_test_state(dir.path());
+    let mut app = create_runner_app(state, &stylesheet);
+    let (wake, updates) = std::sync::mpsc::channel();
+    app.install_update_wake(std::sync::Arc::new(move || {
+        let _ = wake.send(());
+    }));
+    let frame = FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 0,
+    };
+    app.set_viewport(ViewportSize::new(1600, 980));
+    app.frame(frame);
+    assert!(
+        app.find_element_bounds_by_id("#shadow-softness-slider")
+            .is_none()
+    );
+
+    for (width, height) in [(1600, 980), (1024, 768), (800, 600)] {
+        app.set_viewport(ViewportSize::new(width, height));
+        handle_runner_event(
+            app.state_mut(),
+            &EngineEvent::ViewportChanged(ViewportEvent {
+                width,
+                height,
+                scale_factor: 1.0,
+            }),
+        );
+        app.state_mut().settings_open = true;
+        app.invalidate(cssimpler::app::Invalidation::Structure);
+        app.frame(frame);
+        let panel = app.find_element_bounds_by_id("#settings-panel").unwrap();
+
+        let defaults = || UsdShadowSettings {
+            resolution: 2048,
+            ..Default::default()
+        };
+        for (id, drag_outside) in [
+            ("shadow-softness-slider", false),
+            ("shadow-strength-slider", true),
+        ] {
+            let track = node(app.scene(), id).unwrap().layout;
+            assert!(track.x >= panel.x && track.x + track.width <= panel.x + panel.width);
+            assert!(track.y >= panel.y && track.y + track.height <= panel.y + panel.height);
+            let y = track.y + track.height / 2.0;
+            handle_runner_event(
+                app.state_mut(),
+                &pointer_move_ev(track.x + track.width * 0.5, y),
+            );
+            handle_runner_event(app.state_mut(), &pointer_btn_ev(true));
+            while updates.try_recv().is_ok() {}
+            node(app.scene(), id).unwrap().handlers.mousedown().unwrap()();
+            assert!(
+                updates.try_recv().is_ok(),
+                "slider press should wake the paused editor"
+            );
+            app.frame(frame);
+            let settings = app.state().viewport_shadow_levels.get().apply(defaults());
+            if drag_outside {
+                assert!(
+                    (settings.strength - 0.50).abs() <= 0.01,
+                    "{track:?} {settings:?}"
+                );
+                handle_runner_event(app.state_mut(), &pointer_move_ev(track.x - 20.0, y));
+                assert!(
+                    updates.try_recv().is_ok(),
+                    "slider drag should wake the paused editor"
+                );
+                app.frame(frame);
+            } else {
+                assert!(
+                    (settings.light_radius - 0.20).abs() < 0.005,
+                    "{track:?} {settings:?}"
+                );
+            }
+            assert!(handle_runner_event(app.state_mut(), &pointer_btn_ev(false)));
+        }
+        let settings = app.state().viewport_shadow_levels.get().apply(defaults());
+        assert_eq!(settings.strength, 0.0);
+        assert!((settings.light_radius - 0.20).abs() < 0.005);
+        assert!(!app.state().dragging_3d && !app.state().pointer_down);
+    }
 }

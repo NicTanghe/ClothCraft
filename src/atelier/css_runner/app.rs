@@ -1,8 +1,9 @@
 //! Native application creation and runner entry point.
 
-use super::super::{DocumentFiles, RunOptions, perf, usd_smoke, worker};
+use super::super::{DocumentFiles, RunOptions, perf, usd_smoke, viewport_wireframe, worker};
 use super::actions::update_runner;
 use super::input::handle_runner_event;
+use super::preferences::PreferenceStore;
 use super::state::CssRunnerState;
 use super::ui::shell::build_runner_ui;
 use clothcraft::css_ui::load_studio_stylesheet;
@@ -10,6 +11,9 @@ use clothcraft::fitting::{FittingProject, FittingScene};
 use clothcraft::gpu_avbd::ContactMethod;
 use cssimpler::app::{App, Invalidation, RenderMode};
 use cssimpler::core::Node;
+use cssimpler::renderer::gpu::usd::{
+    UsdCameraMode, UsdRenderer, UsdShadowSettings, UsdStudioLighting,
+};
 use cssimpler::renderer::{FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
 
@@ -24,25 +28,31 @@ pub fn create_runner_app<'a>(
     fn(&CssRunnerState) -> Node,
     Invalidation,
 > {
-    let preview_path = state.files.output.join("runner_preview.usda");
-    if let Some(parent) = preview_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let usda = clothcraft::usd_scene::garment_stage_usda(&state.scene.garment, &state.scene.state)
-        .unwrap_or_default();
-    let usda = clothcraft::usd_scene::append_viewport_surface(usda, &state.scene.collider.surface);
-    let _ = std::fs::write(&preview_path, usda);
+    use clothcraft::usd_scene;
 
-    let usd_scene = cssimpler::renderer::gpu::usd::UsdScene::open(&preview_path)
-        .expect("load generated USD viewport scene");
+    let usda = usd_scene::garment_stage_usda(&state.scene.garment, &state.scene.state)
+        .expect("publish garment viewport geometry");
+    let usda = usd_scene::append_viewport_surface(usda, state.avatar_display_surface());
+    let usda = usd_scene::append_infinity_cove(usda, state.studio_backdrop_theme());
+    let usd_scene = usd_scene::viewport_scene_from_usda(&usda).expect("create USD viewport scene");
     if let Err(err) = clothcraft::usd_scene::init_viewport_camera(&usd_scene, &state.camera) {
         state.status_message = format!("USD camera init error: {err}");
     }
     state.usd_scene = Some(usd_scene.clone());
+    state.viewport_camera.replace(state.camera.clone());
+    let camera = state.viewport_camera.clone();
+    let cube_hover = state.viewport_cube_hover.clone();
 
     let smoke = state.smoke;
     let smoke_done = state.smoke_done.clone();
     let smoke_output = state.files.output.join("ui.png");
+    // Clone the viewport handles before `state` moves into the application.
+    let wireframe = state.viewport_wireframe.clone();
+    let shadow_levels = state.viewport_shadow_levels.clone();
+    let shadow_supported = state.viewport_shadow_supported.clone();
+    let redraw_slot = state.viewport_redraw.clone();
+    let update = state.update_handle.clone();
+    let continuous = smoke || state.perf_test;
     let app = App::new(
         state,
         stylesheet,
@@ -52,32 +62,58 @@ pub fn create_runner_app<'a>(
     .with_event_handler(handle_runner_event)
     .with_render_mode(RenderMode::OnInvalidation)
     .with_frame_aligned_input(true)
-    .with_continuous_updates(true)
+    .with_update_handle(update)
+    .with_update_deadline(CssRunnerState::next_update_at)
+    .with_continuous_updates(continuous)
     .with_exit_when(|state| state.smoke_done.get() || state.should_exit);
 
-    let cam_mode = cssimpler::renderer::gpu::usd::UsdCameraMode::Authored(
-        clothcraft::usd_scene::VIEWPORT_CAMERA_PATH.into(),
-    );
-    if smoke {
-        app.with_gpu_viewport(
-            "runner-viewport-3d-scene",
-            Default::default(),
-            move |init| {
-                let redraw = init.redraw.clone();
-                let renderer =
-                    cssimpler::renderer::gpu::usd::UsdRenderer::new(init, usd_scene, cam_mode)?;
+    let cam_mode = UsdCameraMode::Authored(clothcraft::usd_scene::VIEWPORT_CAMERA_PATH.into());
+    app.with_gpu_viewport(
+        "runner-viewport-3d-scene",
+        Default::default(),
+        move |init| {
+            let redraw = init.redraw.clone();
+            *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
+            let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
+            let mut renderer = UsdRenderer::new(init, usd_scene, cam_mode)?;
+            shadow_supported.set(renderer.supports_shadow_mapping());
+            if shadow_supported.get() {
+                renderer.set_studio_lighting(Some(UsdStudioLighting {
+                    key_intensity: 0.76,
+                    key_tint: [1.06, 0.99, 0.87],
+                    toward_fill: [0.70, 0.45, 0.55],
+                    fill_intensity: 0.34,
+                    fill_tint: [0.84, 0.94, 1.08],
+                    ambient: 0.24,
+                    floor: false,
+                    shadows: Some(shadow_levels.get().apply(UsdShadowSettings {
+                        resolution: 2048,
+                        ..UsdShadowSettings::default()
+                    })),
+                    ..UsdStudioLighting::default()
+                }))?;
+            }
+            let viewport = viewport_wireframe::RunnerViewport::new(
+                renderer,
+                wireframe,
+                cube,
+                camera,
+                cube_hover,
+                shadow_levels,
+            );
+            if smoke {
                 Ok(Box::new(usd_smoke::SmokeViewport {
-                    renderer,
+                    viewport,
                     output: smoke_output,
                     done: smoke_done,
                     redraw,
                     frames: 0,
                 }))
-            },
-        )
-    } else {
-        app.with_usd_viewport("runner-viewport-3d-scene", usd_scene, cam_mode)
-    }
+            } else {
+                Ok(Box::new(viewport))
+            }
+        },
+    )
 }
 
 pub(super) fn init_gpu_device() -> Result<(wgpu::Device, wgpu::Queue), String> {
@@ -118,6 +154,14 @@ pub fn run(
     } else {
         ContactMethod::Ipc
     };
+    // Smoke and performance runs keep deterministic defaults and never write to
+    // the real user profile.
+    if !smoke && !perf_test {
+        match PreferenceStore::user() {
+            Ok(store) => state.attach_preferences(store),
+            Err(error) => state.status_message = format!("Settings can't be saved: {error}"),
+        }
+    }
     if perf_test {
         state.perf = Some(perf::PerfRun::new());
         state.playing = true;

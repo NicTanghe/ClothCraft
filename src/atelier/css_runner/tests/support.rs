@@ -58,7 +58,7 @@ pub(super) fn selection_test_state(dir: &std::path::Path) -> CssRunnerState {
     fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").unwrap();
     let mut project = FittingProject::basic(GarmentKind::Tshirt, 0, avatar);
     project.template = GarmentTemplate::load(std::path::Path::new(
-        "examples/templates/curved-panels.json",
+        "examples/templates/curved-panels.usda",
     ))
     .unwrap();
     project.template.seams.clear();

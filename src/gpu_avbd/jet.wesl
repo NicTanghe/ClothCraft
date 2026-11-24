@@ -1,7 +1,9 @@
+import package::main::{Term, at};
+
 // Second-order local AD for scalar material factors, at one vertex (3 DOFs).
-struct Jet { v:f32, g:vec3f, h:mat3x3f }
-const I=mat3x3f(vec3f(1,0,0),vec3f(0,1,0),vec3f(0,0,1));
-fn outer(a:vec3f,b:vec3f)->mat3x3f {return mat3x3f(a*b.x,a*b.y,a*b.z);}
+public struct Jet { v:f32, g:vec3f, h:mat3x3f }
+public const I=mat3x3f(vec3f(1,0,0),vec3f(0,1,0),vec3f(0,0,1));
+public fn outer(a:vec3f,b:vec3f)->mat3x3f {return mat3x3f(a*b.x,a*b.y,a*b.z);}
 fn jc(v:f32)->Jet {return Jet(v,vec3f(0),mat3x3f());}
 fn ja(a:Jet,b:Jet)->Jet {return Jet(a.v+b.v,a.g+b.g,a.h+b.h);}
 fn js(a:Jet,b:Jet)->Jet {return Jet(a.v-b.v,a.g-b.g,a.h-b.h);}
@@ -21,7 +23,7 @@ fn jd(a:JV,b:JV)->Jet {return ja(ja(jm(a.x,b.x),jm(a.y,b.y)),jm(a.z,b.z));}
 fn jcross(a:JV,b:JV)->JV {return JV(js(jm(a.y,b.z),jm(a.z,b.y)),js(jm(a.z,b.x),jm(a.x,b.z)),js(jm(a.x,b.y),jm(a.y,b.x)));}
 fn normal(a:JV)->JV {return vj(a,inv(root(jd(a,a))));}
 // U = k/2 C². Finite AVBD uses no hard-constraint multiplier for these factors.
-fn factor(t:Term,v:u32,alpha:f32)->Jet {
+public fn factor(t:Term,v:u32,alpha:f32)->Jet {
     var x:array<JV,4>;
     for(var j=0u;j<4u;j++) {
         let p=at(t.ids[j],alpha);
@@ -50,7 +52,7 @@ fn factor(t:Term,v:u32,alpha:f32)->Jet {
     return value;
 }
 // Scalar objective evaluation: no local AD arrays or derivative work in Armijo.
-fn factor_value(t:Term,alpha:f32)->f32 {
+public fn factor_value(t:Term,alpha:f32)->f32 {
     let x0=at(t.ids.x,alpha);let x1=at(t.ids.y,alpha);
     if t.info.x==0u {
         let e=x1-x0;let f=at(t.ids.z,alpha)-x0;

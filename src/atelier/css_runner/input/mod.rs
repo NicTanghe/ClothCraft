@@ -18,6 +18,13 @@ pub(super) mod scroll;
 /// latest state once. Press, release, keyboard, text and focus events stay
 /// immediate.
 pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
+    match event {
+        EngineEvent::PointerMoved { .. } => state.cube_pointer_present = true,
+        EngineEvent::PointerLeft | EngineEvent::FocusChanged(false) | EngineEvent::Suspended => {
+            state.cube_pointer_present = false;
+        }
+        _ => {}
+    }
     state.frame_drag.feed(event);
     let handled = route_runner_event(state, event);
     if handled
@@ -27,6 +34,7 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
         )
     {
         state.input_dirty = true;
+        state.update_handle.request_update();
         false
     } else {
         handled
@@ -36,33 +44,32 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     use std::sync::atomic::Ordering;
     let text_editing = state.numeric_input_active.load(Ordering::Relaxed);
-    // A press ends the pending Arrange edit. The commit is queued behind any
-    // keystrokes still waiting, so they are included; it may run after the
-    // press changed the selection, which the commit keeps.
-    if (text_editing || state.placement_draft.is_some())
-        && matches!(
-            event,
-            EngineEvent::PointerButton {
-                state: cssimpler::renderer::ButtonState::Pressed,
-                ..
-            }
-        )
-    {
-        state.actions.push(super::actions::RunnerAction::Ui(
-            super::actions::RunnerUiOp::CommitPlacement,
-        ));
-    }
-    if number::handle_number_event(state, event) {
-        return true;
-    }
-    // Native numeric text inputs own keyboard events until the next pointer press.
-    if matches!(
+    let pointer_pressed = matches!(
         event,
         EngineEvent::PointerButton {
             state: cssimpler::renderer::ButtonState::Pressed,
             ..
         }
-    ) {
+    );
+    let tab_pressed = matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into()));
+    // A pointer press or Tab ends the pending Arrange edit. Queue the commit
+    // behind waiting keystrokes so it applies the latest value and keeps any
+    // selection change from the same event.
+    if (pointer_pressed && (text_editing || state.placement_draft.is_some()))
+        || (tab_pressed && text_editing)
+    {
+        state.actions.push(super::actions::RunnerAction::Ui(
+            super::actions::RunnerUiOp::CommitPlacement,
+        ));
+        state.update_handle.request_update();
+    }
+    if number::handle_number_event(state, event)
+        || super::shadow_controls::handle_event(state, event)
+    {
+        return true;
+    }
+    // Native numeric text inputs own keyboard events until the next pointer press.
+    if pointer_pressed {
         state.mesh_input_focus = false;
     }
     if let EngineEvent::Key(k) = event
@@ -76,8 +83,7 @@ fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     }
 
     // Tab enters the native input cycle; preserve keyboard ownership there.
-    if matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into()))
-    {
+    if tab_pressed {
         state.numeric_input_active.store(true, Ordering::Relaxed);
         return false;
     }
@@ -89,6 +95,7 @@ fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
             state.actions.push(super::actions::RunnerAction::Ui(
                 super::actions::RunnerUiOp::CommitPlacement,
             ));
+            state.update_handle.request_update();
         }
         return false;
     }

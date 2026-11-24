@@ -293,7 +293,7 @@ fn numeric_dimensions_keep_the_exact_millimetre_size_through_save_load() {
     assert_eq!(read.compile().unwrap().mesh.uv, edit.garment.mesh.uv);
     // The product path is a file: save/load must not round the size either.
     let path =
-        std::env::temp_dir().join(format!("clothcraft-dimensions-{}.json", std::process::id()));
+        std::env::temp_dir().join(format!("clothcraft-dimensions-{}.usda", std::process::id()));
     edit.template.save(&path).unwrap();
     let loaded = GarmentTemplate::load(&path).unwrap();
     std::fs::remove_file(&path).unwrap();

@@ -1,3 +1,7 @@
+import package::reduce_state::{energies, gradients, hessians};
+@if(subgroups) import package::reduce_subgroup::{reduce_energy, reduce_system};
+@else import package::reduce_portable::{reduce_energy, reduce_system};
+
 // Independent VBD implementation. Exact energy/gradient; SPD Gauss-Newton
 // local Hessians. OGC candidates and conservative radii are supplied by f64 CPU.
 struct Term { ids:vec4u, info:vec4u, a:vec4f, b:vec4f, c:vec4f }
@@ -166,11 +170,7 @@ fn predict(@builtin(global_invocation_id) id:vec3u) {
 }
 
 // One 32-lane workgroup per vertex, rather than one serial invocation.
-// Coloring still prevents all inter-group energy dependencies. Reductions are
-// explicitly synchronized, portable to devices without subgroup extensions.
-var<workgroup> energies:array<f32,32>;
-var<workgroup> gradients:array<vec3f,32>;
-var<workgroup> hessians:array<mat3x3f,32>;
+// Coloring still prevents all inter-group energy dependencies.
 var<workgroup> direction:vec3f;
 var<workgroup> candidate:vec3f;
 var<workgroup> initial_energy:f32;
@@ -185,7 +185,11 @@ fn assemble(v:u32,lane:u32) {
     reduce_system(e,g,h,lane);
 }
 @compute @workgroup_size(32)
-fn probe(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_index) lane:u32){
+fn probe(
+    @builtin(workgroup_id) group:vec3u,
+    @if(subgroups) @builtin(subgroup_invocation_id) lane:u32,
+    @else @builtin(local_invocation_index) lane:u32,
+){
     let v=group.x;if v>=config.moving{return;}
     assemble(v,lane);
     var e=0.0;
@@ -195,7 +199,11 @@ fn probe(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_index) lan
     if lane==0u {probes[v]=vec4f(gradients[0],energies[0]);}
 }
 @compute @workgroup_size(32)
-fn iterate(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_index) lane:u32){
+fn iterate(
+    @builtin(workgroup_id) group:vec3u,
+    @if(subgroups) @builtin(subgroup_invocation_id) lane:u32,
+    @else @builtin(local_invocation_index) lane:u32,
+){
     if group.x>=config.count{return;}let v=order[config.offset+group.x];let old=positions[v].xyz;
     assemble(v,lane);
     if lane==0u {

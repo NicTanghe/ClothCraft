@@ -1,5 +1,14 @@
 # USD scene boundary
 
+The native fitting and Project v1 viewports now seed anonymous USD stages from
+their compiled geometry. Both editors share their stage with cssimpler and
+publish accepted updates into it. Editable garment data lives in Rust, where
+commands and undo operate on `GarmentTemplate`. The stage receives a projection
+of the accepted state. See the [USD transition audit](reports/usd-transition-audit.pdf)
+and its [Typst source](reports/usd-transition-audit.typ) for the current boundaries.
+
+## Original publication slice
+
 FC-0030, 10 November 2026. This first slice implements **CPU-only static garment
 scene publication**. It does not complete the internal USD migration, register a
 viewport, import USD, or change the supported editable document formats.
@@ -46,7 +55,7 @@ and returns a complete USDA string. It performs no I/O, rendering or simulation.
 The example publishes the template's compiled initial arrangement:
 
 ```powershell
-cargo run --locked --no-default-features -j 2 --example usd_static_scene -- examples/templates/two-panel.json output/two-panel.usda
+cargo run --locked --no-default-features -j 2 --example usd_static_scene -- examples/templates/two-panel.usda output/two-panel.usda
 ```
 
 Create the output directory first. The example accepts a template JSON and an
@@ -65,7 +74,7 @@ writes a file; a subsequent I/O error is not an atomic file-replacement guarante
 | `points` | World-space current positions, `point3f[]`, in metres; explicit f64 to f32 conversion |
 | `faceVertexCounts`, `faceVertexIndices` | Triangles and panel-local transient point indices, preserving compiler winding |
 | `subdivisionScheme`, `orientation`, `doubleSided` | Explicit `none`, `rightHanded`, `true`; polygon cloth without implicit Catmull-Clark or invented thickness |
-| `normals` | Area-weighted smooth `normal3f[]` with `vertex` interpolation for every panel and the collision display mesh; the viewport therefore shades continuously instead of falling back to one normal per face. The 3D header's Smooth/Flat control rewrites the same attribute with `faceVarying` per-corner normals for flat shading |
+| `normals` | Area-weighted smooth `normal3f[]` with `vertex` interpolation for every panel and the collision display mesh; the viewport therefore shades continuously instead of falling back to one normal per face. The 3D header's single shading toggle rewrites the same attribute with `faceVarying` per-corner normals for flat shading |
 | `clothcraft:restUV` | Custom `double2[]` in **local material metres**, retained directly from `Mesh.uv`; independent of drape, placement and board layout |
 | `primvars:st` | Standard `texCoord2f[]` with `vertex` interpolation, a f32 presentation copy of the same local metre coordinates; no atlas packing or [0,1] normalization |
 | `primvars:displayColor` | One constant illustrative color, not fabric appearance or a calibrated material |
@@ -141,7 +150,7 @@ They cover panel-local topology/winding, semantic ID stability and escaping,
 unchanged f64 material coordinates after deformation, display precision,
 inconsistent partitions, invalid snapshots, smooth area-weighted averaging,
 flat per-corner normals and the finite fallback for degenerate or isolated
-vertices. The runner regression also clicks the Smooth/Flat control and reads the
+vertices. The runner regression also clicks the shading toggle and reads the
 authored interpolation and values back from the live stage. The optional independent reader
 uses Pixar's Python `pxr` API; no GPU or native window is created:
 
@@ -149,7 +158,7 @@ uses Pixar's Python `pxr` API; no GPU or native window is created:
 # Install separately in an isolated Python environment; never required by CI.
 python -m pip install usd-core==26.11
 python scripts/check-usd-scene.py tests/fixtures/usd/independent-panel.usda
-python scripts/check-usd-scene.py output/two-panel.usda --template examples/templates/two-panel.json
+python scripts/check-usd-scene.py output/two-panel.usda --template tests/fixtures/legacy-templates/two-panel.json
 ```
 
 The first input is an independently authored, deliberately deformed panel. The
@@ -208,11 +217,28 @@ vertices use a finite `+Y` fallback. Triangle winding, not the rest geometry,
 defines orientation.
 
 Accepted snapshots, edit commits and remeshes rewrite the affected `points` and
-`normals` together on the event thread. The 3D viewport header exposes a
-Smooth/Flat control. Flat mode authors `faceVarying` per-corner normals from the
-same triangles, and switching back republishes the vertex normals. The control
-is view-only state: it is not saved in the document, does not touch physics and
-resets to Smooth on launch.
+`normals` together on the event thread. The 3D viewport header exposes one
+icon toggle for Smooth/Flat shading. Flat mode authors `faceVarying` per-corner
+normals from the same triangles, and switching back republishes the vertex
+normals. The control is view-only state: it is not saved in the document, does
+not touch physics and resets to Smooth on launch.
+
+### Cloth wireframe overlay
+
+The 3D header's second icon toggle shows or hides the cloth wireframe. cssimpler
+strokes polygon-cage edges per USD mesh on the GPU, so the overlay is renderer
+state rather than display geometry: the runner enables the stroke on each
+`/World/Garment/*` panel mesh and leaves `/Collider`, avatars and every other
+display mesh shaded only. Because the stroke follows the authored cage, no
+ribbon quads, lifts or normals are published, accepted solver steps do not
+re-author overlay geometry, and the stage never contains a `/ClothWire` mesh.
+
+The stroke is a solid band whose colour and width come from the Settings panel
+(default 2 px, Ink); it is centred on each edge, so at a silhouette it covers
+both the surface and the background behind it. The toggle is view-only state: it
+is not saved in the document, never feeds physics, and reaches the viewport
+through a shared settings value that wakes the on-demand viewport when it
+changes. This is a diagnostic overlay, not a measured performance feature.
 
 The native preview also includes a static display mesh for the collision surface:
 the loaded mannequin in the fitting workspace and a tessellated analytic sphere
@@ -229,3 +255,6 @@ its dimensions/frame count/scope to `ui.json`, then exits normally. The capture
 excludes UI chrome, editing and simulation; it rejects uniform images. Normal
 launches do not capture/read back GPU images. Portable Windows verification
 checks this lifecycle and its evidence.
+
+Display-only studio geometry (the theme-aware infinity cove) is described in
+[studio backdrop](studio-backdrop.md); it is not part of the fitted scene.

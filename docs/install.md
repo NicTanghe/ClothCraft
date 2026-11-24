@@ -86,7 +86,7 @@ machine; building successfully does not certify a particular adapter.
 From PowerShell inside the extracted directory:
 
 ```powershell
-.\cloth-template.exe validate 'examples/templates/two-panel.json'
+.\cloth-template.exe validate 'examples/templates/two-panel.usda'
 .\cloth-template.exe example '.\My First Pattern.json'
 .\cloth-template.exe validate '.\My First Pattern.json'
 ```

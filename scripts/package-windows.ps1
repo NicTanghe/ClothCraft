@@ -195,11 +195,11 @@ if ($Verify) {
     Push-Location -LiteralPath $verifyRoot
     try {
         $exe = Join-Path $verifyRoot 'cloth-template.exe'
-        & $exe validate 'examples/templates/two-panel.json'
+        & $exe validate 'examples/templates/two-panel.usda'
         if ($LASTEXITCODE -ne 0) { throw 'Extracted binary failed to validate the bundled template' }
-        & $exe example 'Verification Pattern.json'
+        & $exe example 'Verification Pattern.usda'
         if ($LASTEXITCODE -ne 0) { throw 'Extracted binary failed to write a new template' }
-        & $exe validate 'Verification Pattern.json'
+        & $exe validate 'Verification Pattern.usda'
         if ($LASTEXITCODE -ne 0) { throw 'Extracted binary failed to reopen its template' }
     } finally {
         Pop-Location

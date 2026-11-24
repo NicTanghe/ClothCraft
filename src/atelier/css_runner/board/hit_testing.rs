@@ -240,7 +240,7 @@ mod measurement_tests {
     #[test]
     fn rotated_board_pick_resolves_material_coordinates() {
         let mut template = GarmentTemplate::load(std::path::Path::new(
-            "examples/templates/curved-panels.json",
+            "examples/templates/curved-panels.usda",
         ))
         .unwrap();
         template.panels[0].layout_rotation_degrees = 57.;

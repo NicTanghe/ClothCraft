@@ -1,8 +1,9 @@
 use clothcraft::{
     garment::GarmentTemplate,
     usd_scene::{
-        ShadingMode, append_viewport_surface, display_normals, flat_corner_normals,
-        garment_stage_usda, smooth_vertex_normals,
+        ShadingMode, StudioBackdropTheme, append_infinity_cove, append_viewport_surface,
+        display_normals, flat_corner_normals, garment_stage_usda, infinity_cove_mesh,
+        smooth_vertex_normals,
     },
 };
 use glam::DVec3;
@@ -214,4 +215,125 @@ fn collision_display_surface_publishes_smooth_normals() {
     let usda = append_viewport_surface(String::new(), &surface);
     assert_eq!(usda.matches("normal3f[] normals = [").count(), 1);
     assert_eq!(usda.matches("interpolation = \"vertex\"\n )\n").count(), 1);
+}
+
+#[test]
+fn display_stage_has_no_ribbon_wireframe_mesh() {
+    // The cloth wireframe is now a renderer-side stroke on the garment panel
+    // meshes, so the display stage must not carry a separate `/ClothWire` mesh.
+    let garment = tiny();
+    let usda = garment_stage_usda(&garment, &garment.initial_state).unwrap();
+    assert!(usda.contains("def Scope \"Garment\""));
+    assert!(!usda.contains("ClothWire"));
+    let surface = clothcraft::avatar::SurfaceMesh {
+        vertices: vec![DVec3::ZERO, DVec3::X, DVec3::Y],
+        triangles: vec![[0, 1, 2]],
+    };
+    let usda = append_viewport_surface(usda, &surface);
+    assert!(usda.contains("def Mesh \"Collider\""));
+    assert!(!usda.contains("ClothWire"));
+}
+
+#[test]
+fn infinity_cove_is_a_seamless_floor_and_wall_cyclorama() {
+    let mesh = infinity_cove_mesh();
+    assert!(!mesh.vertices.is_empty());
+    assert!(!mesh.triangles.is_empty());
+    assert!(mesh.vertices.iter().all(|point| point.is_finite()));
+    let min_y = mesh
+        .vertices
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = mesh
+        .vertices
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let max_radius = mesh
+        .vertices
+        .iter()
+        .map(|point| point.x.hypot(point.z))
+        .fold(0.0, f64::max);
+    assert_eq!(min_y, 0.0, "the floor sits on the world floor");
+    assert!(
+        (max_y - 40.0).abs() < 1e-9,
+        "wall is tall enough to leave the frame"
+    );
+    assert!(
+        (max_radius - 30.0).abs() < 1e-6,
+        "coordinate radius is bounded"
+    );
+    assert!(mesh.vertices.len() > 1000);
+    assert!(mesh.triangles.len() > 2000);
+    assert!(
+        mesh.triangles
+            .iter()
+            .flatten()
+            .all(|index| *index < mesh.vertices.len())
+    );
+}
+
+#[test]
+fn infinity_cove_changes_colour_with_the_studio_theme() {
+    let dark = append_infinity_cove(String::new(), StudioBackdropTheme::Dark);
+    let light = append_infinity_cove(String::new(), StudioBackdropTheme::Light);
+    for usda in [&dark, &light] {
+        assert!(usda.contains("def Mesh \"InfinityCove\""));
+        assert!(usda.contains("uniform bool doubleSided = true"));
+        assert!(usda.contains("normal3f[] normals = ["));
+        assert!(!usda.contains("def Mesh \"Collider\""));
+    }
+    assert!(dark.contains("(0.12, 0.135, 0.16)"));
+    assert!(light.contains("(0.84, 0.85, 0.87)"));
+    assert_ne!(dark, light);
+    assert_ne!(
+        StudioBackdropTheme::Dark.cove_color(),
+        StudioBackdropTheme::Light.cove_color()
+    );
+}
+
+#[test]
+fn studio_cove_is_not_part_of_the_fitted_garment_scene() {
+    let garment = tiny();
+    let usda = garment_stage_usda(&garment, &garment.initial_state).unwrap();
+    assert!(!usda.contains("InfinityCove"));
+    let usda = append_infinity_cove(usda, StudioBackdropTheme::Light);
+    assert!(usda.contains("InfinityCove"));
+}
+
+#[cfg(feature = "desktop")]
+#[test]
+fn cove_colour_attribute_updates_without_reloading_the_stage() {
+    use cssimpler::renderer::gpu::openusd::gf;
+    use cssimpler::renderer::gpu::usd::UsdScene;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cove.usda");
+    let usda = append_infinity_cove("#usda 1.0\n".to_string(), StudioBackdropTheme::Dark);
+    std::fs::write(&path, usda).unwrap();
+    let scene = UsdScene::open(&path).unwrap();
+    assert_eq!(
+        scene
+            .stage()
+            .attribute("/InfinityCove.cssimpler:castsShadow")
+            .unwrap()
+            .get_at::<bool>(None)
+            .unwrap(),
+        Some(false)
+    );
+    let read = || {
+        scene
+            .stage()
+            .attribute("/InfinityCove.primvars:displayColor")
+            .unwrap()
+            .get_at::<Vec<gf::Vec3f>>(None)
+            .unwrap()
+            .unwrap()[0]
+    };
+    let dark = read();
+    assert_eq!((dark.x, dark.y, dark.z), (0.12, 0.135, 0.16));
+    clothcraft::usd_scene::update_infinity_cove_color(&scene, StudioBackdropTheme::Light).unwrap();
+    let light = read();
+    assert_eq!((light.x, light.y, light.z), (0.84, 0.85, 0.87));
 }

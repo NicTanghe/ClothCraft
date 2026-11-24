@@ -34,7 +34,7 @@ fn save_writes_the_opened_project_and_reopens_it() {
     state.save_project();
     assert_eq!(state.status_message, format!("Saved {}", source.display()));
     assert!(
-        !dir.path().join("out/fitting-project.json").exists(),
+        !dir.path().join("out/fitting-project.usda").exists(),
         "save must not fall back to the output directory when a source exists"
     );
     let reopened = FittingProject::load(&source).expect("reopen saved project");
@@ -57,16 +57,25 @@ fn save_without_a_source_reports_the_default_location() {
         .unwrap_or_else(|e| e.into_inner());
     let dir = tempfile::tempdir().expect("tempdir");
     let mut state = save_test_state(dir.path(), None);
-    let expected = dir.path().join("out").join("fitting-project.json");
+    state.scene.state.time = 0.25;
+    state.scene.state.v[0].x = 0.125;
+    let expected = dir.path().join("out").join("fitting-project.usda");
     assert_eq!(state.save_target(), (expected.clone(), true));
     state.save_project();
-    assert!(expected.is_file());
+    let text = std::fs::read_to_string(&expected).expect("read default save");
+    assert!(text.starts_with("#usda "));
     assert!(
         state.status_message.contains("default output location"),
         "{}",
         state.status_message
     );
-    FittingProject::load(&expected).expect("reopen default save");
+    let reopened = FittingProject::load(&expected).expect("reopen default save");
+    let scene = reopened
+        .compile()
+        .expect("compile reopened project with portable avatar");
+    assert_eq!(scene.state.x, state.scene.state.x);
+    assert_eq!(scene.state.v, state.scene.state.v);
+    assert_eq!(scene.state.time, state.scene.state.time);
 }
 
 #[test]

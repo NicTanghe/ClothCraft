@@ -11,6 +11,15 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     })
 }
 
+/// True when the path names a USD document (`.usda` text or `.usd` container).
+pub fn is_usd_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("usda") || extension.eq_ignore_ascii_case("usd")
+        })
+}
+
 pub(crate) fn atomic_write_with(
     path: &Path,
     write: impl FnOnce(&mut fs::File) -> Result<(), String>,

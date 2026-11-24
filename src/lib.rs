@@ -19,6 +19,7 @@ pub mod document;
 pub mod energy;
 pub(crate) mod energy_factors;
 pub mod fabrics;
+pub mod fbx_avatar;
 pub mod fitting;
 pub mod garment;
 pub mod gltf_avatar;
@@ -46,6 +47,10 @@ pub mod session_protocol;
 pub mod solver;
 pub mod solver_lab;
 pub mod template_catalog;
+/// Bounded static-avatar geometry import from FBX and OpenUSD files.
+pub mod usd_avatar;
+/// Lossless JSON <-> USDA document mapping for templates and fitting projects.
+pub mod usd_document;
 /// CPU-only publication of static garment geometry as an OpenUSD scene.
 pub mod usd_scene;
 pub mod vbd;

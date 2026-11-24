@@ -1,5 +1,6 @@
 //! Settings controls, modal input ownership and wheel sensitivity regressions.
 
+use super::super::super::viewport_wireframe::{DEFAULT_WIDTH_PX, MAX_WIDTH_PX, MIN_WIDTH_PX};
 use super::super::super::worker;
 use super::super::actions::{RunnerUiOp, apply_runner_ui_op};
 use super::super::app::create_runner_app;
@@ -7,9 +8,10 @@ use super::super::board::geometry::{
     compute_2d_viewport_rect, screen_to_board_m, viewport_3d_rect,
 };
 use super::super::input::handle_runner_event;
+use super::super::preferences::{AppPreferences, PreferenceStore};
 use super::super::state::{DEFAULT_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED, MIN_2D_ZOOM_SPEED};
 use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
-use clothcraft::css_ui::load_studio_stylesheet;
+use clothcraft::css_ui::{Theme, ViewLayoutMode, load_studio_stylesheet};
 use cssimpler::renderer::{
     EngineEvent, FrameInfo, KeyIdentity, KeyboardEvent, KeyboardModifiers, ScrollDelta,
 };
@@ -71,6 +73,11 @@ fn settings_controls_close_and_do_not_edit_the_board() {
             "#zoom-speed-inc",
             "#zoom-speed-dec",
             "#zoom-speed-reset",
+            "#wireframe-colour",
+            "#wireframe-width-dec",
+            "#wireframe-width-value",
+            "#wireframe-width-inc",
+            "#wireframe-reset",
         ] {
             let b = app.find_element_bounds_by_id(id).unwrap();
             assert!(
@@ -240,4 +247,114 @@ fn zoom_speed_affects_both_scroll_units_preserves_anchor_and_keeps_limits() {
         }
     ));
     assert!((state.camera.distance - 4.8).abs() < 1e-6);
+}
+
+#[test]
+fn wireframe_colour_and_thickness_reach_the_viewport() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = selection_test_state(dir.path());
+    macro_rules! shared {
+        () => {
+            *state
+                .viewport_wireframe
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+        };
+    }
+
+    // Defaults: off, first colour, 2 px.
+    state.sync_usd_wireframe();
+    assert!(!shared!().enabled);
+    assert_eq!(shared!().colour, 0);
+    assert_eq!(shared!().width_px, DEFAULT_WIDTH_PX);
+
+    apply_runner_ui_op(&mut state, RunnerUiOp::CycleWireframeColour);
+    assert_eq!(shared!().colour, 1);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AdjustWireframeWidth(1.0));
+    assert_eq!(shared!().width_px, 3.0);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AdjustWireframeWidth(-100.0));
+    assert_eq!(shared!().width_px, MIN_WIDTH_PX);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AdjustWireframeWidth(100.0));
+    assert_eq!(shared!().width_px, MAX_WIDTH_PX);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AdjustWireframeWidth(f32::NAN));
+    assert_eq!(shared!().width_px, MAX_WIDTH_PX);
+
+    // Turning the overlay on keeps the chosen style.
+    apply_runner_ui_op(&mut state, RunnerUiOp::ToggleWireframe);
+    assert!(shared!().enabled);
+    assert_eq!(shared!().colour, 1);
+    assert_eq!(shared!().width_px, MAX_WIDTH_PX);
+
+    // Reset restores colour and width but not the toggle.
+    apply_runner_ui_op(&mut state, RunnerUiOp::ResetWireframeStyle);
+    assert!(shared!().enabled);
+    assert_eq!(shared!().colour, 0);
+    assert_eq!(shared!().width_px, DEFAULT_WIDTH_PX);
+}
+
+#[test]
+fn settings_survive_a_restart_through_the_preference_file() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("preferences/settings.ron");
+    let mut state = selection_test_state(dir.path());
+    state.attach_preferences(PreferenceStore::at(&path));
+
+    state.theme = Theme::Light;
+    state.layout_mode = ViewLayoutMode::TwoDOnly;
+    state.board_2d_zoom_speed = 3.25;
+    state.show_body_fill = false;
+    state.show_body_border = false;
+    state.wireframe = true;
+    state.wireframe_colour = 3;
+    state.wireframe_width_px = 6.0;
+    state.project.template.measurement_bits = Some(16);
+    assert_eq!(state.next_update_at(), None);
+    state.flush_preferences(false);
+    assert!(state.next_update_at().is_some());
+    assert!(!path.exists());
+    state.flush_preferences(true);
+    assert_eq!(state.next_update_at(), None);
+    assert!(path.exists(), "flush should create {}", path.display());
+
+    // A second session starts from the defaults and then loads the file.
+    let mut restored = selection_test_state(dir.path());
+    restored.attach_preferences(PreferenceStore::at(&path));
+    assert_eq!(restored.theme, Theme::Light);
+    assert_eq!(restored.layout_mode, ViewLayoutMode::TwoDOnly);
+    assert_eq!(restored.board_2d_zoom_speed, 3.25);
+    assert!(!restored.show_body_fill);
+    assert!(!restored.show_body_border);
+    assert!(restored.show_body_outline);
+    assert!(restored.wireframe);
+    assert_eq!(restored.wireframe_colour, 3);
+    assert_eq!(restored.wireframe_width_px, 6.0);
+    assert_eq!(restored.project.template.measurement_precision(), 16);
+}
+
+#[test]
+fn opened_documents_keep_their_own_measurement_precision() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let store = PreferenceStore::at(dir.path().join("settings.ron"));
+    store
+        .save(&AppPreferences {
+            zoom_speed: 2.0,
+            measurement_bits: 16,
+            ..AppPreferences::default()
+        })
+        .unwrap();
+
+    let mut state = selection_test_state(dir.path());
+    state.files.source = Some(dir.path().join("garment.json"));
+    state.project.template.measurement_bits = Some(10);
+    state.attach_preferences(store);
+
+    // The document's own value wins; unrelated preferences still apply.
+    assert_eq!(state.project.template.measurement_precision(), 10);
+    assert_eq!(state.board_2d_zoom_speed, 2.0);
 }

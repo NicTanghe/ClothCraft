@@ -4,6 +4,11 @@
 or Alt-through box selection. Read [group placement](group-placement.md) for
 the flat-arrangement reset policy, cancellation and visibility limits.
 
+For one piece, open **Properties → Piece → 3D Arrangement** to edit translation
+in centimetres or rotation in degrees. Press Enter, leave the field, or release
+the drag handle to apply the placement as one undoable edit. Escape discards
+the draft. The live USD viewport shows the committed placement.
+
 19 October update: [panel tools](panel-tools.md) documents boundary-owned internal lines, the read-only 2D ruler and bidirectional linked mirror pairs. Geometry updates commit on release; 3D placement/material stay independent.
 
 **16 October:** [Document lifecycle and partial/multi-edge sewing](documents-and-sewing.md) now extend the workflow below. Native Save/Open is separate from Export. Use Sew → Multiple edges per side for ordered chains.
@@ -239,7 +244,7 @@ Rotation validation, 14 October 2026: all 78 CPU tests and the 41-action native 
 
 During simulation, **Properties → Simulation → Diagnostics** displays maximum seam gap and positive axial extension (95% of rest area and maximum). Large gap means assembly is incomplete; persistent excessive extension may indicate incompatible sewing, material choice or insufficient convergence. The Simulation tab allows up to 128 iterations. The default is now 16; adaptive initialization and the larger solve budget address artificial gravity stretch without changing mass or gravity.
 
-Measured outcomes and example captures: [board validation](board-validation.md). The reusable [curved-panels fixture](../examples/templates/curved-panels.json) is a saved result from the native drawing workflow.
+Measured outcomes and example captures: [board validation](board-validation.md). The reusable [curved-panels fixture](../examples/templates/curved-panels.usda) is a saved result from the native drawing workflow.
 
 ## Numeric editing and view controls
 
@@ -258,7 +263,7 @@ Implementation: `authoring/clipboard.rs` and `Command::{Paste,LayoutGroup}` own 
 ### Existing numeric tools
 
 Adapted from FireflyTheReal / julienfoss; see [provenance and integration fixes](firefly-integration.md).
-In Edit, Shift-click contour points to select several. Drag a selected point or use arrow keys (1 mm; Shift: 10 mm). Numeric coordinates and rectangle dimensions are in the inspector. The nearby + badge splits an unsewn boundary at sampled material arclength; Delete removes a straight, unsewn, untargeted point. Splitting keeps the piece in place on the board and in its flat 3D arrangement, without shifting the board view. Clear an affected seam or target before changing its boundary identity. Internal sewing paths remain separate from outer-contour point selection.
+In Edit, Shift-click contour points to select several. Drag a selected point or use arrow keys (1 mm; Shift: 10 mm). Numeric coordinates and rectangle dimensions are in the inspector. The nearby + badge splits a boundary at sampled material arclength; Delete removes a straight, unsewn, untargeted point. Splitting keeps the piece in place on the board and in its flat 3D arrangement, without shifting the board view. A sewn boundary now splits with its seam: a seam that crosses the new point becomes two seams and the partner boundary is split at the matching point. This is limited to one segment per seam side with no seam notches; seams with tails or notches must be simplified first. Target lengths are still refused before mutation, and linked mirror pairs still require unlinking before any topology change. Internal sewing paths remain separate from outer-contour point selection.
 
 The inspector and board share the selected boundary's target length. Applying it changes rest geometry; clearing it removes only metadata. Dimensions scale the rectangle's holes and internal paths as well. All commands remain transactional and undoable.
 

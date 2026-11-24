@@ -77,6 +77,7 @@ restart/release protocols. See [its evidence and limitations](settling-zoo.md).
 | `math.rs`, `energy.rs` | Second-order AD, membrane and bending | Current + rest geometry → energy/derivatives |
 | `contact.rs` | Vertex/sphere penalty | Discrete contact, per-vertex thickness |
 | `avatar.rs` | OBJ, static BVH and local signed distance | Mannequin → `Collider` implementation |
+| `avatar_import.rs`, `gltf_avatar.rs`, `fbx_avatar.rs`, `usd_avatar.rs` | Static avatar intake, format policy and canonical OBJ staging | Chosen file → validated `SurfaceMesh` in metres, right-handed Y-up |
 | `fitting.rs` | Arrangement, cache and transactional steps | FittingProject → FittingScene |
 | `solver.rs` | Implicit Euler, Newton/PCG, Armijo | Compiled model + state → state/metrics |
 | `project.rs` | Legacy single-panel scene format | `Project` JSON v1 |
@@ -91,7 +92,7 @@ restart/release protocols. See [its evidence and limitations](settling-zoo.md).
 | `vbd/audit.rs` | Explicit offline energy and accepted-step accounting | read-only f64 terms, frozen-contact balance and final residual; no automatic runtime cost; [scope](energy-and-release.md) |
 | `vbd/coloring.rs` | Deterministic greedy coloring and dependency-preserving precision levels | same colors/vertex order with a small-palette mask; unrestricted fallback; only independent f64 minimizations run together |
 | `garment/diagnostics.rs` | Stretch measurements independent of rendering | Material rest + state → area-weighted percentile and maximum |
-| `gpu_vbd.rs`, `vbd.wgsl` | Local f32 solve, exact gradients, approximate positive Hessians | CPU candidates/bounds → GPU compute → validated state |
+| `gpu_vbd.rs`, `gpu_vbd/vbd.wesl` | Local f32 solve, exact gradients, approximate positive Hessians | CPU candidates/bounds → GPU compute → validated state |
 | `ogc/filter.rs`, `gpu_vbd/contact_filter/` | Conservative GPU BVH refit/search and separating-axis rejection | current positions → candidate IDs → unchanged f64 contact geometry/bounds; [contract](gpu-contact-search.md) |
 | `picking.rs` | Rays and barycentric attachments | Mouse → grab force, no teleportation |
 | `bin/cloth-fit.rs`, `atelier.rs`, `gpu_bench.rs` | CLI, workspace and rendering measurements | Projects / reports / opt-in captures |
@@ -140,9 +141,9 @@ The 2D board uses indexed vertices instead of duplicating every triangle corner.
 
 ## Point tools and view controls (Firefly integration)
 
-See [integration provenance and fixes](firefly-integration.md). Polygon `target_lengths` is optional nonphysical metadata, omitted when empty and excluded from fitting cache signatures as well as `same_physics`. An explicit target command may change rest geometry; loading never enforces a stored target. Contour splits preserve cubics by de Casteljau subdivision and reject referenced seams/targets rather than migrating them implicitly. Existing holes and internal lines continue through the same domain mesher.
+See [integration provenance and fixes](firefly-integration.md). Polygon `target_lengths` is optional nonphysical metadata, omitted when empty and excluded from fitting cache signatures as well as `same_physics`. An explicit target command may change rest geometry; loading never enforces a stored target. Contour splits preserve cubics by de Casteljau subdivision. Target-length boundaries are rejected before mutation; a sewn boundary splits with its seam when the seam has one segment per side and no seam notches, and otherwise fails closed. Linked mirror pairs still require unlinking first. Existing holes and internal lines continue through the same domain mesher.
 
-Board view rotation is radians; panel layout rotation remains degrees. Pointer and nudge adapters convert explicitly. Multi-point movement translates attached controls and invalidates transient selections when contour identity/order changes. Camera presets and orthographic projection share the same matrix with picking. Preferences separate immediately applied theme/snap from next-launch simulation/overlay defaults. The worker and physical solver paths are unchanged.
+Board view rotation is radians; panel layout rotation remains degrees. Pointer and nudge adapters convert explicitly. Multi-point movement translates attached controls and invalidates transient selections when contour identity/order changes. Camera presets and orthographic projection share the same matrix with picking. Workspace/view preferences (theme, layout, zoom speed, body layers, wireframe style and default measurement precision) persist per user in `settings.ron`; document-owned simulation settings stay in the garment project. The worker and physical solver paths are unchanged.
 
 ## Document and sewing extensions (16 October 2026)
 

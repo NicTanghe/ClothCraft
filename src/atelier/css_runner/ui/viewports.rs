@@ -10,6 +10,9 @@ use super::super::board::selection::{compute_connected_2d_highlight, effective_s
 use super::super::state::CssRunnerState;
 use super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
+use clothcraft::css_ui::icons::{
+    icon_shading_flat, icon_shading_smooth, icon_wireframe_off, icon_wireframe_on,
+};
 use clothcraft::usd_scene::ShadingMode;
 use cssimpler::core::Node;
 use cssimpler::ui;
@@ -26,15 +29,28 @@ pub(in super::super) fn build_runner_stage(state: &CssRunnerState) -> Node {
 }
 
 pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node {
-    let smooth_class = if state.shading == ShadingMode::Smooth {
-        "viewport-tool-btn active"
-    } else {
-        "viewport-tool-btn"
+    let (shading_icon, shading_title) = match state.shading {
+        ShadingMode::Smooth => (
+            icon_shading_smooth(),
+            "Smooth shading — click for flat shading",
+        ),
+        ShadingMode::Flat => (
+            icon_shading_flat(),
+            "Flat shading — click for smooth shading",
+        ),
     };
-    let flat_class = if state.shading == ShadingMode::Flat {
-        "viewport-tool-btn active"
+    let (wire_icon, wire_title, wire_class) = if state.wireframe {
+        (
+            icon_wireframe_on(),
+            "Hide cloth wireframe",
+            "viewport-tool-btn icon-only active",
+        )
     } else {
-        "viewport-tool-btn"
+        (
+            icon_wireframe_off(),
+            "Show cloth wireframe",
+            "viewport-tool-btn icon-only",
+        )
     };
     ui! {
         <div id="viewport-3d" class="viewport-container">
@@ -44,8 +60,8 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
                     <span class="viewport-sub">"USD native 3D viewport (VBD + OGC)"</span>
                 </div>
                 <div class="viewport-tools">
-                    <button id="shading-smooth" class={smooth_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetShadingMode(ShadingMode::Smooth))} title="Smooth per-vertex shading">"Smooth"</button>
-                    <button id="shading-flat" class={flat_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetShadingMode(ShadingMode::Flat))} title="Flat per-face shading">"Flat"</button>
+                    <button id="wireframe-toggle" class={wire_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleWireframe)} title={wire_title}>{wire_icon}</button>
+                    <button id="shading-toggle" class="viewport-tool-btn icon-only" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleShading)} title={shading_title}>{shading_icon}</button>
                 </div>
             </div>
             <div class="canvas-area">
@@ -56,6 +72,11 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
 }
 
 pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
+    let body_class = if state.show_body_outline {
+        "viewport-tool-btn active"
+    } else {
+        "viewport-tool-btn"
+    };
     let (paths, view_box) = render_runner_2d_paths(state);
     let svg_rect = compute_2d_viewport_rect(state);
     let board = board_node(paths, view_box, svg_rect.w, svg_rect.h);
@@ -354,6 +375,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                     <span class="viewport-sub">{sub_text}</span>
                 </div>
                 <div class="viewport-tools">
+                    <button id="body-outline-toggle" class={body_class} onclick_shared={queue_action(&state.actions, RunnerAction::ToggleBodyOutline)} title="Show/hide the gray avatar silhouette">"Body"</button>
                     <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dIn)} title="Zoom In (+)">"+"</button>
                     <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dOut)} title="Zoom Out (-)">"-"</button>
                     <button class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::Zoom2dFit)} title="Fit Board (0)">"Fit"</button>

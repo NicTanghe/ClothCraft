@@ -2,15 +2,15 @@
 
 The rectangular v1 rules below remain compatible. v2 adds polygon contours, segment names and Delaunay settings: see [meshing.md](meshing.md) and [first-fit.md](first-fit.md). Both versions use the same integrated sewing formulation. Later ordered-chain extensions are documented in [documents-and-sewing.md](documents-and-sewing.md).
 
-Runnable examples: [two-panel.json](../examples/templates/two-panel.json) and [local-ease.json](../examples/templates/local-ease.json). Rust types with `deny_unknown_fields` are the current normative definition; compilation supplements deserialization with geometry/reference validation.
+Runnable examples: [two-panel.usda](../examples/templates/two-panel.usda) and [local-ease.usda](../examples/templates/local-ease.usda). Templates are saved as USDA; the field names below describe the same serde representation, and JSON remains importable as a legacy format. Rust types with `deny_unknown_fields` are the current normative definition; compilation supplements deserialization with geometry/reference validation.
 
 ```powershell
-cargo run --locked --no-default-features -j 2 --bin cloth-template -- validate examples/templates/two-panel.json
-cargo run --locked --no-default-features -j 2 --bin cloth-template -- bake examples/templates/two-panel.json --output output/template-bake
-cargo run --locked --release --no-default-features -j 2 --bin cloth-template -- simulate examples/templates/two-panel.json --steps 30 --threads 2 --output output/template-simulation
+cargo run --locked --no-default-features -j 2 --bin cloth-template -- validate examples/templates/two-panel.usda
+cargo run --locked --no-default-features -j 2 --bin cloth-template -- bake examples/templates/two-panel.usda --output output/template-bake
+cargo run --locked --release --no-default-features -j 2 --bin cloth-template -- simulate examples/templates/two-panel.usda --steps 30 --threads 2 --output output/template-simulation
 ```
 
-`example path.json` creates an example and refuses to overwrite a file. `bake` and `simulate` replace fixed-name artifacts in their output directory. `simulate` returns failure if a step did not converge; metrics and final state remain available for diagnosis. None of these modes opens a window.
+`example path.usda` creates an example and refuses to overwrite a file. `bake` and `simulate` replace fixed-name artifacts in their output directory. `simulate` returns failure if a step did not converge; metrics and final state remain available for diagnosis. None of these modes opens a window.
 
 ## Panels and fabrics
 

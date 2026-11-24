@@ -245,6 +245,7 @@ pub fn apply(state: &mut CssRunnerState, physics: bool) -> Result<(), String> {
             state.shading,
         );
     }
+    state.sync_usd_wireframe();
     state.send_control_state(false);
     state.status_message = format!(
         "{} mesh prepared; reset to arrangement ({} vertices, {} triangles)",
@@ -457,7 +458,7 @@ mod tests {
         fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").unwrap();
         let mut project = FittingProject::basic(GarmentKind::Tshirt, 0, avatar);
         project.template = GarmentTemplate::load(std::path::Path::new(
-            "examples/templates/curved-panels.json",
+            "examples/templates/curved-panels.usda",
         ))
         .unwrap();
         project.template.seams.clear();

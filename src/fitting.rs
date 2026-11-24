@@ -128,8 +128,12 @@ impl FittingProject {
     pub fn load(path: &Path) -> Result<Self, String> {
         let data = fs::read_to_string(path)
             .map_err(|e| format!("Cannot read fitting project {}: {e}", path.display()))?;
-        let mut project: Self = serde_json::from_str(&data)
-            .map_err(|e| format!("Cannot parse fitting project {}: {e}", path.display()))?;
+        let mut project: Self = if crate::document::is_usd_path(path) {
+            crate::usd_document::project_from_usda(&data)?
+        } else {
+            serde_json::from_str(&data)
+                .map_err(|e| format!("Cannot parse fitting project {}: {e}", path.display()))?
+        };
         if project.avatar_path.is_relative() {
             project.avatar_path = path
                 .parent()
@@ -249,7 +253,11 @@ impl FittingProject {
             }
         }
         copy.avatar_path = crate::document::portable_avatar(&self.avatar_path, path)?;
-        let bytes = serde_json::to_vec_pretty(&copy).map_err(|e| e.to_string())?;
+        let bytes = if crate::document::is_usd_path(path) {
+            crate::usd_document::project_to_usda(&copy)?.into_bytes()
+        } else {
+            serde_json::to_vec_pretty(&copy).map_err(|e| e.to_string())?
+        };
         crate::document::atomic_write(path, &bytes)
     }
 }
@@ -298,7 +306,7 @@ mod tests {
 
     fn tshirt() -> GarmentTemplate {
         GarmentTemplate::load(
-            &Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/templates/tshirt.json"),
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/templates/tshirt.usda"),
         )
         .unwrap()
     }

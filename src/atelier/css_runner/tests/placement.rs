@@ -111,6 +111,60 @@ fn test_state(dir: &std::path::Path) -> CssRunnerState {
 }
 
 #[test]
+fn arrange_commit_and_undo_update_the_live_usd_mesh() {
+    use clothcraft::usd_scene::viewport_panel_path;
+    use cssimpler::renderer::gpu::openusd::gf::Vec3f;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let stylesheet = clothcraft::css_ui::load_studio_stylesheet().unwrap();
+    let mut app = super::super::app::create_runner_app(test_state(dir.path()), &stylesheet);
+    let scene = app.state().usd_scene.clone().unwrap();
+    assert!(scene.stage().root_layer().is_anonymous());
+    let point_path = |panel: usize| {
+        let id = &app.state().project.template.panels[panel].id;
+        format!("{}.points", viewport_panel_path(id))
+    };
+    let paths = [point_path(0), point_path(1)];
+    let points = |panel: usize| {
+        scene
+            .stage()
+            .attribute(paths[panel].as_str())
+            .unwrap()
+            .get::<Vec<Vec3f>>()
+            .unwrap()
+            .unwrap()
+    };
+    let initial = [points(0), points(1)];
+    let state = app.state_mut();
+    let target_cm = tx_cm(state, 0) + 12.5;
+    let control = arrange_control(state, PlacementAxis::TranslationX);
+    let mut frames = Frames { index: 1 };
+    focus(&control);
+    type_text(&control, &target_cm.to_string());
+    frames.run(state);
+    assert_eq!(points(0), initial[0], "typing only changes the draft");
+
+    handle_runner_event(state, &named_key("Tab"));
+    frames.run(state);
+    let moved = points(0);
+    assert_eq!(moved.len(), initial[0].len());
+    assert!(!moved.is_empty());
+    for (point, previous) in moved.iter().zip(&initial[0]) {
+        assert!((point.x - previous.x - 0.125).abs() < 1e-6);
+        assert_eq!([point.y, point.z], [previous.y, previous.z]);
+    }
+    assert_eq!(points(1), initial[1]);
+
+    assert!(undo_redo_2d(state, false));
+    assert_eq!(points(0), initial[0]);
+    assert!(undo_redo_2d(state, true));
+    assert_eq!(points(0), moved);
+}
+
+#[test]
 fn arrange_fields_commit_one_undoable_place_per_edit() {
     let _guard = worker::WORKER_TEST_LOCK
         .lock()
