@@ -970,6 +970,24 @@ pub fn viewport_sphere(sphere: &crate::contact::Sphere) -> crate::avatar::Surfac
 #[cfg(feature = "desktop")]
 pub const VIEWPORT_CAMERA_PATH: &str = "/World/ViewportCamera";
 
+/// Keep navigation edits independent of the viewport's geometry revisions.
+#[cfg(feature = "desktop")]
+pub fn viewport_camera_scene(
+    camera: &crate::render::Camera,
+) -> Result<cssimpler::renderer::gpu::usd::UsdScene, String> {
+    use cssimpler::renderer::gpu::{
+        openusd_schemas,
+        usd::{Stage, UsdScene},
+    };
+    let stage = Stage::builder()
+        .schema_registry(openusd_schemas::schema_registry())
+        .in_memory("clothcraft-viewport-camera.usda")
+        .map_err(|error| error.to_string())?;
+    let scene = UsdScene::from_stage(stage).map_err(|error| error.to_string())?;
+    init_viewport_camera(&scene, camera)?;
+    Ok(scene)
+}
+
 #[cfg(feature = "desktop")]
 pub fn default_scene_camera(
     positions: &[glam::DVec3],

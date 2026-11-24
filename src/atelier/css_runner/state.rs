@@ -72,6 +72,7 @@ pub struct CssRunnerState {
     pub smoke: bool,
     pub smoke_done: std::rc::Rc<std::cell::Cell<bool>>,
     pub usd_scene: Option<cssimpler::renderer::gpu::usd::UsdScene>,
+    pub(super) usd_camera_scene: Option<cssimpler::renderer::gpu::usd::UsdScene>,
     pub import_dialog: Option<ImportDialog>,
     pub import_tolerance_mm: f64,
     pub import_mesh_mm: f64,
@@ -202,6 +203,7 @@ impl CssRunnerState {
             smoke: false,
             smoke_done: Default::default(),
             usd_scene: None,
+            usd_camera_scene: None,
             import_dialog: None,
             import_tolerance_mm: 0.1,
             import_mesh_mm: 25.0,
@@ -386,7 +388,7 @@ impl CssRunnerState {
 
     pub fn sync_usd_camera(&mut self) {
         self.viewport_camera.replace(self.camera.clone());
-        if let Some(scene) = &self.usd_scene
+        if let Some(scene) = &self.usd_camera_scene
             && let Err(error) = clothcraft::usd_scene::update_viewport_camera(scene, &self.camera)
         {
             self.status_message = format!("USD camera error: {error}");
