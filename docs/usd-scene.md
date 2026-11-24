@@ -1,5 +1,14 @@
 # USD scene boundary
 
+The native fitting and Project v1 viewports now seed anonymous USD stages from
+their compiled geometry. Both editors share their stage with cssimpler and
+publish accepted updates into it. Editable garment data lives in Rust, where
+commands and undo operate on `GarmentTemplate`. The stage receives a projection
+of the accepted state. See the [USD transition audit](reports/usd-transition-audit.pdf)
+and its [Typst source](reports/usd-transition-audit.typ) for the current boundaries.
+
+## Original publication slice
+
 FC-0030, 10 November 2026. This first slice implements **CPU-only static garment
 scene publication**. It does not complete the internal USD migration, register a
 viewport, import USD, or change the supported editable document formats.

@@ -1643,12 +1643,8 @@ pub fn create_editor_app<'a>(
     fn(&CssEditorState) -> Node,
     Invalidation,
 > {
-    let preview_path = state.output_dir.join("editor_preview.usda");
-    if let Some(parent) = preview_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let usda =
-        clothcraft::usd_scene::mesh_stage_usda(&state.mesh, &state.state).unwrap_or_default();
+    let usda = clothcraft::usd_scene::mesh_stage_usda(&state.mesh, &state.state)
+        .expect("publish Project v1 viewport geometry");
     let usda = if let Some(sphere) = &state.active.sphere {
         clothcraft::usd_scene::append_viewport_surface(
             usda,
@@ -1657,10 +1653,8 @@ pub fn create_editor_app<'a>(
     } else {
         usda
     };
-    let _ = std::fs::write(&preview_path, usda);
-
-    let usd_scene = cssimpler::renderer::gpu::usd::UsdScene::open(&preview_path)
-        .expect("load generated USD viewport scene");
+    let usd_scene =
+        clothcraft::usd_scene::viewport_scene_from_usda(&usda).expect("create USD viewport scene");
     if let Err(err) = clothcraft::usd_scene::init_viewport_camera(&usd_scene, &state.camera) {
         state.status_message = format!("USD camera init error: {err}");
     }
@@ -1812,7 +1806,8 @@ mod tests {
     fn test_css_editor_headless_frame_and_rendering() {
         let stylesheet = load_studio_stylesheet().expect("load studio stylesheet");
         let project = Project::default();
-        let state = CssEditorState::new(project, PathBuf::from("target/test_editor_out"));
+        let output = tempfile::tempdir().unwrap();
+        let state = CssEditorState::new(project, output.path().into());
         let mut app = create_editor_app(state, &stylesheet);
         app.set_viewport(cssimpler::renderer::ViewportSize::new(1600, 980));
 
@@ -1823,12 +1818,10 @@ mod tests {
         });
         assert!(!scene.is_empty(), "scene nodes should not be empty");
 
-        let collider_points = app
-            .state()
-            .usd_scene
-            .as_ref()
-            .unwrap()
-            .stage()
+        let stage = app.state().usd_scene.as_ref().unwrap().stage();
+        assert!(stage.root_layer().is_anonymous());
+        assert!(!output.path().join("editor_preview.usda").exists());
+        let collider_points = stage
             .attribute("/Collider.points")
             .unwrap()
             .get::<Vec<cssimpler::renderer::gpu::openusd::gf::Vec3f>>()

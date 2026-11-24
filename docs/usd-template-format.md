@@ -108,7 +108,10 @@ holes, and the remaining draft data stays in the template attributes.
   supported.
 - No size or depth limit is applied by this reader yet; documents come from local
   files.
-- The default fitting-project save filename remains `fitting-project.json` so existing scripts keep working. Templates never use JSON; pass an explicit `.usda` path for project USD output.
+- In the fitting editor, Save writes `fitting-project.usda` in the session's
+  output directory when the session has no source file. A session opened from
+  a project saves back to that path. The `cloth-fit` command still writes
+  `fitting-project.json` for scripts that consume its output.
 
 ## Validation
 
