@@ -1,9 +1,11 @@
+import package::contact::separated_beyond_envelope;
+
 // Independent finite AVBD / squared-distance IPC-style barrier pipeline.
 // All iteration decisions stay on the device. No global floating-point atomics.
-struct Term {ids:vec4u,info:vec4u,a:vec4f,b:vec4f,c:vec4f,gradients:array<vec4f,4>}
+public struct Term {ids:vec4u,info:vec4u,a:vec4f,b:vec4f,c:vec4f,gradients:array<vec4f,4>}
 struct Particle {initial:vec4f, velocity_mass:vec4f,inertia_target:vec4f,delta:vec4f,energy:vec4f,cg:array<vec4f,7>}
 struct Node {lo:vec4f,hi:vec4f,info:vec4u}
-struct Pair {ids:vec4u,kind:u32,slack:f32,dual:f32,rho:f32,next:vec4u,normal_curvature:vec4f,weights:vec4f,frozen:vec4f}
+public struct Pair {ids:vec4u,kind:u32,slack:f32,dual:f32,rho:f32,next:vec4u,normal_curvature:vec4f,weights:vec4f,frozen:vec4f}
 struct PairBuffer {count:atomic<u32>,pad0:u32,pad1:u32,pad2:u32,pairs:array<Pair>}
 struct Control {error:atomic<u32>,alpha:atomic<u32>,accepted:atomic<u32>,sweep:u32,minimum:atomic<u32>,active_count:atomic<u32>,previous_count:u32,matched:atomic<u32>,primal:atomic<u32>,slack_residual:atomic<u32>,dual_change:atomic<u32>,force:atomic<u32>,trials:atomic<u32>,pad0:u32,pad1:u32,pad2:u32}
 struct Config {
@@ -18,20 +20,20 @@ struct Config {
     method:vec4u, // x: independent barrier AL experiment
     coupled:vec4u, // x: inexact coupled linear iterations
 }
-@group(0) @binding(0) var<storage,read_write> positions:array<vec4f>;
-@group(0) @binding(1) var<storage,read_write> particles:array<Particle>;
-@group(0) @binding(2) var<storage,read_write> terms:array<Term>;
-@group(0) @binding(3) var<storage,read> geometry:array<u32>;
-@group(0) @binding(4) var<storage,read_write> contacts:PairBuffer;
-@group(0) @binding(5) var<storage,read_write> heads:array<atomic<u32>>;
+@group(0) @binding(0) public var<storage,read_write> positions:array<vec4f>;
+@group(0) @binding(1) public var<storage,read_write> particles:array<Particle>;
+@group(0) @binding(2) public var<storage,read_write> terms:array<Term>;
+@group(0) @binding(3) public var<storage,read> geometry:array<u32>;
+@group(0) @binding(4) public var<storage,read_write> contacts:PairBuffer;
+@group(0) @binding(5) public var<storage,read_write> heads:array<atomic<u32>>;
 @group(0) @binding(6) var<storage,read_write> nodes:array<Node>;
-@group(0) @binding(7) var<storage,read_write> control:Control;
-@group(0) @binding(8) var<uniform> config:Config;
-fn at(v:u32,alpha:f32)->vec3f {
+@group(0) @binding(7) public var<storage,read_write> control:Control;
+@group(0) @binding(8) public var<uniform> config:Config;
+public fn at(v:u32,alpha:f32)->vec3f {
     if v>=config.counts.x || alpha==0 {return positions[v].xyz;}
     return positions[v].xyz+alpha*particles[v].delta.xyz;
 }
-fn primitive(i:u32)->vec4u {
+public fn primitive(i:u32)->vec4u {
     let p=config.offsets.x+4u*i;
     return vec4u(geometry[p],geometry[p+1u],geometry[p+2u],geometry[p+3u]);
 }
@@ -142,4 +144,4 @@ fn begin_sweep() {
     atomicStore(&contacts.count,0u);atomicStore(&control.alpha,bitcast<u32>(1.0));atomicStore(&control.accepted,0u);
 }
 
-fn proposal_radius()->f32 {return bitcast<f32>(config.method.w)*config.physical.z;}
+public fn proposal_radius()->f32 {return bitcast<f32>(config.method.w)*config.physical.z;}

@@ -31,7 +31,7 @@ published BAL paper's adaptive augmentation-set/Newton-PCG formulation.
 Each sweep performs one globally accepted primal update, a 32-bisection slack
 solve, and a dual update. Duals start cold each physical timestep and persist
 within it. The f64 scalar oracle is in src/barrier_al.rs; GPU passes are in
-src/gpu_avbd/al.wgsl. Shifted nonnegative augmented energy is used only during
+src/gpu_avbd/al.wesl. Shifted nonnegative augmented energy is used only during
 frozen-primal Armijo acceptance. No physical energy monotonicity across dual
 updates is claimed.
 

@@ -1,6 +1,10 @@
+import package::contact::{closest, mathematical_barrier, scalar_barrier, triangle_closest};
+import package::main::{Pair, at, config, contacts, control, geometry, heads, particles, positions, primitive};
+import package::solve::assemble_vertex;
+
 // Independent distance-slack splitting, not the published BAL formulation.
 // Current/history pair regions use full primitive keys, never insertion identity.
-fn contact_value(d:f32,p:Pair,k:f32,original:bool)->vec3f {
+public fn contact_value(d:f32,p:Pair,k:f32,original:bool)->vec3f {
     if config.method.x==0u || original || p.rho<=0 {return scalar_barrier(d,k);}
     let q=d-p.slack+p.dual/p.rho;
     return vec3f(mathematical_barrier(p.slack,k).x+0.5*p.rho*q*q,p.rho*q,p.rho);

@@ -1,8 +1,11 @@
+import package::coupled::sphere_slot;
+import package::main::{Pair, at, config, contacts, control, geometry, heads, particles, positions, primitive, proposal_radius};
+
 struct Closest {q:vec3f,w:vec4f}
 fn segment_point(p:vec3f,a:vec3f,b:vec3f)->f32 {
     let e=b-a;return clamp(dot(p-a,e)/max(dot(e,e),1e-30),0.0,1.0);
 }
-fn triangle_closest(p:vec3f,a:vec3f,b:vec3f,c:vec3f)->Closest {
+public fn triangle_closest(p:vec3f,a:vec3f,b:vec3f,c:vec3f)->Closest {
     let e=b-a;let f=c-a;let n=cross(e,f);let nn=dot(n,n);
     var best=Closest(p-a,vec4f(1,-1,0,0));var dd=dot(best.q,best.q);
     let ab=segment_point(p,a,b);let bc=segment_point(p,b,c);let ca=segment_point(p,c,a);
@@ -41,12 +44,12 @@ fn edge_closest(a:vec3f,b:vec3f,c:vec3f,d:vec3f)->Closest {
     }
     return best;
 }
-fn closest(pair:Pair,alpha:f32)->Closest {
+public fn closest(pair:Pair,alpha:f32)->Closest {
     let x=pair.ids;
     if pair.kind==0u {return triangle_closest(at(x.x,alpha),at(x.y,alpha),at(x.z,alpha),at(x.w,alpha));}
     return edge_closest(at(x.x,alpha),at(x.y,alpha),at(x.z,alpha),at(x.w,alpha));
 }
-fn mathematical_barrier(d:f32,k:f32)->vec3f {
+public fn mathematical_barrier(d:f32,k:f32)->vec3f {
     let r=config.physical.z;
     if d>=r {return vec3f(0);}
     if !(d>0) {atomicOr(&control.error,4u);return vec3f(1e30,0,0);}
@@ -54,7 +57,7 @@ fn mathematical_barrier(d:f32,k:f32)->vec3f {
     let first=-(2*u*l+u*u/s);let second=-(2*l+4*u/s-u*u/(s*s));
     return vec3f(-a*u*u*l,a*first*2*d/(r*r),a*(second*4*d*d/(r*r*r*r)+first*2/(r*r)));
 }
-fn scalar_barrier(d:f32,k:f32)->vec3f {
+public fn scalar_barrier(d:f32,k:f32)->vec3f {
     if !(d>config.gravity.w) {atomicOr(&control.error,4u);return vec3f(1e30,0,0);}
     return mathematical_barrier(d,k);
 }
@@ -141,7 +144,7 @@ fn limit_contact_motion(@builtin(global_invocation_id) id:vec3u) {
 // support-interval gap on ANY axis is a lower bound on primitive separation,
 // even if a nearly-parallel closest-point estimate is inaccurate. Padding
 // covers f32 projection error in the documented origin-relative coordinate range.
-fn separated_beyond_envelope(pair:Pair)->bool {
+public fn separated_beyond_envelope(pair:Pair)->bool {
     let axis=closest(pair,0).q;let norm=length(axis);
     if !(norm>1e-20 && norm<1e20) {return false;}
     var amin=1e30;var amax=-1e30;var bmin=1e30;var bmax=-1e30;

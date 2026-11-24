@@ -22,7 +22,7 @@ Independent Rust implementation of the normal-contact method described by Chen e
 - `ogc/potential.rs`: quadratic then logarithmic activation, exact AD derivatives and a polynomial nearly-parallel-edge filter. Each canonical primitive interaction is integrated once; shared VV/VE contributions from VF and EE traversals are merged.
 - Spherical bounds `0.45 * min(dVF, dEE, dFV)` around positions at the **last detection**, not the last iteration. The OGC projection limits each local proposal before its energy check.
 - `vbd.rs`: implicit Euler with the same anisotropic membrane, bending and sewing as the reference. Local 3×3 Newton, exact Hessian regularized to SPD, local descent search. Coloring includes contacts and mouse attachments: a color shares no element.
-- `gpu_vbd.rs`, `vbd.wgsl`: GPU energies, forces and VBD iterations with approximate positive local Hessians. The gradient retains EE-filter derivatives. `--check-gpu-gradients` compares GPU energies/forces against f64 AD at identical f32-rounded geometry.
+- `gpu_vbd.rs`, `gpu_vbd/vbd.wesl`: GPU energies, forces and VBD iterations with approximate positive local Hessians. The gradient retains EE-filter derivatives. `--check-gpu-gradients` compares GPU energies/forces against f64 AD at identical f32-rounded geometry.
 
 ## Prediction and conservative candidates
 
