@@ -194,7 +194,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
                     metrics.step_ms
                 );
                 state.last_metrics = Some(metrics);
-                state.sync_usd_points();
+                state.sync_usd_simulation_pose();
             }
             Err(e) => {
                 state.playing = false;

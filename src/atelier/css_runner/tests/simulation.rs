@@ -14,6 +14,47 @@ use cssimpler::renderer::{EngineEvent, FrameInfo, RedrawSchedule, SceneProvider}
 use std::time::Duration;
 
 #[test]
+fn accepted_solver_snapshot_publishes_points_without_reauthoring_normals() {
+    use cssimpler::renderer::gpu::openusd::gf;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let sheet = load_studio_stylesheet().unwrap();
+    let mut app = create_runner_app(selection_test_state(dir.path()), &sheet);
+    let panel = &app.state().scene.garment.panels[0];
+    let path = clothcraft::usd_scene::viewport_panel_path(&panel.id);
+    let vertex = panel.vertices.start;
+    let stage = app.state().usd_scene.as_ref().unwrap().stage().clone();
+    let read = |attribute| {
+        stage
+            .attribute(format!("{path}.{attribute}"))
+            .unwrap()
+            .get::<Vec<gf::Vec3f>>()
+            .unwrap()
+            .unwrap()
+    };
+    let initial_points = read("points");
+    let initial_normals = read("normals");
+    let state = app.state();
+    let mut pose = state.scene.state.clone();
+    pose.x[vertex].z += 0.1;
+    *state.worker_latest.lock().unwrap() = Some(worker::Done {
+        generation: state.generation,
+        had_grab: false,
+        result: Ok((pose, Default::default())),
+    });
+    app.frame(FrameInfo {
+        delta: Duration::ZERO,
+        frame_index: 0,
+    });
+    assert_eq!(app.state().step_count, 1);
+    assert_ne!(read("points"), initial_points);
+    assert_eq!(read("normals"), initial_normals);
+}
+
+#[test]
 fn test_3d_camera_orbit_zoom_and_reset_usd() {
     let _guard = worker::WORKER_TEST_LOCK
         .lock()

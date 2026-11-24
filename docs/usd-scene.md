@@ -198,22 +198,25 @@ support for every OpenUSD schema, Hydra renderer, asset resolver or DCC extensio
 
 The fitting workspace authors navigation on a separate in-memory USD camera
 stage. Orbiting, zooming and resetting the camera refresh the view while the
-renderer reuses geometry buffers and the existing shadow map. Updates to garment
-geometry still invalidate the scene buffers and shadow map.
+renderer reuses geometry buffers and the existing shadow map. Topology edits
+invalidate the scene buffers. Accepted cloth poses update the shadow map.
 
 Both cssimpler editors use the registered USD viewport as their sole 3D renderer.
 The previous CPU-projected SVG triangle overlay has been removed; the 2D pattern
 boards still use SVG. This removes duplicate mesh projection and DOM construction
 on UI rebuilds. The USD snapshot is loaded at application creation and retained as a shared stage.
-Accepted simulation results update its point attributes on the event thread, so
-the native renderer observes stage revisions without file export/reload. Reference
-editor reset/remeshing also updates display topology. Worker scheduling remains
-separate follow-up work.
+Accepted fitting results author only panel points on the event thread. The
+renderer uploads those positions and uses its cached triangle and edge mappings
+to update cloth normals, wireframe edges and the mesh buffers in a compute pass
+before rendering shadows and lighting. Static avatar and cove data stay in
+their existing buffers. Adapters without usable compute rebuild the display
+geometry with CPU-derived normals. The accepted CPU snapshot still serves
+editing, diagnostics and export, including the GPU solver's existing readback.
+The reference editor retains its authored geometry update path.
 
 Native USD host elements have explicit flex sizing and minimum drawable dimensions;
 unlike an SVG, their mesh content does not supply an intrinsic DOM size.
 
-Display normals are authored by ClothCraft rather than inferred by the renderer.
 `garment_stage_usda` and `append_viewport_surface` publish an area-weighted
 `normal3f[] normals` attribute with `vertex` interpolation for every panel and
 the static collision mesh, so the default appearance is smooth. A zero or
@@ -221,11 +224,12 @@ non-finite normal would be rejected by the viewport, so degenerate or isolated
 vertices use a finite `+Y` fallback. Triangle winding, not the rest geometry,
 defines orientation.
 
-Accepted snapshots, edit commits and remeshes rewrite the affected `points` and
-`normals` together on the event thread. The 3D viewport header exposes one
+Edit commits and remeshes rewrite the affected `points` and `normals` together.
+The 3D viewport header exposes one
 icon toggle for Smooth/Flat shading. Flat mode authors `faceVarying` per-corner
 normals from the same triangles, and switching back republishes the vertex
-normals. The control is view-only state: it is not saved in the document, does
+normals. The viewport uses the authored interpolation to choose smooth or flat
+normals for live poses. The control is view-only state: it is not saved in the document, does
 not touch physics and resets to Smooth on launch.
 
 ### Cloth wireframe overlay
