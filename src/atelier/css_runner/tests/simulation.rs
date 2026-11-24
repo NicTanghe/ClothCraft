@@ -39,7 +39,7 @@ fn test_3d_camera_orbit_zoom_and_reset_usd() {
     });
 
     let read_xform = |st: &CssRunnerState| {
-        st.usd_scene
+        st.usd_camera_scene
             .as_ref()
             .unwrap()
             .stage()
@@ -56,6 +56,14 @@ fn test_3d_camera_orbit_zoom_and_reset_usd() {
     let initial_xf = read_xform(app.state());
     let initial_yaw = app.state().camera.yaw;
     let initial_dist = app.state().camera.distance;
+    let stage = app.state().usd_scene.as_ref().unwrap().stage().clone();
+    let geometry_changes = std::rc::Rc::new(std::cell::Cell::new(0));
+    let changes = geometry_changes.clone();
+    stage.add_sink(
+        move |_: &_, _: &cssimpler::renderer::gpu::openusd::usd::CommittedChange| {
+            changes.set(changes.get() + 1);
+        },
+    );
 
     let vp3d = viewport_3d_rect(app.state());
     let cx = vp3d.x + vp3d.w * 0.5;
@@ -88,6 +96,11 @@ fn test_3d_camera_orbit_zoom_and_reset_usd() {
     assert!((app.state().camera.yaw - initial_yaw).abs() < 1e-6);
     assert!((app.state().camera.distance - initial_dist).abs() < 1e-6);
     assert_eq!(read_xform(app.state()), initial_xf);
+    assert_eq!(
+        geometry_changes.get(),
+        0,
+        "navigation must preserve the geometry cache"
+    );
 }
 
 #[test]
