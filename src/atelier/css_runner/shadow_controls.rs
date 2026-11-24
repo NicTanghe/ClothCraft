@@ -35,12 +35,14 @@ impl ShadowDrag {
 pub(super) enum ShadowControl {
     Softness,
     Strength,
+    Coverage,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::atelier) struct ShadowLevels {
     softness: u8,
     strength: u8,
+    coverage: u8,
 }
 
 impl Default for ShadowLevels {
@@ -48,6 +50,7 @@ impl Default for ShadowLevels {
         Self {
             softness: 40,
             strength: 78,
+            coverage: 0,
         }
     }
 }
@@ -57,6 +60,7 @@ impl ShadowLevels {
         match control {
             ShadowControl::Softness => self.softness,
             ShadowControl::Strength => self.strength,
+            ShadowControl::Coverage => self.coverage,
         }
     }
 
@@ -69,6 +73,7 @@ impl ShadowLevels {
             (24.0 + 60.0 * softness).round().min(64.0) as u32
         };
         settings.strength = f32::from(self.strength) / 100.0;
+        settings.coverage = f32::from(self.coverage) / 100.0;
         settings
     }
 }
@@ -79,6 +84,7 @@ impl ShadowControl {
         match self {
             Self::Softness => levels.softness = value,
             Self::Strength => levels.strength = value,
+            Self::Coverage => levels.coverage = value,
         }
         let changed = state.viewport_shadow_levels.replace(levels) != levels;
         if changed {
@@ -104,8 +110,14 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
         fill_style.layout.calc.width = Some(LengthPercentageCalc::new(0.0, filled));
         let mut thumb_style = Style::default();
         thumb_style.layout.calc.inset_left = Some(LengthPercentageCalc::new(0.0, filled - 4.0));
+        let value_text = match (control, value) {
+            (ShadowControl::Coverage, 0) => "Close fit".to_owned(),
+            (ShadowControl::Coverage, 100) => "Full cove".to_owned(),
+            (ShadowControl::Coverage, _) => format!("{value}% toward full cove"),
+            _ => format!("{value}%"),
+        };
         let title = if supported {
-            format!("Shadow {label} · {value}%")
+            format!("Shadow {label} · {value_text}")
         } else {
             "Shadow mapping is unavailable on this device".to_owned()
         };
@@ -126,6 +138,7 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
             .with_attribute("aria-valuemin", "0")
             .with_attribute("aria-valuemax", "100")
             .with_attribute("aria-valuenow", value.to_string())
+            .with_attribute("aria-valuetext", value_text)
             .on_mousedown_shared(move || {
                 let mut input = pointer.lock().unwrap();
                 if supported && input.primary_pressed {
@@ -181,6 +194,11 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
                 ShadowControl::Strength,
                 "shadow-strength-slider",
                 "Strength",
+            ),
+            row(
+                ShadowControl::Coverage,
+                "shadow-coverage-slider",
+                "Coverage",
             ),
         ])
         .into()

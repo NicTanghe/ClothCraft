@@ -6,9 +6,11 @@ The native 3D viewport uses a slightly warm shadow-casting key and a cool
 directional fill. A 2048² depth map and a contact-hardening filter keep shadow
 edges tighter near contact and widen them farther from the caster. Meshes and
 the infinity cove receive these shadows on devices with sampled-depth support.
-The cove stays out of the light-space pass and its bounds. Other devices keep
-the original lighting and cove. The Softness and Strength sliders in Settings → 3D shadows
-adjust the penumbra and blocked key light independently for the current session.
+The depth map starts with a close fit around the shadow casters. In Settings →
+3D shadows, Coverage expands that region up to the entire infinity cove. The
+cove receives shadows and stays out of the depth draw. Softness and Strength
+control the penumbra and blocked key light independently for the current session.
+Devices without sampled-depth support keep the original lighting and cove.
 
 Garment panel meshes preview a fine fabric weave using their USD display
 colour. Avatar meshes keep the default surface response. The viewport changes
