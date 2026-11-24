@@ -3,3 +3,4 @@
 *.jpg -text
 *.glb -text
 *.abc -text
+docs/reports/*.pdf binary

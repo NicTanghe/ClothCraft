@@ -1,11 +1,43 @@
-//! Static USD publication, independent of the desktop and the physical solvers.
+//! Publish compiled geometry as USD and update the live desktop viewport stage.
 //!
-//! This bounded USDA writer is a publication boundary, not a USD parser or stage
-//! implementation. Editable templates remain the source of semantic references;
-//! the future event-thread scene adapter can load the result into cssimpler's
-//! native `openusd::usd::Stage`. See `docs/usd-scene.md` for losses and units.
+//! Editable templates supply semantic references and the solvers supply
+//! accepted geometry. See `docs/usd-scene.md` for the publication contract.
 use crate::{garment::CompiledGarment, model::State};
 use std::{collections::BTreeSet, fmt::Write as _};
+
+/// Seed the viewport's anonymous root layer from a generated scene snapshot.
+#[cfg(feature = "desktop")]
+pub fn viewport_scene_from_usda(
+    usda: &str,
+) -> Result<cssimpler::renderer::gpu::usd::UsdScene, String> {
+    use cssimpler::renderer::gpu::{
+        openusd::{usd::Stage, usda::parser::Parser},
+        openusd_schemas,
+        usd::UsdScene,
+    };
+
+    let specs = Parser::new(usda)
+        .parse()
+        .map_err(|error| error.to_string())?;
+    let stage = Stage::builder()
+        .schema_registry(openusd_schemas::schema_registry())
+        .in_memory("clothcraft-viewport.usda")
+        .map_err(|error| error.to_string())?;
+    let root = stage.root_layer().identifier().to_owned();
+    stage
+        .batch_edit(&[&root], |layers| {
+            let data = layers[0].data_mut();
+            for (path, spec) in specs {
+                data.create_spec(path.clone(), spec.ty);
+                for (name, value) in spec.fields {
+                    data.set_field(&path, &name, value);
+                }
+            }
+            Ok(())
+        })
+        .map_err(|error| error.to_string())?;
+    UsdScene::from_stage(stage).map_err(|error| error.to_string())
+}
 
 /// How the viewport derives shading normals from the displayed triangle mesh.
 ///

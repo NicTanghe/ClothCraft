@@ -6,12 +6,12 @@ use std::fs;
 
 impl CssRunnerState {
     /// Where Save writes: the document opened with `--project`, or
-    /// `<output>/fitting-project.json` when the session has no source file.
+    /// `<output>/fitting-project.usda` when the session has no source file.
     /// The flag is true for that default location.
     pub fn save_target(&self) -> (std::path::PathBuf, bool) {
         match &self.files.source {
             Some(source) => (source.clone(), false),
-            None => (self.files.output.join("fitting-project.json"), true),
+            None => (self.files.output.join("fitting-project.usda"), true),
         }
     }
 

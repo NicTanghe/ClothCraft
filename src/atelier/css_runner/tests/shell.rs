@@ -381,7 +381,7 @@ fn test_css_runner_headless_frame_and_rendering() {
     // Save the visible accepted checkpoint, not the launch-time project cache.
     app.state_mut().save_project();
     let saved =
-        FittingProject::load(&app.state().files.output.join("fitting-project.json")).unwrap();
+        FittingProject::load(&app.state().files.output.join("fitting-project.usda")).unwrap();
     let checkpoint = saved.state.unwrap();
     assert_eq!(checkpoint.x, app.state().scene.state.x);
     assert_eq!(checkpoint.v, app.state().scene.state.v);
@@ -806,10 +806,26 @@ fn viewport_wireframe_toggle_strokes_only_garment_panels() {
 
     // The display stage carries the garment panels and the collider, and no
     // longer a ribbon wireframe mesh: the stroke lives in the GPU renderer.
-    let usda = std::fs::read_to_string(output.join("runner_preview.usda")).expect("read stage");
-    assert!(usda.contains("def Scope \"Garment\""));
-    assert!(usda.contains("def Mesh \"Collider\""));
-    assert!(!usda.contains("ClothWire"));
+    let scene = app
+        .state()
+        .usd_scene
+        .as_ref()
+        .expect("viewport scene")
+        .clone();
+    let stage = scene.stage();
+    assert!(stage.root_layer().is_anonymous());
+    assert!(!output.join("runner_preview.usda").exists());
+    for path in [
+        "/World/Garment",
+        "/Collider",
+        "/InfinityCove",
+        clothcraft::usd_scene::VIEWPORT_CAMERA_PATH,
+    ] {
+        assert!(
+            stage.prim(path).unwrap().is_valid().unwrap(),
+            "missing {path}"
+        );
+    }
 
     assert!(!app.state().wireframe);
     assert!(!shared().enabled);
@@ -844,8 +860,7 @@ fn viewport_wireframe_toggle_strokes_only_garment_panels() {
     );
 
     // Toggling the stroke must not re-author overlay geometry into the stage.
-    let usda = std::fs::read_to_string(output.join("runner_preview.usda")).expect("read stage");
-    assert!(!usda.contains("ClothWire"));
+    assert!(!stage.prim("/World/ClothWire").unwrap().is_valid().unwrap());
 
     assert!(cssimpler::renderer::dispatch_click(
         app.scene(),
