@@ -1,26 +1,35 @@
 //! Shared native numeric editor for adjustable workspace values.
 use super::super::{
     actions::{RunnerAction, RunnerUiOp},
+    placement::{PlacementAxis, placement_value},
     state::CssRunnerState,
 };
 use cssimpler::{core::Node, ui};
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NumberField {
     ZoomSpeed,
     CornerRadius,
     CornerTension,
+    /// One placement axis of the piece the field was built for. The piece ID is
+    /// fixed when the inspector is rendered, so queued edits keep their target
+    /// even if the selection changes before they are processed.
+    Placement {
+        panel: Arc<str>,
+        axis: PlacementAxis,
+    },
     ImportTolerance,
     ImportMesh,
     ImportScale,
 }
 
 pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: NumberField) -> Node {
-    let value = match field {
+    let value = match &field {
         NumberField::ZoomSpeed => state.board_2d_zoom_speed,
         NumberField::CornerRadius => state.corner_radius_mm,
         NumberField::CornerTension => state.corner_tension,
+        NumberField::Placement { panel, axis } => placement_value(state, panel, *axis),
         NumberField::ImportTolerance => state.import_tolerance_mm,
         NumberField::ImportMesh => state.import_mesh_mm,
         NumberField::ImportScale => state.import_scale_mm_per_unit,
@@ -46,6 +55,7 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
     let focus_id = id.to_owned();
     let input_id = id.to_owned();
     let initial_text = displayed.clone();
+    let input_field = field.clone();
     ui! {
         <div class="cad-number-control">
             <input type="text" id={id} class="cad-number-input" value={displayed}
@@ -59,7 +69,7 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
                     // text editing owns focus. Parsing must not remove the dot.
                     *input_text.lock().unwrap() = Some((input_id.clone(), text.to_owned()));
                     if let Ok(value) = text.parse::<f64>() && value.is_finite() {
-                        actions.push(RunnerAction::Ui(RunnerUiOp::SetNumber(field, value)));
+                        actions.push(RunnerAction::Ui(RunnerUiOp::SetNumber(input_field.clone(), value)));
                     }
                 }} />
             <button id={handle_id} class="cad-number-drag"
@@ -67,7 +77,7 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
                 onmousedown_shared={move || {
                     let mut drag = drag.lock().unwrap();
                     drag.active = Some(super::super::input::number::NumberDrag {
-                        field, last_y: drag.pointer_y, initial_value: value, value, remainder: 0.0,
+                        field: field.clone(), last_y: drag.pointer_y, initial_value: value, value, remainder: 0.0,
                         initial_mode_radius, initial_preview_active,
                         cursor: if native_drag { super::super::input::cursor_wrap::CursorWrap::new() } else { None },
                     });
@@ -81,11 +91,15 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
 }
 
 impl NumberField {
-    pub(in super::super) fn spec(self) -> (f64, f64, f64, &'static str) {
+    pub(in super::super) fn spec(&self) -> (f64, f64, f64, &'static str) {
         match self {
             Self::ZoomSpeed => (0.25, 4.0, 0.25, "2D zoom speed (×)"),
             Self::CornerRadius => (1.0, 250.0, 1.0, "Corner radius (mm)"),
             Self::CornerTension => (0.05, 1.5, 0.05, "Corner tension"),
+            Self::Placement { axis, .. } if axis.is_rotation() => {
+                (-180.0, 180.0, 1.0, "Piece rotation (degrees)")
+            }
+            Self::Placement { .. } => (-300.0, 300.0, 0.5, "Piece position (cm)"),
             Self::ImportTolerance => (0.01, 5.0, 0.01, "Import curve chord error (mm)"),
             Self::ImportMesh => (3.0, 500.0, 1.0, "Imported panel mesh spacing (mm)"),
             Self::ImportScale => (

@@ -44,19 +44,32 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     use std::sync::atomic::Ordering;
     let text_editing = state.numeric_input_active.load(Ordering::Relaxed);
+    let pointer_pressed = matches!(
+        event,
+        EngineEvent::PointerButton {
+            state: cssimpler::renderer::ButtonState::Pressed,
+            ..
+        }
+    );
+    let tab_pressed = matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into()));
+    // A pointer press or Tab ends the pending Arrange edit. Queue the commit
+    // behind waiting keystrokes so it applies the latest value and keeps any
+    // selection change from the same event.
+    if (pointer_pressed && (text_editing || state.placement_draft.is_some()))
+        || (tab_pressed && text_editing)
+    {
+        state.actions.push(super::actions::RunnerAction::Ui(
+            super::actions::RunnerUiOp::CommitPlacement,
+        ));
+        state.update_handle.request_update();
+    }
     if number::handle_number_event(state, event)
         || super::shadow_controls::handle_event(state, event)
     {
         return true;
     }
     // Native numeric text inputs own keyboard events until the next pointer press.
-    if matches!(
-        event,
-        EngineEvent::PointerButton {
-            state: cssimpler::renderer::ButtonState::Pressed,
-            ..
-        }
-    ) {
+    if pointer_pressed {
         state.mesh_input_focus = false;
     }
     if let EngineEvent::Key(k) = event
@@ -70,12 +83,20 @@ fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     }
 
     // Tab enters the native input cycle; preserve keyboard ownership there.
-    if matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into()))
-    {
+    if tab_pressed {
         state.numeric_input_active.store(true, Ordering::Relaxed);
         return false;
     }
     if matches!(event, EngineEvent::Key(_)) && text_editing {
+        // Enter applies a typed placement; the text field keeps focus. The
+        // commit is queued behind the keystrokes it applies.
+        if matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Enter".into()))
+        {
+            state.actions.push(super::actions::RunnerAction::Ui(
+                super::actions::RunnerUiOp::CommitPlacement,
+            ));
+            state.update_handle.request_update();
+        }
         return false;
     }
     match event {

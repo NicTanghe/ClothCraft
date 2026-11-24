@@ -4,6 +4,11 @@
 or Alt-through box selection. Read [group placement](group-placement.md) for
 the flat-arrangement reset policy, cancellation and visibility limits.
 
+For one piece, open **Properties → Piece → 3D Arrangement** to edit translation
+in centimetres or rotation in degrees. Press Enter, leave the field, or release
+the drag handle to apply the placement as one undoable edit. Escape discards
+the draft. The live USD viewport shows the committed placement.
+
 19 October update: [panel tools](panel-tools.md) documents boundary-owned internal lines, the read-only 2D ruler and bidirectional linked mirror pairs. Geometry updates commit on release; 3D placement/material stay independent.
 
 **16 October:** [Document lifecycle and partial/multi-edge sewing](documents-and-sewing.md) now extend the workflow below. Native Save/Open is separate from Export. Use Sew → Multiple edges per side for ordered chains.
