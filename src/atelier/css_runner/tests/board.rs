@@ -437,6 +437,33 @@ fn mirror_piece_status_toggle_keeps_modes_per_piece_and_mirrors_point_drags() {
             serde_json::to_value(&before).unwrap()
         );
     }
+
+    state.slide_on_edge = true;
+    for (delta, expected) in [
+        (DVec2::new(0.012, 0.024), DVec2::new(0.012, 0.)),
+        (DVec2::new(0.006, 0.024), DVec2::new(0., 0.024)),
+    ] {
+        state.set_single_2d_point(id.clone(), 0);
+        let (x, y) = board_to_screen_px(state, board(&before, 0));
+        let (end_x, end_y) = board_to_screen_px(state, board(&before, 0) + delta);
+        handle_runner_event(state, &pointer_move_ev(x, y));
+        assert!(handle_runner_event(state, &pointer_btn_ev(true)));
+        handle_runner_event(state, &pointer_move_ev(end_x, end_y));
+        let verify = |after: &GarmentTemplate| {
+            assert!(board(after, 0).distance(board(&before, 0) + expected) < 1e-6);
+            let reflected = DVec2::new(-expected.x, expected.y);
+            assert!(board(after, 1).distance(board(&before, 1) + reflected) < 1e-6);
+        };
+        verify(
+            state
+                .preview_template
+                .as_ref()
+                .expect("mirrored slide preview"),
+        );
+        assert!(handle_runner_event(state, &pointer_btn_ev(false)));
+        verify(&state.project.template);
+        assert!(undo_redo_2d(state, false));
+    }
 }
 
 #[test]

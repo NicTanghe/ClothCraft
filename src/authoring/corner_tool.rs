@@ -1708,6 +1708,100 @@ fn incident_path(
     Ok(samples)
 }
 
+fn incident_slide_paths(poly: &PolygonPattern, point: usize) -> Result<[Vec<DVec2>; 2], String> {
+    Ok([
+        incident_path(poly, point, false)?,
+        incident_path(poly, point, true)?,
+    ])
+}
+
+fn project_slide_path(samples: &[DVec2], position: DVec2) -> DVec2 {
+    let mut nearest = samples[0];
+    for (i, segment) in samples.windows(2).enumerate() {
+        let d = segment[1] - segment[0];
+        let length = d.length();
+        if length <= 1e-12 {
+            continue;
+        }
+        let end = if i + 2 == samples.len() {
+            (length - SLIDE_CORNER_GAP_M).max(0.)
+        } else {
+            length
+        };
+        let axis = d / length;
+        let projected = segment[0] + axis * (position - segment[0]).dot(axis).clamp(0., end);
+        if projected.distance_squared(position) < nearest.distance_squared(position) {
+            nearest = projected;
+        }
+    }
+    nearest
+}
+
+fn slide_tangent(samples: &[DVec2]) -> Option<DVec2> {
+    samples[1..]
+        .iter()
+        .find_map(|p| (*p - samples[0]).try_normalize())
+}
+
+#[derive(Clone, Copy)]
+struct MirroredSlide {
+    axis: DVec2,
+    across: bool,
+}
+
+impl MirroredSlide {
+    fn from_drag(pair_line: DVec2, drag: DVec2) -> Option<Self> {
+        let axis = pair_line.try_normalize()?;
+        let direction = drag.try_normalize()?;
+        // The perpendicular band extends 20% of a right angle to either side.
+        let across = direction.dot(axis).abs() <= (std::f64::consts::FRAC_PI_2 * 0.2).sin();
+        Some(Self { axis, across })
+    }
+
+    fn preferred_path(self, paths: &[Vec<DVec2>; 2]) -> Option<usize> {
+        let [a, b] = paths
+            .each_ref()
+            .map(|path| slide_tangent(path).map(|tangent| tangent.dot(self.axis).abs()));
+        let (a, b) = (a?, b?);
+        if (a - b).abs() <= 1e-9 {
+            return None;
+        }
+        let along = usize::from(b > a);
+        Some(if self.across { 1 - along } else { along })
+    }
+}
+
+fn mirrored_corner_line(
+    source: &GarmentTemplate,
+    panel: usize,
+    poly: &PolygonPattern,
+    point: usize,
+    mirror_within_piece: bool,
+) -> Option<DVec2> {
+    let corner = poly.points[point];
+    if mirror_within_piece
+        && let Some(mate) = piece_mirror::corner_partner(poly, piece_mirror::axis_x(poly), point)
+        && mate != point
+    {
+        return Some(poly.points[mate] - corner);
+    }
+    let piece = &source.panels[panel];
+    let mate = mirror_partner(source, &piece.id)?;
+    let mate_index = source.panels.iter().position(|p| p.id == mate)?;
+    let other = &source.panels[mate_index];
+    let points = &other.polygon.as_ref()?.points;
+    if poly.points.len() != points.len() {
+        return None;
+    }
+    let other_point = points[points.len() - 1 - point];
+    let angle = piece.layout_rotation_degrees;
+    let board_delta = layout(source, mate_index)
+        + rotate_2d(other_point, other.layout_rotation_degrees)
+        - layout(source, panel)
+        - rotate_2d(corner, angle);
+    Some(rotate_2d(board_delta, -angle))
+}
+
 /// Project a drag onto the nearer of the two original incident boundary paths.
 pub fn slide_corner_position(
     source: &GarmentTemplate,
@@ -1715,38 +1809,48 @@ pub fn slide_corner_position(
     point: usize,
     position: DVec2,
 ) -> Result<DVec2, String> {
+    slide_corner_position_with_mirroring(source, panel, point, position, false)
+}
+
+/// For a mirrored pair, choose the incident path relative to the line joining its points.
+pub fn slide_corner_position_with_mirroring(
+    source: &GarmentTemplate,
+    panel: &str,
+    point: usize,
+    position: DVec2,
+    mirror_within_piece: bool,
+) -> Result<DVec2, String> {
     if !position.is_finite() {
         return Err("Point coordinates must be finite".into());
     }
-    let poly = source
+    let panel = source
         .panels
         .iter()
-        .find(|p| p.id == panel)
-        .and_then(|p| p.polygon.as_ref())
+        .position(|p| p.id == panel)
+        .ok_or("Select an editable contour point")?;
+    let poly = source.panels[panel]
+        .polygon
+        .as_ref()
         .ok_or("Select an editable contour point")?;
     let corner = *poly.points.get(point).ok_or("Point index out of range")?;
-    let mut nearest = corner;
-    for incoming in [true, false] {
-        let samples = incident_path(poly, point, incoming)?;
-        for (i, segment) in samples.windows(2).enumerate() {
-            let d = segment[1] - segment[0];
-            let length = d.length();
-            if length <= 1e-12 {
-                continue;
-            }
-            let end = if i + 2 == samples.len() {
-                (length - SLIDE_CORNER_GAP_M).max(0.)
-            } else {
-                length
-            };
-            let axis = d / length;
-            let projected = segment[0] + axis * (position - segment[0]).dot(axis).clamp(0., end);
-            if projected.distance_squared(position) < nearest.distance_squared(position) {
-                nearest = projected;
-            }
-        }
+    let paths = incident_slide_paths(poly, point)?;
+    let preferred = mirrored_corner_line(source, panel, poly, point, mirror_within_piece)
+        .and_then(|line| MirroredSlide::from_drag(line, position - corner))
+        .and_then(|slide| slide.preferred_path(&paths));
+    if let Some(path) = preferred {
+        return Ok(project_slide_path(&paths[path], position));
     }
-    Ok(nearest)
+    // Preserve incoming-first tie breaking for ordinary corners.
+    let [outgoing, incoming] = paths
+        .each_ref()
+        .map(|path| project_slide_path(path, position));
+    Ok(
+        if outgoing.distance_squared(position) < incoming.distance_squared(position) {
+            outgoing
+        } else {
+            incoming
+        },
+    )
 }
 
 fn slide_dart_base(
@@ -1754,15 +1858,19 @@ fn slide_dart_base(
     point: usize,
     is_left: bool,
     position: DVec2,
+    mirror_slide: Option<MirroredSlide>,
 ) -> Result<DVec2, String> {
-    // The other incident edge continues along the mouth. The sewn leg is
-    // parallel to the tip direction and is never the perpendicular choice.
-    let samples = incident_path(poly, point, is_left)?;
+    let paths = incident_slide_paths(poly, point)?;
+    let outer = usize::from(is_left);
+    let path = mirror_slide
+        .and_then(|slide| slide.preferred_path(&paths))
+        .unwrap_or(outer);
+    let samples = &paths[path];
+    if path != outer {
+        return Ok(project_slide_path(samples, position));
+    }
     let base = samples[0];
-    let tangent = samples[1..]
-        .iter()
-        .find_map(|p| (*p - base).try_normalize())
-        .ok_or("Dart base needs a nonzero adjoining edge")?;
+    let tangent = slide_tangent(samples).ok_or("Dart base needs a nonzero adjoining edge")?;
     let limit = (samples.last().unwrap().distance(base) - SLIDE_CORNER_GAP_M).max(0.);
     // Extend the line toward the mouth so the two bases can slide inward as well.
     Ok(base + tangent * (position - base).dot(tangent).min(limit))
@@ -1904,8 +2012,30 @@ pub(super) fn move_dart_point(
         };
     } else {
         let (base, mate) = if point == left { (0, 2) } else { (2, 0) };
+        let mirror_slide = if slide {
+            let line = if mirror {
+                Some(b - a)
+            } else {
+                source
+                    .panels
+                    .iter()
+                    .position(|p| p.id == panel)
+                    .and_then(|index| {
+                        mirrored_corner_line(
+                            source,
+                            index,
+                            poly,
+                            point,
+                            mirrored_pieces.contains(panel),
+                        )
+                    })
+            };
+            line.and_then(|line| MirroredSlide::from_drag(line, position - before[base]))
+        } else {
+            None
+        };
         after[base] = if slide {
-            slide_dart_base(poly, point, point == left, position)?
+            slide_dart_base(poly, point, point == left, position, mirror_slide)?
         } else {
             position
         };
@@ -1918,6 +2048,7 @@ pub(super) fn move_dart_point(
                     if mate == 0 { left } else { right },
                     mate == 0,
                     reflected,
+                    mirror_slide,
                 )?
             } else {
                 reflected

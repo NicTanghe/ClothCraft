@@ -13,7 +13,7 @@ use clothcraft::authoring::corner_tool::{
     CIRCLE_TENSION, DartPointOptions, is_sewn_dart_point,
     preview_adjust_handle_with_piece_mirroring, preview_dart_point_with_piece_mirroring,
     preview_move_corner, preview_move_groups_with_piece_mirroring, preview_move_piece_corner,
-    slide_corner_position, validate_fillet_batch,
+    slide_corner_position_with_mirroring, validate_fillet_batch,
 };
 use clothcraft::authoring::{self, Command};
 use clothcraft::fitting::FittingScene;
@@ -329,7 +329,13 @@ pub(super) fn point_drag_target(
         && !dart
         && resolve_corner_edge(source, panel_id, point_idx).is_some()
     {
-        slide_corner_position(source, panel_id, point_idx, position)?
+        slide_corner_position_with_mirroring(
+            source,
+            panel_id,
+            point_idx,
+            position,
+            state.mirrored_pieces.contains(panel_id),
+        )?
     } else {
         position
     };
