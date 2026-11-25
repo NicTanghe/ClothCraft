@@ -6,7 +6,7 @@
 //! - Independent property tests and unit tests.
 
 use clothcraft::{
-    authoring::{self, Command, History},
+    authoring::{self, Command, History, corner_tool::slide_corner_position},
     garment::{
         GarmentTemplate,
         darts::DartSpec,
@@ -15,6 +15,7 @@ use clothcraft::{
         meshing::MeshingSettings,
         polygon::PolygonPattern,
         presets::{self, GarmentKind},
+        seam::{BoundaryRef, Side},
     },
 };
 use glam::DVec2;
@@ -249,6 +250,167 @@ fn real_dart_authoring_transaction_and_solver_seam() {
     );
     let redone = history.restore(&undone.template, true).unwrap();
     assert_eq!(serde_json::to_vec(&redone.template).unwrap(), json_bytes);
+}
+
+#[test]
+fn ordinary_edge_slide_uses_either_incident_path_without_merging_corners() {
+    let template = rectangle_template(0.3, 0.2);
+    let panel = &template.panels[0].id;
+    let slide = |x, y| slide_corner_position(&template, panel, 0, DVec2::new(x, y)).unwrap();
+    assert_eq!(slide(0.07, 0.02), DVec2::new(0.07, 0.));
+    assert_eq!(slide(0.01, 0.08), DVec2::new(0., 0.08));
+    let near_end = slide(0.4, 0.);
+    assert!(near_end.x > 0.29 && near_end.x < 0.3 - 1e-6);
+}
+
+#[test]
+fn mirrored_dart_slide_follows_each_outer_edge_and_preserves_equal_legs() {
+    let points = vec![
+        DVec2::ZERO,
+        DVec2::new(0.10, 0.02),
+        DVec2::new(0.15, 0.12),
+        DVec2::new(0.20, 0.02),
+        DVec2::new(0.30, 0.07),
+        DVec2::new(0.30, 0.24),
+        DVec2::new(0., 0.24),
+    ];
+    let open = authoring::apply(
+        &rectangle_template(0.3, 0.24),
+        Command::Polygon {
+            points: points.clone(),
+            tangents: vec![],
+            meshing: MeshingSettings::default(),
+            fabric: "woven-reference".into(),
+            replace: true,
+        },
+    )
+    .unwrap()
+    .template;
+    let panel = &open.panels[0];
+    let poly = panel.polygon.as_ref().unwrap();
+    let leg = |index: usize| BoundaryRef {
+        panel: panel.id.clone(),
+        side: Side::Bottom,
+        edge: Some(poly.edges[index].clone()),
+        range: [0., 1.],
+        reversed: false,
+    };
+    let sewn = authoring::apply(
+        &open,
+        Command::Sew {
+            a: leg(1),
+            b: leg(2),
+            reverse: true,
+            ease: false,
+        },
+    )
+    .unwrap()
+    .template;
+    let moved = authoring::apply(
+        &sewn,
+        Command::MoveDartPoint {
+            panel: panel.id.clone(),
+            point: 1,
+            position: DVec2::new(0.086, 0.052),
+            mirror: true,
+            slide: true,
+        },
+    )
+    .unwrap();
+    let after = &moved.template.panels[0].polygon.as_ref().unwrap().points;
+    for (base, outer) in [(1, 0), (3, 4)] {
+        let line = (points[outer] - points[base]).normalize();
+        let delta = after[base] - points[base];
+        assert!(delta.length() > 1e-3);
+        assert!(delta.perp_dot(line).abs() < 1e-10);
+    }
+    let [a, b] = moved.garment.seams[0].lengths;
+    assert!((a - b).abs() < 1e-9);
+}
+
+#[test]
+fn translating_dart_bases_preserves_curved_legs_and_respects_explicit_easing() {
+    let source = rectangle_template(0.3, 0.2);
+    let panel = source.panels[0].id.clone();
+    let edge = source.panels[0].polygon.as_ref().unwrap().edges[0].clone();
+    let dart = authoring::apply(
+        &source,
+        Command::DartCutSew {
+            panel: panel.clone(),
+            edge,
+            left_t: 0.35,
+            right_t: 0.45,
+            apex: DVec2::new(0.12, 0.08),
+        },
+    )
+    .unwrap()
+    .template;
+
+    for ease in [false, true] {
+        let mut before = dart.clone();
+        before.seams[0].allow_ease = ease;
+        before.panels[0].layout_rotation_degrees = 31.0;
+        let poly = before.panels[0].polygon.as_mut().unwrap();
+        let [left, tip, right] = [1, 2, 3].map(|i| poly.points[i]);
+        if ease {
+            poly.points[2].x += 0.004;
+        } else {
+            let left_handles = [0.3, 0.7].map(|t| left.lerp(tip, t) + DVec2::new(-0.002, 0.));
+            let right_handles =
+                [left_handles[1], left_handles[0]].map(|p| DVec2::new(2. * tip.x - p.x, p.y));
+            poly.curves.insert(poly.edges[1].clone(), left_handles);
+            poly.curves.insert(poly.edges[2].clone(), right_handles);
+        }
+        assert!(right.x > tip.x);
+        let prior = before.compile().unwrap().seams[0].lengths;
+        let board_point = |template: &GarmentTemplate, index| {
+            let p = &template.panels[0];
+            authoring::layout(template, 0)
+                + authoring::rotate_2d(
+                    p.polygon.as_ref().unwrap().points[index],
+                    p.layout_rotation_degrees,
+                )
+        };
+        let board_delta = authoring::rotate_2d(DVec2::new(0.005, 0.009), 31.);
+        let after = authoring::apply(
+            &before,
+            Command::MovePointGroupsConnected {
+                points: vec![(panel.clone(), 3), (panel.clone(), 1)],
+                board_delta,
+            },
+        )
+        .unwrap();
+        let tip_delta = if ease { DVec2::ZERO } else { board_delta };
+        for (index, expected) in [(1, board_delta), (2, tip_delta), (3, board_delta)] {
+            let delta = board_point(&after.template, index) - board_point(&before, index);
+            assert!(delta.distance(expected) < 1e-10);
+        }
+        let lengths = after.garment.seams[0].lengths;
+        if ease {
+            assert!(after.template.seams[0].allow_ease);
+            assert!((lengths[0] - lengths[1]).abs() > 1e-5);
+            let mirrored = authoring::apply(
+                &before,
+                Command::MoveDartPoint {
+                    panel: panel.clone(),
+                    point: 2,
+                    position: before.panels[0].polygon.as_ref().unwrap().points[2]
+                        + DVec2::new(0.005, 0.009),
+                    mirror: true,
+                    slide: false,
+                },
+            )
+            .unwrap();
+            let [a, tip, b] = [1, 2, 3].map(|i| board_point(&mirrored.template, i));
+            assert!(a.distance(board_point(&before, 1)) < 1e-10);
+            assert!(b.distance(board_point(&before, 3)) < 1e-10);
+            assert!((tip - a.midpoint(b)).dot((b - a).normalize()).abs() < 1e-10);
+            assert!((tip.distance(a) - tip.distance(b)).abs() < 1e-10);
+        } else {
+            assert!((lengths[0] - prior[0]).abs() < 1e-10);
+            assert!((lengths[1] - prior[1]).abs() < 1e-10);
+        }
+    }
 }
 
 #[test]

@@ -448,6 +448,15 @@ pub fn icon_dart_2d() -> Node {
     }
 }
 
+pub fn icon_slide_on_edge() -> Node {
+    ui! {
+        <svg viewBox="0 0 24 24" class="icon tool-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12h6m6 0h6M6 9l-3 3 3 3m12-6 3 3-3 3" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
+    }
+}
+
 pub fn icon_notch_2d() -> Node {
     ui! {
         <svg viewBox="0 0 24 24" class="icon tool-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -166,6 +166,14 @@ pub enum Command {
         points: Vec<(String, usize)>,
         board_delta: DVec2,
     },
+    /// Drag one point on a sewn dart, optionally reflecting its base partner.
+    MoveDartPoint {
+        panel: String,
+        point: usize,
+        position: DVec2,
+        mirror: bool,
+        slide: bool,
+    },
     /// Move contour points by an exact metric step given in millimetres.
     Nudge {
         panel: String,
@@ -2189,9 +2197,26 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             points,
             board_delta,
         } => {
-            let first = points.first().map(|(p, _)| p.clone());
+            selected = points.first().map(|(p, _)| p.clone());
             corner_tool::move_point_groups_connected(source, &mut template, &points, board_delta)?;
-            selected = first;
+        }
+        Command::MoveDartPoint {
+            panel,
+            point,
+            position,
+            mirror,
+            slide,
+        } => {
+            corner_tool::move_dart_point(
+                source,
+                &mut template,
+                &panel,
+                point,
+                position,
+                mirror,
+                slide,
+            )?;
+            selected = Some(panel);
         }
         Command::Nudge {
             panel,

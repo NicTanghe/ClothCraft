@@ -2,16 +2,16 @@
 
 use super::super::board::corners::{clamp_fillet_radius_m, connected_batch_fillet_max_radius_m};
 use super::super::board::geometry::{
-    board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect, dist_point_to_segment,
-    panel_raw_points, panel_to_board_pt, screen_to_board_m, screen_to_board_unclamped_m,
-    viewport_3d_rect,
+    board_status_rect, board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect,
+    dist_point_to_segment, panel_raw_points, panel_to_board_pt, screen_to_board_m,
+    screen_to_board_unclamped_m, viewport_3d_rect,
 };
 use super::super::board::hit_testing::{hit_test_2d, measurement_pick};
 use super::super::board::selection::{batch_corners_for_points, effective_selected_points};
 use super::super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::super::editing::{
     commit_authoring_command, default_fabric_id, finish_internal_line_draft, finish_pen_draft,
-    round_corners_batch, sew_boundary_length, sew_confirm_prompt,
+    point_drag_target, round_corners_batch, sew_boundary_length, sew_confirm_prompt,
 };
 use super::super::state::CssRunnerState;
 use clothcraft::authoring::corner_tool::{
@@ -75,10 +75,17 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                 state.last_2d_click = None;
             }
             let multi_mod = modifiers.shift || modifiers.control || modifiers.super_key;
-            let was_down = state.pointer_down;
-            state.pointer_down = *btn_state == cssimpler::renderer::ButtonState::Pressed;
             let (px, py) = state.last_pointer_pos;
             let canvas_2d = compute_2d_viewport_rect(state);
+            // Let cssimpler's button handle this press before the board starts a drag.
+            if *btn_state == cssimpler::renderer::ButtonState::Pressed
+                && canvas_2d.contains(px, py)
+                && board_status_rect(canvas_2d).contains(px, py)
+            {
+                return false;
+            }
+            let was_down = state.pointer_down;
+            state.pointer_down = *btn_state == cssimpler::renderer::ButtonState::Pressed;
             let rect_3d = viewport_3d_rect(state);
 
             if state.pointer_down && !was_down {
@@ -1123,13 +1130,33 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                             })
                                     })
                                     .unwrap_or(last_local);
-                                commit_authoring_command(
-                                    state,
+                                let (local, dart) =
+                                    match point_drag_target(state, &panel_id, point_idx, local) {
+                                        Ok(target) => target,
+                                        Err(error) => {
+                                            state.status_message =
+                                                format!("Edit rejected: {error}");
+                                            return true;
+                                        }
+                                    };
+                                let command = if dart {
+                                    Command::MoveDartPoint {
+                                        panel: panel_id,
+                                        point: point_idx,
+                                        position: local,
+                                        mirror: state.mirror_dart_bases,
+                                        slide: state.slide_on_edge,
+                                    }
+                                } else {
                                     Command::Anchor {
                                         panel: panel_id,
                                         anchor: point_idx,
                                         position: local,
-                                    },
+                                    }
+                                };
+                                commit_authoring_command(
+                                    state,
+                                    command,
                                     format!(
                                         "Moved point #{point_idx} to ({:.1}, {:.1}) mm",
                                         local.x * 1000.0,

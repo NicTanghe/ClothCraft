@@ -6,15 +6,19 @@ use super::super::board::geometry::{
 };
 use super::super::board::native::board_node;
 use super::super::board::rendering::render_runner_2d_paths;
-use super::super::board::selection::{compute_connected_2d_highlight, effective_selected_points};
+use super::super::board::selection::{
+    compute_connected_2d_highlight, effective_selected_points, has_single_dart_point,
+    has_single_slide_point,
+};
 use super::super::state::CssRunnerState;
 use super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::icons::{
-    icon_shading_flat, icon_shading_smooth, icon_wireframe_off, icon_wireframe_on,
+    icon_dart_2d, icon_shading_flat, icon_shading_smooth, icon_slide_on_edge, icon_wireframe_off,
+    icon_wireframe_on,
 };
 use clothcraft::usd_scene::ShadingMode;
-use cssimpler::core::Node;
+use cssimpler::core::{ElementNode, Node};
 use cssimpler::ui;
 
 pub(in super::super) fn build_runner_stage(state: &CssRunnerState) -> Node {
@@ -69,6 +73,35 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
             </div>
         </div>
     }
+}
+
+fn board_status_toggle(
+    state: &CssRunnerState,
+    id: &str,
+    label: &str,
+    available: bool,
+    active: bool,
+    icon: Node,
+    action: RunnerUiOp,
+) -> Node {
+    let (class, status) = match (available, active) {
+        (false, _) => ("viewport-tool-btn icon-only status-disabled", "Unavailable"),
+        (true, true) => ("viewport-tool-btn icon-only active", "On"),
+        (true, false) => ("viewport-tool-btn icon-only", "Off"),
+    };
+    let mut button = ElementNode::new("button")
+        .with_id(id)
+        .with_attribute("class", class)
+        .with_attribute("aria-label", label)
+        .with_attribute("aria-pressed", active.to_string())
+        .with_attribute("title", format!("{label} · {status}"));
+    button = if available {
+        button.on_click_shared(queue_ui_op(&state.actions, action))
+    } else {
+        button.with_attribute("disabled", "disabled")
+    };
+    button.children.push(icon);
+    Node::Element(button)
 }
 
 pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
@@ -367,6 +400,25 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
         },
     };
 
+    let dart_status = board_status_toggle(
+        state,
+        "mirror-dart-bases",
+        "Mirror dart",
+        has_single_dart_point(state),
+        state.mirror_dart_bases,
+        icon_dart_2d(),
+        RunnerUiOp::ToggleMirrorDartBases,
+    );
+    let slide_status = board_status_toggle(
+        state,
+        "slide-on-edge",
+        "Slide on edge",
+        has_single_slide_point(state),
+        state.slide_on_edge,
+        icon_slide_on_edge(),
+        RunnerUiOp::ToggleSlideOnEdge,
+    );
+
     ui! {
         <div id="viewport-2d" class="viewport-container">
             <div class="viewport-header">
@@ -385,6 +437,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
             {cad_bar}
             <div class="canvas-area">
                 {board}
+                <div id="board-2d-status" class="board-status-bar">{dart_status}{slide_status}</div>
             </div>
         </div>
     }

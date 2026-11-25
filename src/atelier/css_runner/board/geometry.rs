@@ -71,6 +71,16 @@ pub fn compute_2d_viewport_rect(state: &CssRunnerState) -> Rect2d {
     }
 }
 
+pub(in super::super) fn board_status_rect(canvas: Rect2d) -> Rect2d {
+    // Match the 26px buttons, 4px gap and offset in `.board-status-bar`.
+    Rect2d {
+        x: canvas.x + 8.0,
+        y: canvas.y + 8.0,
+        w: 56.0,
+        h: 26.0,
+    }
+}
+
 /// Exact CSS layout rect for `#viewport-3d`'s `.canvas-area` (for 3D camera orbit gating).
 pub fn viewport_3d_rect(state: &CssRunnerState) -> Rect2d {
     let win_w = state.window_size.0.max(100.0);

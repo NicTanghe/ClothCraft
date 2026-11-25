@@ -1,6 +1,7 @@
 //! Corner rounding and Bézier continuity editing in panel-local rest space.
 use super::*;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Tangent continuity rule governing incident Bézier handles at a corner.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1616,17 +1617,310 @@ pub(super) fn adjust_handle(
     )
 }
 
+/// Material-space corners of an inset made from two complete sewn legs.
+fn dart_corners(poly: &PolygonPattern, seam: &SeamSpec) -> Option<[usize; 3]> {
+    if seam.a.panel != seam.b.panel
+        || !(seam.a.reversed ^ seam.b.reversed ^ seam.reverse_b)
+        || !seam.a_tail.is_empty()
+        || !seam.b_tail.is_empty()
+        || !is_full_range(seam.a.range)
+        || !is_full_range(seam.b.range)
+    {
+        return None;
+    }
+    let edge_index = |name: &str| poly.edges.iter().position(|edge| edge == name);
+    let a = edge_index(seam.a.edge.as_deref()?)?;
+    let b = edge_index(seam.b.edge.as_deref()?)?;
+    let n = poly.points.len();
+    if n < 3 || poly.edges.len() != n {
+        return None;
+    }
+    let (left, tip) = if (a + 1) % n == b {
+        (a, b)
+    } else if (b + 1) % n == a {
+        (b, a)
+    } else {
+        return None;
+    };
+    let right = (tip + 1) % n;
+    let [base_a, apex, base_b] = [left, tip, right].map(|i| poly.points[i]);
+    ((apex - base_a).perp_dot(base_b - apex) < 0.).then_some([left, tip, right])
+}
+
+fn find_dart<'a>(
+    source: &'a GarmentTemplate,
+    panel: &str,
+    point: usize,
+) -> Option<(&'a PolygonPattern, &'a SeamSpec, [usize; 3])> {
+    let poly = source
+        .panels
+        .iter()
+        .find(|p| p.id == panel)?
+        .polygon
+        .as_ref()?;
+    source
+        .seams
+        .iter()
+        .filter(|seam| seam.a.panel == panel)
+        .find_map(|seam| {
+            let corners = dart_corners(poly, seam)?;
+            corners.contains(&point).then_some((poly, seam, corners))
+        })
+}
+
+/// Whether this contour point belongs to a sewn inset.
+pub fn is_sewn_dart_point(source: &GarmentTemplate, panel: &str, point: usize) -> bool {
+    find_dart(source, panel, point).is_some()
+}
+
+pub fn is_sewn_dart_tip(source: &GarmentTemplate, panel: &str, point: usize) -> bool {
+    find_dart(source, panel, point).is_some_and(|(_, _, corners)| corners[1] == point)
+}
+
+// Leave more than the contour mesher's 1 µm minimum before the next corner.
+const SLIDE_CORNER_GAP_M: f64 = 2e-6;
+
+fn incident_path(
+    poly: &PolygonPattern,
+    point: usize,
+    incoming: bool,
+) -> Result<Vec<DVec2>, String> {
+    let n = poly.points.len();
+    if point >= n {
+        return Err("Point index out of range".into());
+    }
+    let mut samples = poly.edge_points(if incoming { (point + n - 1) % n } else { point })?;
+    if incoming {
+        samples.reverse();
+    }
+    Ok(samples)
+}
+
+/// Project a drag onto the nearer of the two original incident boundary paths.
+pub fn slide_corner_position(
+    source: &GarmentTemplate,
+    panel: &str,
+    point: usize,
+    position: DVec2,
+) -> Result<DVec2, String> {
+    if !position.is_finite() {
+        return Err("Point coordinates must be finite".into());
+    }
+    let poly = source
+        .panels
+        .iter()
+        .find(|p| p.id == panel)
+        .and_then(|p| p.polygon.as_ref())
+        .ok_or("Select an editable contour point")?;
+    let corner = *poly.points.get(point).ok_or("Point index out of range")?;
+    let mut nearest = corner;
+    for incoming in [true, false] {
+        let samples = incident_path(poly, point, incoming)?;
+        for (i, segment) in samples.windows(2).enumerate() {
+            let d = segment[1] - segment[0];
+            let length = d.length();
+            if length <= 1e-12 {
+                continue;
+            }
+            let end = if i + 2 == samples.len() {
+                (length - SLIDE_CORNER_GAP_M).max(0.)
+            } else {
+                length
+            };
+            let axis = d / length;
+            let projected = segment[0] + axis * (position - segment[0]).dot(axis).clamp(0., end);
+            if projected.distance_squared(position) < nearest.distance_squared(position) {
+                nearest = projected;
+            }
+        }
+    }
+    Ok(nearest)
+}
+
+fn slide_dart_base(
+    poly: &PolygonPattern,
+    point: usize,
+    is_left: bool,
+    position: DVec2,
+) -> Result<DVec2, String> {
+    // The other incident edge continues along the mouth. The sewn leg is
+    // parallel to the tip direction and is never the perpendicular choice.
+    let samples = incident_path(poly, point, is_left)?;
+    let base = samples[0];
+    let tangent = samples[1..]
+        .iter()
+        .find_map(|p| (*p - base).try_normalize())
+        .ok_or("Dart base needs a nonzero adjoining edge")?;
+    let limit = (samples.last().unwrap().distance(base) - SLIDE_CORNER_GAP_M).max(0.);
+    // Extend the line toward the mouth so the two bases can slide inward as well.
+    Ok(base + tangent * (position - base).dot(tangent).min(limit))
+}
+
+fn project_to_dart_axis(point: DVec2, [left, right]: [DVec2; 2]) -> DVec2 {
+    let mouth = (right - left).normalize_or_zero();
+    point - mouth * (point - left.midpoint(right)).dot(mouth)
+}
+
+/// Plan both selected bases together so seam traversal preserves their translation.
+fn dart_deltas(
+    source: &GarmentTemplate,
+    seeds: &[(CornerRef, DVec2)],
+) -> BTreeMap<CornerRef, DVec2> {
+    let mut planned = BTreeMap::new();
+    if seeds.len() < 2 {
+        return planned;
+    }
+    let selected: BTreeMap<_, _> = seeds
+        .iter()
+        .map(|(corner, delta)| (corner, *delta))
+        .collect();
+    for seam in &source.seams {
+        let Some(poly) = source
+            .panels
+            .iter()
+            .find(|p| p.id == seam.a.panel)
+            .and_then(|p| p.polygon.as_ref())
+        else {
+            continue;
+        };
+        let Some([left, tip, right]) = dart_corners(poly, seam) else {
+            continue;
+        };
+        let corner = |point| CornerRef {
+            panel: seam.a.panel.clone(),
+            point,
+        };
+        let [left_corner, tip_corner, right_corner] = [left, tip, right].map(corner);
+        let (Some(&delta), Some(&right_delta)) =
+            (selected.get(&left_corner), selected.get(&right_corner))
+        else {
+            continue;
+        };
+
+        if let Some(&tip_delta) = selected.get(&tip_corner) {
+            planned.insert(tip_corner, tip_delta);
+        } else if !seam.allow_ease {
+            let [a, apex, b] = [left, tip, right].map(|i| poly.points[i]);
+            let curved = [left, tip]
+                .iter()
+                .any(|&i| poly.curves.contains_key(&poly.edges[i]));
+            // Straight legs stay equal with the tip on the perpendicular bisector.
+            // A rigid translation also preserves curved leg arclengths.
+            let tip_delta = if curved {
+                delta
+            } else {
+                project_to_dart_axis(apex, [a + delta, b + right_delta]) - apex
+            };
+            planned.insert(tip_corner, tip_delta);
+        }
+        planned.insert(left_corner, delta);
+        planned.insert(right_corner, right_delta);
+    }
+    planned
+}
+
+pub fn preview_move_dart_point(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    panel: &str,
+    point: usize,
+    position: DVec2,
+    mirror: bool,
+    slide: bool,
+) -> Result<(), String> {
+    move_dart_point(source, template, panel, point, position, mirror, slide)?;
+    let _ = linked::synchronize(source, template);
+    Ok(())
+}
+
+pub(super) fn move_dart_point(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    panel: &str,
+    point: usize,
+    position: DVec2,
+    mirror: bool,
+    slide: bool,
+) -> Result<(), String> {
+    if !position.is_finite() {
+        return Err("Point coordinates must be finite".into());
+    }
+    let (poly, seam, [left, tip, right]) =
+        find_dart(source, panel, point).ok_or("Select a sewn dart point")?;
+    let before = [left, tip, right].map(|i| poly.points[i]);
+    let [a, apex, b] = before;
+    let mut after = before;
+    if point == tip {
+        after[1] = if mirror || !seam.allow_ease {
+            project_to_dart_axis(position, [a, b])
+        } else {
+            position
+        };
+    } else {
+        let (base, mate) = if point == left { (0, 2) } else { (2, 0) };
+        after[base] = if slide {
+            slide_dart_base(poly, point, point == left, position)?
+        } else {
+            position
+        };
+        if mirror {
+            let mouth = (b - a).normalize_or_zero();
+            let reflected = after[base] - 2. * mouth * (after[base] - apex).dot(mouth);
+            after[mate] = if slide {
+                slide_dart_base(
+                    poly,
+                    if mate == 0 { left } else { right },
+                    mate == 0,
+                    reflected,
+                )?
+            } else {
+                reflected
+            };
+        }
+        if (!mirror || slide) && !seam.allow_ease {
+            after[1] = project_to_dart_axis(apex, [after[0], after[2]]);
+        }
+    }
+    let preferred: BTreeMap<_, _> = [left, tip, right]
+        .into_iter()
+        .zip(after.into_iter().zip(before))
+        .map(|(i, (new, old))| {
+            (
+                CornerRef {
+                    panel: panel.into(),
+                    point: i,
+                },
+                new - old,
+            )
+        })
+        .collect();
+    let seed = CornerRef {
+        panel: panel.into(),
+        point,
+    };
+    let seeds = vec![(seed.clone(), preferred[&seed])];
+    move_connected_corner_deltas(source, template, seeds, &preferred)
+}
+
 fn propagate_corner_deltas(
     source: &GarmentTemplate,
     seeds: impl IntoIterator<Item = (CornerRef, DVec2)>,
-) -> std::collections::BTreeMap<CornerRef, DVec2> {
-    let mut corner_deltas = std::collections::BTreeMap::new();
+    preferred: &BTreeMap<CornerRef, DVec2>,
+) -> BTreeMap<CornerRef, DVec2> {
+    let mut corner_deltas = BTreeMap::new();
     let mut queue = std::collections::VecDeque::new();
-    for (seed_ref, delta) in seeds {
+    for (seed_ref, delta) in seeds.into_iter().chain(
+        preferred
+            .iter()
+            .map(|(corner, delta)| (corner.clone(), *delta)),
+    ) {
         if corner_deltas.contains_key(&seed_ref) {
             continue;
         }
-        corner_deltas.insert(seed_ref.clone(), delta);
+        corner_deltas.insert(
+            seed_ref.clone(),
+            preferred.get(&seed_ref).copied().unwrap_or(delta),
+        );
         queue.push_back(seed_ref);
 
         while let Some(cur) = queue.pop_front() {
@@ -1683,7 +1977,10 @@ fn propagate_corner_deltas(
                     if let Some(mapped_delta) =
                         map_edge_vector(a0, a1, b0, b1, partner.same_direction, cur_delta)
                     {
-                        corner_deltas.insert(target.clone(), mapped_delta);
+                        corner_deltas.insert(
+                            target.clone(),
+                            preferred.get(&target).copied().unwrap_or(mapped_delta),
+                        );
                         queue.push_back(target);
                     }
                 }
@@ -1707,7 +2004,13 @@ fn propagate_corner_deltas(
                         point: cn - 1 - cur.point,
                     };
                     if !corner_deltas.contains_key(&target) {
-                        corner_deltas.insert(target.clone(), reflect_vec(link.axis, cur_delta));
+                        corner_deltas.insert(
+                            target.clone(),
+                            preferred
+                                .get(&target)
+                                .copied()
+                                .unwrap_or_else(|| reflect_vec(link.axis, cur_delta)),
+                        );
                         queue.push_back(target);
                     }
                 }
@@ -1768,7 +2071,7 @@ pub fn preview_move_corner(
         panel: panel.to_owned(),
         point: anchor,
     };
-    let corner_deltas = propagate_corner_deltas(source, [(seed_ref, seed_delta)]);
+    let corner_deltas = propagate_corner_deltas(source, [(seed_ref, seed_delta)], &BTreeMap::new());
 
     // Group by panel, skipping mirror-link siblings of already-edited representatives
     let mut edited_reps = std::collections::BTreeSet::new();
@@ -2015,6 +2318,16 @@ pub(super) fn move_point_groups_connected(
         }
     }
 
+    let preferred = dart_deltas(source, &seeds);
+    move_connected_corner_deltas(source, template, seeds, &preferred)
+}
+
+fn move_connected_corner_deltas(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    seeds: Vec<(CornerRef, DVec2)>,
+    preferred: &BTreeMap<CornerRef, DVec2>,
+) -> Result<(), String> {
     freeze_implicit_layouts(source, template);
 
     let mut representative_by_panel: std::collections::BTreeMap<String, String> =
@@ -2034,7 +2347,7 @@ pub(super) fn move_point_groups_connected(
         }
     }
 
-    let corner_deltas = propagate_corner_deltas(source, seeds);
+    let corner_deltas = propagate_corner_deltas(source, seeds, preferred);
     let mut by_panel: std::collections::BTreeMap<String, Vec<(usize, DVec2)>> =
         std::collections::BTreeMap::new();
     for (cref, d) in &corner_deltas {
@@ -2120,9 +2433,9 @@ pub(super) fn move_points_connected(
         return Ok(());
     }
 
-    let corner_deltas = propagate_corner_deltas(
-        source,
-        unique.into_iter().map(|pt| {
+    let seeds: Vec<_> = unique
+        .into_iter()
+        .map(|pt| {
             (
                 CornerRef {
                     panel: panel.to_owned(),
@@ -2130,8 +2443,10 @@ pub(super) fn move_points_connected(
                 },
                 delta,
             )
-        }),
-    );
+        })
+        .collect();
+    let preferred = dart_deltas(source, &seeds);
+    let corner_deltas = propagate_corner_deltas(source, seeds, &preferred);
 
     let mut edited_reps = std::collections::BTreeSet::new();
     edited_reps.insert(panel.to_owned());

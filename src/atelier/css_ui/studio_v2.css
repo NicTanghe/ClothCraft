@@ -1147,6 +1147,24 @@ button {
 }
 #board-2d-drawing { z-index: 1; }
 
+.board-status-bar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  z-index: 3;
+}
+
+.board-status-bar .status-disabled, .board-status-bar .status-disabled:hover {
+  color: var(--text-muted);
+  background-color: var(--surface-raised);
+  border-color: var(--border);
+  cursor: default;
+  opacity: 0.58;
+}
+
 .cad-2d-bar {
   height: 28px;
   padding: 0 8px;
