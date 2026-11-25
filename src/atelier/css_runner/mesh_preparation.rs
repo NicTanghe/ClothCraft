@@ -6,12 +6,31 @@ use clothcraft::mesh_resolution::{features::MeshFeature, preparation};
 use cssimpler::core::ElementNode as Element;
 use cssimpler::{core::Node, ui};
 
+const SEWN_EDGE_RATIO: usize = 13;
+const FIELD_LABELS: [&str; 14] = [
+    "Uniform base spacing (mm)",
+    "Warp E estimate (Pa)",
+    "Weft E estimate (Pa)",
+    "Boundary / base spacing",
+    "Transition (mm)",
+    "Fold angle (degrees)",
+    "Parallel offset (mm)",
+    "Gathering sewn/rest ratio",
+    "Added gathering warp E (Pa)",
+    "Down-fill sewn/rest ratio",
+    "Sizing pressure (Pa)",
+    "Pressure reference (Pa)",
+    "Added gathering weft E (Pa)",
+    "Sewn edge / base spacing",
+];
+
 pub struct MeshDraft {
     pub level: u8,
     pub open: bool,
     // Uniform mm, E warp/weft Pa, boundary ratio, transition mm, fold angle/offset mm,
-    // gathering ratio/added Pa, down-fill ratio/pressure Pa/reference Pa.
-    pub fields: [String; 13],
+    // gathering ratio/added Pa, down-fill ratio/pressure Pa/reference Pa, sewn edge ratio.
+    pub fields: [String; 14],
+    pub editing_value: Option<(usize, String)>,
     // All panels, smooth transitions, fold endpoints, parallel rails, gathering, down-fill.
     pub options: [bool; 6],
     pub path: String,
@@ -24,26 +43,44 @@ impl Default for MeshDraft {
             open: false,
             fields: [
                 "25", "110000", "110000", "0.5", "40", "90", "0.5", "0.5", "0", "0.95", "0",
-                "1000", "0",
+                "1000", "0", "1.0",
             ]
             .map(str::to_owned),
+            editing_value: None,
             options: [true, true, false, false, false, false],
             path: String::new(),
             panel_id: None,
         }
     }
 }
+
+fn finite_number(text: &str) -> Option<f64> {
+    text.trim().parse::<f64>().ok().filter(|v| v.is_finite())
+}
+
 impl MeshDraft {
     /// Logarithmic stops: coarse = 4x spacing, middle = estimate, fine = 0.25x.
     pub fn scale(&self) -> f64 {
         2_f64.powf(2.0 - f64::from(self.level) / 4.0)
     }
     fn number(&self, i: usize) -> Result<f64, String> {
-        self.fields[i]
-            .parse::<f64>()
-            .ok()
-            .filter(|v| v.is_finite())
-            .ok_or_else(|| "Enter finite numeric mesh settings".into())
+        finite_number(&self.fields[i]).ok_or_else(|| "Enter finite numeric mesh settings".into())
+    }
+
+    pub fn finish_value(&mut self, commit: bool) {
+        if commit
+            && self
+                .editing_value
+                .as_ref()
+                .is_some_and(|(_, value)| finite_number(value).is_none())
+        {
+            return;
+        }
+        if let Some((field, value)) = self.editing_value.take()
+            && commit
+        {
+            self.fields[field] = value.trim().to_owned();
+        }
     }
     pub fn from_panel(panel: Option<&Panel>) -> Self {
         let mut draft = Self {
@@ -61,6 +98,9 @@ impl MeshDraft {
                 draft.fields[2] = plan.young_pa[1].to_string();
                 draft.fields[3] = plan.boundary_ratio.to_string();
                 draft.fields[4] = (plan.transition_m * 1000.0).to_string();
+                if let Some(ratio) = plan.sewn_edge_ratio {
+                    draft.fields[SEWN_EDGE_RATIO] = ratio.to_string();
+                }
                 draft.options[1] = plan.smooth_transitions;
             }
             let path = poly.edges.first().cloned().unwrap_or_default();
@@ -152,6 +192,7 @@ impl MeshDraft {
                     let plan = settings.physics_sizing.as_mut().unwrap();
                     plan.spacing_scale = self.scale();
                     plan.smooth_transitions = self.options[1];
+                    plan.sewn_edge_ratio = Some(self.number(SEWN_EDGE_RATIO)?);
                     plan.features = source
                         .panels
                         .iter()
@@ -299,30 +340,32 @@ pub fn render(state: &CssRunnerState) -> Node {
             Node::Element(node)
         })
         .collect();
-    let labels = [
-        "Uniform base spacing (mm)",
-        "Warp E estimate (Pa)",
-        "Weft E estimate (Pa)",
-        "Boundary / base spacing",
-        "Transition (mm)",
-        "Fold angle (degrees)",
-        "Parallel offset (mm)",
-        "Gathering sewn/rest ratio",
-        "Added gathering warp E (Pa)",
-        "Down-fill sewn/rest ratio",
-        "Sizing pressure (Pa)",
-        "Pressure reference (Pa)",
-        "Added gathering weft E (Pa)",
-    ];
-    let fields: Vec<Node> = [0,1,2,3,4,5,6,7,8,12,9,10,11].into_iter().filter(|i| *i < 5 || ((*i == 5 || *i == 6) && (state.mesh_draft.options[2] || state.mesh_draft.options[3])) || ((*i == 7 || *i == 8 || *i == 12) && state.mesh_draft.options[4]) || ((*i >= 9 && *i <= 11) && state.mesh_draft.options[5])).map(|i| {
-        let label = labels[i];
-        let ops = state.actions.clone();
-        let input = Element::new("input").with_id(format!("mesh-value-{i}"))
-            .on_mousedown_shared(queue_ui_op(&state.actions, RunnerUiOp::MeshInputFocus))
-            .with_attribute("type", "text").with_attribute("value", &state.mesh_draft.fields[i])
-            .on_input_shared(move |value| { ops.push(RunnerAction::Ui(RunnerUiOp::MeshField(i, value.into()))); });
-        ui! { <div class="prop-row"><span class="prop-label">{label}</span>{Node::Element(input)}</div> }
-    }).collect();
+    let draft = &state.mesh_draft;
+    let mut visible_fields = vec![0, 1, 2, 3, SEWN_EDGE_RATIO, 4];
+    if draft.options[2] || draft.options[3] {
+        visible_fields.extend([5, 6]);
+    }
+    if draft.options[4] {
+        visible_fields.extend([7, 8, 12]);
+    }
+    if draft.options[5] {
+        visible_fields.extend([9, 10, 11]);
+    }
+    let fields: Vec<Node> = visible_fields
+        .into_iter()
+        .map(|i| {
+            let label = FIELD_LABELS[i];
+            ui! {
+                <div class="prop-row">
+                    <span class="prop-label">{label}</span>
+                    <button id={format!("mesh-value-{i}")} class="mesh-value-button" title={label}
+                        onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshEditValue(i))}>
+                        {draft.fields[i].clone()}
+                    </button>
+                </div>
+            }
+        })
+        .collect();
     let toggles: Vec<Node> = ["Scope: all polygon pieces", "Smooth refinement transitions", "Refine fold endpoints", "Add parallel fold lines", "Gathering refinement", "Down-fill sizing estimate"].iter().enumerate().map(|(i,label)| {
         ui! { <button id={format!("mesh-option-{i}")} class="mesh-toggle" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshToggle(i))}>
             {format!("{} {label}", if state.mesh_draft.options[i] { "[x]" } else { "[ ]" })}
@@ -359,6 +402,8 @@ pub fn render(state: &CssRunnerState) -> Node {
                 seed: 42,
                 spacing_scale: state.mesh_draft.scale(),
                 smooth_transitions: true,
+                match_seams: false,
+                sewn_edge_ratio: None,
                 features: vec![],
             }
             .base()
@@ -441,6 +486,53 @@ pub fn render(state: &CssRunnerState) -> Node {
     }
 }
 
+// Open the native input outside the scrolled inspector. The renderer applies
+// scroll offsets to pointer callbacks but its text hit testing uses app layout.
+pub(super) fn render_value_editor(state: &CssRunnerState) -> Node {
+    let Some((field, value)) = &state.mesh_draft.editing_value else {
+        return ui! { <span class="hidden" /> };
+    };
+    let actions = state.actions.clone();
+    let valid = finite_number(value).is_some();
+    let input = Element::new("input")
+        .with_id("mesh-value-editor-input")
+        .with_attribute("type", "text")
+        .with_attribute("autofocus", "autofocus")
+        .with_attribute("value", value.as_str())
+        .on_input_shared(move |value| {
+            actions.push(RunnerAction::Ui(RunnerUiOp::MeshValueText(value.into())));
+        })
+        .on_enter_shared(queue_ui_op(
+            &state.actions,
+            RunnerUiOp::MeshFinishValue(true),
+        ));
+    let mut apply = Element::new("button")
+        .with_id("mesh-value-editor-apply")
+        .with_class("action-btn")
+        .on_click_shared(queue_ui_op(
+            &state.actions,
+            RunnerUiOp::MeshFinishValue(true),
+        ));
+    if !valid {
+        apply = apply.with_attribute("disabled", "disabled");
+    }
+    apply.children.push(Node::Text("Apply".into()));
+    ui! {
+        <div id="mesh-value-editor" class="mesh-value-layer">
+            <div class="mesh-value-backdrop" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshFinishValue(false))}></div>
+            <div class="mesh-value-dialog">
+                <div class="dock-section-title">{FIELD_LABELS[*field]}</div>
+                {Node::Element(input)}
+                {if valid { ui! { <span class="hidden" /> } } else { ui! { <p>"Enter a finite number."</p> } }}
+                <div class="mesh-value-actions">
+                    <button class="action-btn" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::MeshFinishValue(false))}>"Cancel"</button>
+                    {Node::Element(apply)}
+                </div>
+            </div>
+        </div>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::super::{DocumentFiles, worker};
@@ -517,8 +609,13 @@ mod tests {
         node(&render(&state), "mesh-value-7")
             .unwrap()
             .handlers
-            .input()
-            .unwrap()("0.7");
+            .click()
+            .unwrap()();
+        drain(&mut state);
+        let editor = render_value_editor(&state);
+        let input = node(&editor, "mesh-value-editor-input").unwrap();
+        input.handlers.input().unwrap()("0.7");
+        input.handlers.enter().unwrap()();
         drain(&mut state);
         assert_eq!(state.mesh_draft.scale(), 2.0);
         assert_eq!(
@@ -553,6 +650,7 @@ mod tests {
             .as_ref()
             .unwrap();
         assert_eq!(plan.spacing_scale, 2.0);
+        assert_eq!(plan.sewn_edge_ratio, Some(1.0));
         assert!(matches!(
             plan.features[0],
             MeshFeature::Gathering {
@@ -654,9 +752,9 @@ mod tests {
         assert_eq!(plan.features.len(), 2);
     }
     #[test]
-    fn native_mesh_layout_renders_all_controls_and_text_input_owns_keyboard() {
+    fn native_mesh_value_editor_accepts_keyboard_input_without_runner_shortcuts() {
         use cssimpler::renderer::{
-            ButtonState, KeyIdentity, KeyboardEvent, PointerPosition, TextInputEvent, ViewportSize,
+            ButtonState, KeyIdentity, KeyboardEvent, TextInputEvent, ViewportSize,
         };
         use std::time::Duration;
         let _guard = worker::WORKER_TEST_LOCK
@@ -668,7 +766,7 @@ mod tests {
         state.mesh_draft.options[2..].fill(true);
         // Isolate the production panel in a CPU-rendered, scrollable test surface.
         let css = format!(
-            "{}\n.mesh-preview {{ width: 480px; height: 1500px; color: var(--text); background: var(--bg); }}",
+            "{}\n.mesh-preview {{ position: relative; width: 480px; height: 1500px; color: var(--text); background: var(--bg); }}",
             clothcraft::css_ui::STUDIO_V2_CSS
         );
         let stylesheet = cssimpler::style::parse_stylesheet(&css).unwrap();
@@ -676,15 +774,9 @@ mod tests {
             state,
             &stylesheet,
             update_runner,
-            |s| ui! { <div class="mesh-preview">{render(s)}</div> },
+            |s| ui! { <div class="mesh-preview">{render(s)}{render_value_editor(s)}</div> },
         )
-        .with_event_handler(|state, event| {
-            if matches!(event, EngineEvent::Key(_)) {
-                handle_runner_event(state, event)
-            } else {
-                false
-            }
-        });
+        .with_event_handler(handle_runner_event);
         app.set_viewport(ViewportSize::new(480, 1500));
         let frame = |index| FrameInfo {
             delta: Duration::from_millis(16),
@@ -698,6 +790,7 @@ mod tests {
             "#mesh-value-8",
             "#mesh-value-12",
             "#mesh-value-10",
+            "#mesh-value-13",
             "#prepare-physics-mesh",
         ] {
             let bounds = app.find_element_bounds_by_id(id).unwrap();
@@ -717,40 +810,51 @@ mod tests {
             );
             image::save_buffer(path, &rgba, 480, 1500, image::ColorType::Rgba8).unwrap();
         }
-        let field = app.find_element_bounds_by_id("#mesh-value-1").unwrap();
-        app.handle_engine_event(&EngineEvent::PointerMoved {
-            position: PointerPosition {
-                x: field.x + field.width - 4.0,
-                y: field.y + field.height / 2.0,
-            },
-            modifiers: Default::default(),
-        });
-        app.handle_engine_event(&EngineEvent::PointerButton {
-            button: cssimpler::renderer::PointerButton::Primary,
-            state: ButtonState::Pressed,
-            modifiers: Default::default(),
-        });
-        // The native input system owns text; the runner must not interpret space as Play.
-        node(&render(app.state()), "mesh-value-1")
+        // The window renderer invokes the click callback on the scrolled button.
+        node(&render(app.state()), "mesh-value-13")
             .unwrap()
             .handlers
-            .mousedown()
+            .click()
             .unwrap()();
         app.frame(frame(1));
-        app.handle_engine_event(&EngineEvent::TextInput(TextInputEvent::Commit("7".into())));
-        app.frame(frame(2));
-        assert!(app.state().mesh_draft.fields[1].contains('7'));
-        assert!(!handle_runner_event(
-            app.state_mut(),
-            &EngineEvent::Key(KeyboardEvent {
-                logical_key: KeyIdentity::Character(" ".into()),
+        let bounds = app
+            .find_element_bounds_by_id("#mesh-value-editor-input")
+            .unwrap();
+        assert!(bounds.width > 20.0 && bounds.height > 10.0);
+        let key = |logical_key, control| {
+            EngineEvent::Key(KeyboardEvent {
+                logical_key,
                 physical_key: None,
                 location: Default::default(),
                 state: ButtonState::Pressed,
                 repeat: false,
-                modifiers: Default::default()
+                modifiers: cssimpler::renderer::KeyboardModifiers {
+                    control,
+                    ..Default::default()
+                },
             })
-        ));
+        };
+        assert!(!app.handle_engine_event(&key(KeyIdentity::Character(" ".into()), false)));
         assert!(!app.state().playing);
+        assert!(app.handle_engine_event(&key(KeyIdentity::Character("a".into()), true)));
+        assert!(
+            app.handle_engine_event(&EngineEvent::TextInput(TextInputEvent::Commit(
+                "0.65".into()
+            )))
+        );
+        assert!(app.handle_engine_event(&key(KeyIdentity::Named("Enter".into()), false)));
+        app.frame(frame(2));
+        assert_eq!(app.state().mesh_draft.fields[SEWN_EDGE_RATIO], "0.65");
+        assert!(
+            app.find_element_bounds_by_id("#mesh-value-editor-input")
+                .is_none()
+        );
+        let template = app
+            .state()
+            .mesh_draft
+            .template(&app.state().project.template, true, None)
+            .unwrap();
+        let restored = MeshDraft::from_panel(template.panels.first());
+        assert_eq!(restored.fields[SEWN_EDGE_RATIO], "0.65");
     }
 }

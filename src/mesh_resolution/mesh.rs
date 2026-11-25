@@ -336,6 +336,17 @@ pub fn generate_with_quality(
     cancelled: &dyn Fn() -> bool,
     angle: Option<f64>,
 ) -> Result<Output, String> {
+    generate_with_boundary_seeds(domain, map, options, cancelled, angle, &[])
+}
+
+pub(super) fn generate_with_boundary_seeds(
+    domain: &Domain,
+    map: &SizingMap,
+    options: &Options,
+    cancelled: &dyn Fn() -> bool,
+    angle: Option<f64>,
+    seeds: &[DVec2],
+) -> Result<Output, String> {
     if angle.is_some_and(|a| !a.is_finite() || !(15. ..=30.).contains(&a)) {
         return Err("Invalid requested metric angle".into());
     }
@@ -358,12 +369,15 @@ pub fn generate_with_quality(
             return Err("Comparison cancelled".into());
         }
         for w in path.windows(2) {
-            let samples = sampled_segment(
-                w[0],
-                w[1],
-                map,
-                options.max_vertices.saturating_sub(cdt.num_vertices()),
-            )?;
+            let samples = match crate::garment::meshing::prepared_segment(w[0], w[1], seeds) {
+                Some(points) => points,
+                None => sampled_segment(
+                    w[0],
+                    w[1],
+                    map,
+                    options.max_vertices.saturating_sub(cdt.num_vertices()),
+                )?,
+            };
             let mut previous = None;
             for p in samples {
                 if cdt.num_vertices() >= options.max_vertices {
@@ -381,8 +395,8 @@ pub fn generate_with_quality(
         }
     }
     let seed_count = cdt.num_vertices();
-    let seeds = cdt.vertices().map(|v| material(v.position())).collect();
-    let cloud = poisson(domain, map, seeds, options, cancelled)?;
+    let constraint_points = cdt.vertices().map(|v| material(v.position())).collect();
+    let cloud = poisson(domain, map, constraint_points, options, cancelled)?;
     // Existing constraint handles must stay bit-identical under rotated metrics.
     for p in &cloud[seed_count..] {
         cdt.insert(q(*p)).map_err(|e| e.to_string())?;
@@ -415,13 +429,16 @@ pub fn generate_with_quality(
             return Err("Comparison cancelled".into());
         }
         if let Some(angle) = angle {
-            let result = cdt.refine(
-                RefinementParameters::new()
-                    .with_angle_limit(AngleLimit::from_deg(angle))
-                    .with_max_additional_vertices(
-                        options.max_vertices.saturating_sub(cdt.num_vertices()),
-                    ),
-            );
+            let parameters = RefinementParameters::new()
+                .with_angle_limit(AngleLimit::from_deg(angle))
+                .with_max_additional_vertices(
+                    options.max_vertices.saturating_sub(cdt.num_vertices()),
+                );
+            let result = cdt.refine(if seeds.is_empty() {
+                parameters
+            } else {
+                parameters.keep_constraint_edges()
+            });
             if !result.refinement_complete {
                 return Err("Angle refinement exceeds vertex budget".into());
             }

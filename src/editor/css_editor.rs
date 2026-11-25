@@ -556,6 +556,8 @@ impl CssEditorState {
                     .physics_sizing
                     .as_ref()
                     .is_none_or(|p| p.smooth_transitions),
+                match_seams: false,
+                sewn_edge_ratio: None,
                 features: self
                     .active
                     .physics_sizing

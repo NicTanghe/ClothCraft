@@ -18,6 +18,7 @@ pub mod polygon;
 pub mod presets;
 pub mod production_metrics;
 pub mod seam;
+mod seam_sampling;
 pub mod shapes;
 pub mod svg_import;
 pub mod template;

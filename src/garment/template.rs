@@ -256,6 +256,62 @@ impl GarmentTemplate {
         crate::document::atomic_write(path, &data)
     }
     pub fn compile(&self) -> Result<CompiledGarment, String> {
+        let ranges = super::seam_sampling::sewn_ranges(self);
+        let first = self.compile_with_boundary_seeds(&BTreeMap::new(), &ranges)?;
+        let seeds = super::seam_sampling::plan(self, &first, true)?;
+        if seeds.is_empty() {
+            return Ok(first);
+        }
+        drop(first);
+        let matched = self.compile_with_boundary_seeds(&seeds, &ranges)?;
+        if !super::seam_sampling::plan(self, &matched, false)?.is_empty() {
+            return Err("Mesh refinement could not retain matching seam stations".into());
+        }
+        Ok(matched)
+    }
+
+    pub(super) fn seam_curves(
+        &self,
+        garment: &CompiledGarment,
+        spec: &SeamSpec,
+    ) -> Result<[BoundaryCurve; 2], String> {
+        let curve = |reference: &BoundaryRef| -> Result<BoundaryCurve, String> {
+            let i = self
+                .panels
+                .iter()
+                .position(|p| p.id == reference.panel)
+                .ok_or_else(|| format!("Missing seam panel {}", reference.panel))?;
+            let vertices = if let Some(edge) = &reference.edge {
+                garment.panels[i]
+                    .boundaries
+                    .get(edge)
+                    .cloned()
+                    .ok_or_else(|| format!("Unknown boundary {edge} on {}", reference.panel))?
+            } else {
+                if self.panels[i].polygon.is_some() {
+                    return Err("Polygon seam requires a named edge".into());
+                }
+                self.panels[i].boundary_vertices(reference.side, garment.panels[i].vertices.start)
+            };
+            BoundaryCurve::new(&garment.mesh, vertices, reference.range, reference.reversed)
+        };
+        Ok([
+            BoundaryCurve::concatenate(
+                spec.side(false).map(curve).collect::<Result<_, _>>()?,
+                false,
+            )?,
+            BoundaryCurve::concatenate(
+                spec.side(true).map(curve).collect::<Result<_, _>>()?,
+                spec.reverse_b,
+            )?,
+        ])
+    }
+
+    fn compile_with_boundary_seeds(
+        &self,
+        seeds: &BTreeMap<String, Vec<DVec2>>,
+        sewn_ranges: &BTreeMap<&str, crate::mesh_resolution::preparation::SewnRanges>,
+    ) -> Result<CompiledGarment, String> {
         if !matches!(self.measurement_precision(), 8 | 10 | 16) {
             return Err("Measurement precision must be 8, 10 or 16 bits".into());
         }
@@ -389,6 +445,7 @@ impl GarmentTemplate {
                 return Err(format!("Duplicate pin in {}", panel.id));
             }
             let material = f.properties.bind(panel.grain_degrees);
+            let boundary_seeds = seeds.get(&panel.id).map_or(&[][..], Vec::as_slice);
             let (mut mesh, mut boundaries) = if let Some(polygon) = &panel.polygon {
                 if !panel.pins.is_empty() {
                     return Err("Polygon panels use pin_points, not rectangle corners".into());
@@ -418,9 +475,13 @@ impl GarmentTemplate {
                         .unwrap();
                     plan.bending_nm = [material.bend_warp, material.bend_weft];
                     plan.axis_degrees = panel.grain_degrees;
-                    prepared.build(&material)?
+                    prepared.build_with_boundary_seeds(
+                        &material,
+                        boundary_seeds,
+                        sewn_ranges.get(panel.id.as_str()),
+                    )?
                 } else {
-                    polygon.build(&material)?
+                    polygon.build_with_boundary_seeds(&material, boundary_seeds, None)?
                 };
                 (built.mesh, built.boundaries)
             } else {
@@ -487,31 +548,6 @@ impl GarmentTemplate {
                 boundaries,
             });
         }
-        let curve = |reference: &BoundaryRef, reverse: bool| -> Result<BoundaryCurve, String> {
-            let i = self
-                .panels
-                .iter()
-                .position(|p| p.id == reference.panel)
-                .ok_or_else(|| format!("Missing seam panel {}", reference.panel))?;
-            let vertices = if let Some(edge) = &reference.edge {
-                out.panels[i]
-                    .boundaries
-                    .get(edge)
-                    .cloned()
-                    .ok_or_else(|| format!("Unknown boundary {edge} on {}", reference.panel))?
-            } else {
-                if self.panels[i].polygon.is_some() {
-                    return Err("Polygon seam requires a named edge".into());
-                }
-                self.panels[i].boundary_vertices(reference.side, out.panels[i].vertices.start)
-            };
-            BoundaryCurve::new(
-                &out.mesh,
-                vertices,
-                reference.range,
-                reverse ^ reference.reversed,
-            )
-        };
         for (i, spec) in self.seams.iter().enumerate() {
             if spec.a_tail.len() >= 128 || spec.b_tail.len() >= 128 {
                 return Err("Sewing side needs 1..128 segments".into());
@@ -539,21 +575,8 @@ impl GarmentTemplate {
                     }
                 }
             }
-            let seam = CompiledSeam::compile(
-                spec,
-                BoundaryCurve::concatenate(
-                    spec.side(false)
-                        .map(|r| curve(r, false))
-                        .collect::<Result<_, _>>()?,
-                    false,
-                )?,
-                BoundaryCurve::concatenate(
-                    spec.side(true)
-                        .map(|r| curve(r, false))
-                        .collect::<Result<_, _>>()?,
-                    spec.reverse_b,
-                )?,
-            )?;
+            let [a, b] = self.seam_curves(&out, spec)?;
+            let seam = CompiledSeam::compile(spec, a, b)?;
             if (seam.lengths[0] - seam.lengths[1]).abs()
                 > 1e-8 * seam.lengths[0].max(seam.lengths[1])
                 || seam.notches.iter().any(|k| (k[0] - k[1]).abs() > 1e-8)
