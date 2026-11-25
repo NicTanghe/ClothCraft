@@ -172,6 +172,7 @@ pub enum Command {
         point: usize,
         position: DVec2,
         mirror: bool,
+        slide: bool,
     },
     /// Move contour points by an exact metric step given in millimetres.
     Nudge {
@@ -2204,8 +2205,17 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             point,
             position,
             mirror,
+            slide,
         } => {
-            corner_tool::move_dart_point(source, &mut template, &panel, point, position, mirror)?;
+            corner_tool::move_dart_point(
+                source,
+                &mut template,
+                &panel,
+                point,
+                position,
+                mirror,
+                slide,
+            )?;
             selected = Some(panel);
         }
         Command::Nudge {

@@ -1,6 +1,8 @@
 //! Transactional authoring commands, history and geometry previews.
 
-use super::board::corners::{clamp_fillet_radius_m, connected_batch_fillet_max_radius_m};
+use super::board::corners::{
+    clamp_fillet_radius_m, connected_batch_fillet_max_radius_m, resolve_corner_edge,
+};
 use super::board::geometry::fit_2d_board;
 use super::board::selection::{
     batch_corners_for_points, effective_selected_points, sanitize_2d_subselection,
@@ -9,7 +11,8 @@ use super::board::types::ToolDraft2d;
 use super::state::CssRunnerState;
 use clothcraft::authoring::corner_tool::{
     CIRCLE_TENSION, is_sewn_dart_point, preview_adjust_handle, preview_move_corner,
-    preview_move_dart_point, preview_move_point_groups_connected, validate_fillet_batch,
+    preview_move_dart_point, preview_move_point_groups_connected, slide_corner_position,
+    validate_fillet_batch,
 };
 use clothcraft::authoring::{self, Command};
 use clothcraft::fitting::FittingScene;
@@ -303,15 +306,37 @@ pub(super) fn toggle_selected_curve(state: &mut CssRunnerState, curved: bool) ->
     commit_authoring_command(state, Command::CurvePoints { points, curved }, msg)
 }
 
+pub(super) fn point_drag_target(
+    state: &CssRunnerState,
+    panel_id: &str,
+    point_idx: usize,
+    position: DVec2,
+) -> Result<(DVec2, bool), String> {
+    let source = &state.project.template;
+    let dart = is_sewn_dart_point(source, panel_id, point_idx);
+    let position = if state.slide_on_edge
+        && !dart
+        && resolve_corner_edge(source, panel_id, point_idx).is_some()
+    {
+        slide_corner_position(source, panel_id, point_idx, position)?
+    } else {
+        position
+    };
+    Ok((position, dart))
+}
+
 pub(super) fn update_preview_point(
     state: &mut CssRunnerState,
     panel_id: &str,
     point_idx: usize,
     local_pos: DVec2,
 ) {
+    let Ok((local_pos, dart)) = point_drag_target(state, panel_id, point_idx, local_pos) else {
+        return;
+    };
     let mut draft = state.project.template.clone();
     let source = &state.project.template;
-    let preview = if is_sewn_dart_point(source, panel_id, point_idx) {
+    let preview = if dart {
         preview_move_dart_point(
             source,
             &mut draft,
@@ -319,6 +344,7 @@ pub(super) fn update_preview_point(
             point_idx,
             local_pos,
             state.mirror_dart_bases,
+            state.slide_on_edge,
         )
     } else {
         preview_move_corner(source, &mut draft, panel_id, point_idx, local_pos)

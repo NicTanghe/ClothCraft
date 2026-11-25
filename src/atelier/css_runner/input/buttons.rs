@@ -2,7 +2,7 @@
 
 use super::super::board::corners::{clamp_fillet_radius_m, connected_batch_fillet_max_radius_m};
 use super::super::board::geometry::{
-    board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect, dart_status_rect,
+    board_status_rect, board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect,
     dist_point_to_segment, panel_raw_points, panel_to_board_pt, screen_to_board_m,
     screen_to_board_unclamped_m, viewport_3d_rect,
 };
@@ -11,11 +11,11 @@ use super::super::board::selection::{batch_corners_for_points, effective_selecte
 use super::super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::super::editing::{
     commit_authoring_command, default_fabric_id, finish_internal_line_draft, finish_pen_draft,
-    round_corners_batch, sew_boundary_length, sew_confirm_prompt,
+    point_drag_target, round_corners_batch, sew_boundary_length, sew_confirm_prompt,
 };
 use super::super::state::CssRunnerState;
 use clothcraft::authoring::corner_tool::{
-    CIRCLE_TENSION, connected_corners, connected_edges, is_sewn_dart_point, validate_fillet_batch,
+    CIRCLE_TENSION, connected_corners, connected_edges, validate_fillet_batch,
 };
 use clothcraft::authoring::{self, Command};
 use clothcraft::garment::meshing::MeshingSettings;
@@ -80,7 +80,7 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             // Let cssimpler's button handle this press before the board starts a drag.
             if *btn_state == cssimpler::renderer::ButtonState::Pressed
                 && canvas_2d.contains(px, py)
-                && dart_status_rect(state, canvas_2d).is_some_and(|rect| rect.contains(px, py))
+                && board_status_rect(canvas_2d).contains(px, py)
             {
                 return false;
             }
@@ -1130,16 +1130,22 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                             })
                                     })
                                     .unwrap_or(last_local);
-                                let command = if is_sewn_dart_point(
-                                    &state.project.template,
-                                    &panel_id,
-                                    point_idx,
-                                ) {
+                                let (local, dart) =
+                                    match point_drag_target(state, &panel_id, point_idx, local) {
+                                        Ok(target) => target,
+                                        Err(error) => {
+                                            state.status_message =
+                                                format!("Edit rejected: {error}");
+                                            return true;
+                                        }
+                                    };
+                                let command = if dart {
                                     Command::MoveDartPoint {
                                         panel: panel_id,
                                         point: point_idx,
                                         position: local,
                                         mirror: state.mirror_dart_bases,
+                                        slide: state.slide_on_edge,
                                     }
                                 } else {
                                     Command::Anchor {

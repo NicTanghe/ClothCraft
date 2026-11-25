@@ -273,41 +273,56 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
     app.state_mut().set_single_2d_point(panel.clone(), 0);
     app.invalidate(cssimpler::app::Invalidation::Structure);
     app.frame(tick(30));
-    assert!(
-        app.find_element_bounds_by_id("#mirror-dart-bases")
-            .is_none()
-    );
+    let mirror_button = app.find_element_bounds_by_id("#mirror-dart-bases").unwrap();
+    let slide_button = app.find_element_bounds_by_id("#slide-on-edge").unwrap();
+    let center = |button: cssimpler::core::LayoutBox| {
+        (button.x + button.width / 2., button.y + button.height / 2.)
+    };
+    let (mx, my) = center(mirror_button);
+    let (sx, sy) = center(slide_button);
+    assert!(app.state().mirror_dart_bases);
+    assert!(!app.state().slide_on_edge);
+    assert!(!cssimpler::renderer::dispatch_click(app.scene(), mx, my));
+    assert!(cssimpler::renderer::dispatch_click(app.scene(), sx, sy));
+    app.frame(tick(31));
+    assert!(app.state().mirror_dart_bases);
+    assert!(app.state().slide_on_edge);
+
     app.state_mut().set_single_2d_point(panel.clone(), 1);
     app.invalidate(cssimpler::app::Invalidation::Structure);
-    app.frame(tick(31));
-    let button = app
-        .find_element_bounds_by_id("#mirror-dart-bases")
-        .expect("single dart point shows mirror toggle");
+    app.frame(tick(32));
+    let button = app.find_element_bounds_by_id("#mirror-dart-bases").unwrap();
     let grid = app.find_element_bounds_by_id("#board-2d").unwrap();
     let toolbar = app.find_element_bounds_by_id("#cad-2d-bar").unwrap();
     assert!(button.y >= toolbar.y + toolbar.height && button.y >= grid.y);
     assert!(button.x >= grid.x && button.x + button.width <= grid.x + grid.width);
 
-    let x = button.x + button.width / 2.;
-    let y = button.y + button.height / 2.;
-    for (frame, mirrored) in [(32, true), (33, false)] {
-        handle_runner_event(app.state_mut(), &pointer_move_ev(x, y));
+    for (frame, mirrored) in [(33, false), (34, true)] {
+        handle_runner_event(app.state_mut(), &pointer_move_ev(mx, my));
         assert!(!handle_runner_event(app.state_mut(), &pointer_btn_ev(true)));
         assert!(app.state().drag_2d.is_none());
         handle_runner_event(app.state_mut(), &pointer_btn_ev(false));
-        assert!(cssimpler::renderer::dispatch_click(app.scene(), x, y));
+        assert!(cssimpler::renderer::dispatch_click(app.scene(), mx, my));
         app.frame(tick(frame));
         assert_eq!(app.state().mirror_dart_bases, mirrored);
         assert_eq!(app.state().selected_2d_point, Some((panel.clone(), 1)));
     }
 
+    app.state_mut().set_single_2d_point(panel.clone(), 2);
+    app.invalidate(cssimpler::app::Invalidation::Structure);
+    app.frame(tick(35));
+    assert!(!cssimpler::renderer::dispatch_click(app.scene(), sx, sy));
+
     app.state_mut().toggle_2d_point(panel, 3);
     app.invalidate(cssimpler::app::Invalidation::Structure);
-    app.frame(tick(34));
+    app.frame(tick(36));
     assert!(
         app.find_element_bounds_by_id("#mirror-dart-bases")
-            .is_none()
+            .is_some()
     );
+    assert!(app.find_element_bounds_by_id("#slide-on-edge").is_some());
+    assert!(!cssimpler::renderer::dispatch_click(app.scene(), mx, my));
+    assert!(!cssimpler::renderer::dispatch_click(app.scene(), sx, sy));
 }
 
 #[test]
@@ -1031,9 +1046,10 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
         let delta = DVec2::new(0.010, 0.006);
         let reflected = DVec2::new(-delta.x, delta.y);
         let perpendicular = DVec2::new(0., delta.y);
-        for (selection, mirror, grabbed, expected) in [
+        for (selection, mirror, slide, grabbed, expected) in [
             (
                 &[6, 1][..],
+                false,
                 false,
                 1,
                 [Some(delta), Some(DVec2::new(delta.x, 0.)), Some(delta)],
@@ -1041,28 +1057,60 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
             (
                 &[6, 1][..],
                 true,
+                true,
                 6,
                 [Some(delta), Some(DVec2::new(delta.x, 0.)), Some(delta)],
             ),
-            (&[6, 0, 1][..], true, 0, [Some(delta); 3]),
-            (&[1][..], false, 1, [Some(DVec2::ZERO), None, Some(delta)]),
+            (&[6, 0, 1][..], true, true, 0, [Some(delta); 3]),
+            (
+                &[1][..],
+                false,
+                false,
+                1,
+                [Some(DVec2::ZERO), None, Some(delta)],
+            ),
             (
                 &[1][..],
                 true,
+                false,
                 1,
                 [Some(reflected), Some(DVec2::ZERO), Some(delta)],
             ),
             (
                 &[6][..],
                 true,
+                false,
                 6,
                 [Some(delta), Some(DVec2::ZERO), Some(reflected)],
             ),
             (
                 &[0][..],
                 true,
+                true,
                 0,
                 [Some(DVec2::ZERO), Some(perpendicular), Some(DVec2::ZERO)],
+            ),
+            (
+                &[1][..],
+                true,
+                true,
+                1,
+                [
+                    Some(DVec2::new(-delta.x, 0.)),
+                    Some(DVec2::ZERO),
+                    Some(DVec2::new(delta.x, 0.)),
+                ],
+            ),
+            (
+                &[6][..],
+                false,
+                true,
+                6,
+                [
+                    Some(DVec2::new(delta.x, 0.)),
+                    Some(DVec2::new(delta.x / 2., 0.)),
+                    Some(DVec2::ZERO),
+                ],
             ),
         ] {
             let before = state.project.template.clone();
@@ -1075,9 +1123,8 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
             for &point in &selection[1..] {
                 state.toggle_2d_point(panel.clone(), point);
             }
-            if state.mirror_dart_bases != mirror {
-                apply_runner_ui_op(&mut state, RunnerUiOp::ToggleMirrorDartBases);
-            }
+            state.mirror_dart_bases = mirror;
+            state.slide_on_edge = slide;
 
             let start = corner_at(&before, grabbed);
             let (x, y) = board_to_screen_px(&state, start);

@@ -6,7 +6,7 @@
 //! - Independent property tests and unit tests.
 
 use clothcraft::{
-    authoring::{self, Command, History},
+    authoring::{self, Command, History, corner_tool::slide_corner_position},
     garment::{
         GarmentTemplate,
         darts::DartSpec,
@@ -15,6 +15,7 @@ use clothcraft::{
         meshing::MeshingSettings,
         polygon::PolygonPattern,
         presets::{self, GarmentKind},
+        seam::{BoundaryRef, Side},
     },
 };
 use glam::DVec2;
@@ -252,6 +253,82 @@ fn real_dart_authoring_transaction_and_solver_seam() {
 }
 
 #[test]
+fn ordinary_edge_slide_uses_either_incident_path_without_merging_corners() {
+    let template = rectangle_template(0.3, 0.2);
+    let panel = &template.panels[0].id;
+    let slide = |x, y| slide_corner_position(&template, panel, 0, DVec2::new(x, y)).unwrap();
+    assert_eq!(slide(0.07, 0.02), DVec2::new(0.07, 0.));
+    assert_eq!(slide(0.01, 0.08), DVec2::new(0., 0.08));
+    let near_end = slide(0.4, 0.);
+    assert!(near_end.x > 0.29 && near_end.x < 0.3 - 1e-6);
+}
+
+#[test]
+fn mirrored_dart_slide_follows_each_outer_edge_and_preserves_equal_legs() {
+    let points = vec![
+        DVec2::ZERO,
+        DVec2::new(0.10, 0.02),
+        DVec2::new(0.15, 0.12),
+        DVec2::new(0.20, 0.02),
+        DVec2::new(0.30, 0.07),
+        DVec2::new(0.30, 0.24),
+        DVec2::new(0., 0.24),
+    ];
+    let open = authoring::apply(
+        &rectangle_template(0.3, 0.24),
+        Command::Polygon {
+            points: points.clone(),
+            tangents: vec![],
+            meshing: MeshingSettings::default(),
+            fabric: "woven-reference".into(),
+            replace: true,
+        },
+    )
+    .unwrap()
+    .template;
+    let panel = &open.panels[0];
+    let poly = panel.polygon.as_ref().unwrap();
+    let leg = |index: usize| BoundaryRef {
+        panel: panel.id.clone(),
+        side: Side::Bottom,
+        edge: Some(poly.edges[index].clone()),
+        range: [0., 1.],
+        reversed: false,
+    };
+    let sewn = authoring::apply(
+        &open,
+        Command::Sew {
+            a: leg(1),
+            b: leg(2),
+            reverse: true,
+            ease: false,
+        },
+    )
+    .unwrap()
+    .template;
+    let moved = authoring::apply(
+        &sewn,
+        Command::MoveDartPoint {
+            panel: panel.id.clone(),
+            point: 1,
+            position: DVec2::new(0.086, 0.052),
+            mirror: true,
+            slide: true,
+        },
+    )
+    .unwrap();
+    let after = &moved.template.panels[0].polygon.as_ref().unwrap().points;
+    for (base, outer) in [(1, 0), (3, 4)] {
+        let line = (points[outer] - points[base]).normalize();
+        let delta = after[base] - points[base];
+        assert!(delta.length() > 1e-3);
+        assert!(delta.perp_dot(line).abs() < 1e-10);
+    }
+    let [a, b] = moved.garment.seams[0].lengths;
+    assert!((a - b).abs() < 1e-9);
+}
+
+#[test]
 fn translating_dart_bases_preserves_curved_legs_and_respects_explicit_easing() {
     let source = rectangle_template(0.3, 0.2);
     let panel = source.panels[0].id.clone();
@@ -320,6 +397,7 @@ fn translating_dart_bases_preserves_curved_legs_and_respects_explicit_easing() {
                     position: before.panels[0].polygon.as_ref().unwrap().points[2]
                         + DVec2::new(0.005, 0.009),
                     mirror: true,
+                    slide: false,
                 },
             )
             .unwrap();

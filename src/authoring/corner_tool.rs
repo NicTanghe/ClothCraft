@@ -1673,6 +1673,89 @@ pub fn is_sewn_dart_point(source: &GarmentTemplate, panel: &str, point: usize) -
     find_dart(source, panel, point).is_some()
 }
 
+pub fn is_sewn_dart_tip(source: &GarmentTemplate, panel: &str, point: usize) -> bool {
+    find_dart(source, panel, point).is_some_and(|(_, _, corners)| corners[1] == point)
+}
+
+// Leave more than the contour mesher's 1 µm minimum before the next corner.
+const SLIDE_CORNER_GAP_M: f64 = 2e-6;
+
+fn incident_path(
+    poly: &PolygonPattern,
+    point: usize,
+    incoming: bool,
+) -> Result<Vec<DVec2>, String> {
+    let n = poly.points.len();
+    if point >= n {
+        return Err("Point index out of range".into());
+    }
+    let mut samples = poly.edge_points(if incoming { (point + n - 1) % n } else { point })?;
+    if incoming {
+        samples.reverse();
+    }
+    Ok(samples)
+}
+
+/// Project a drag onto the nearer of the two original incident boundary paths.
+pub fn slide_corner_position(
+    source: &GarmentTemplate,
+    panel: &str,
+    point: usize,
+    position: DVec2,
+) -> Result<DVec2, String> {
+    if !position.is_finite() {
+        return Err("Point coordinates must be finite".into());
+    }
+    let poly = source
+        .panels
+        .iter()
+        .find(|p| p.id == panel)
+        .and_then(|p| p.polygon.as_ref())
+        .ok_or("Select an editable contour point")?;
+    let corner = *poly.points.get(point).ok_or("Point index out of range")?;
+    let mut nearest = corner;
+    for incoming in [true, false] {
+        let samples = incident_path(poly, point, incoming)?;
+        for (i, segment) in samples.windows(2).enumerate() {
+            let d = segment[1] - segment[0];
+            let length = d.length();
+            if length <= 1e-12 {
+                continue;
+            }
+            let end = if i + 2 == samples.len() {
+                (length - SLIDE_CORNER_GAP_M).max(0.)
+            } else {
+                length
+            };
+            let axis = d / length;
+            let projected = segment[0] + axis * (position - segment[0]).dot(axis).clamp(0., end);
+            if projected.distance_squared(position) < nearest.distance_squared(position) {
+                nearest = projected;
+            }
+        }
+    }
+    Ok(nearest)
+}
+
+fn slide_dart_base(
+    poly: &PolygonPattern,
+    point: usize,
+    is_left: bool,
+    position: DVec2,
+) -> Result<DVec2, String> {
+    // The other incident edge continues along the mouth. The sewn leg is
+    // parallel to the tip direction and is never the perpendicular choice.
+    let samples = incident_path(poly, point, is_left)?;
+    let base = samples[0];
+    let tangent = samples[1..]
+        .iter()
+        .find_map(|p| (*p - base).try_normalize())
+        .ok_or("Dart base needs a nonzero adjoining edge")?;
+    let limit = (samples.last().unwrap().distance(base) - SLIDE_CORNER_GAP_M).max(0.);
+    // Extend the line toward the mouth so the two bases can slide inward as well.
+    Ok(base + tangent * (position - base).dot(tangent).min(limit))
+}
+
 fn project_to_dart_axis(point: DVec2, [left, right]: [DVec2; 2]) -> DVec2 {
     let mouth = (right - left).normalize_or_zero();
     point - mouth * (point - left.midpoint(right)).dot(mouth)
@@ -1743,8 +1826,9 @@ pub fn preview_move_dart_point(
     point: usize,
     position: DVec2,
     mirror: bool,
+    slide: bool,
 ) -> Result<(), String> {
-    move_dart_point(source, template, panel, point, position, mirror)?;
+    move_dart_point(source, template, panel, point, position, mirror, slide)?;
     let _ = linked::synchronize(source, template);
     Ok(())
 }
@@ -1756,6 +1840,7 @@ pub(super) fn move_dart_point(
     point: usize,
     position: DVec2,
     mirror: bool,
+    slide: bool,
 ) -> Result<(), String> {
     if !position.is_finite() {
         return Err("Point coordinates must be finite".into());
@@ -1773,11 +1858,26 @@ pub(super) fn move_dart_point(
         };
     } else {
         let (base, mate) = if point == left { (0, 2) } else { (2, 0) };
-        after[base] = position;
+        after[base] = if slide {
+            slide_dart_base(poly, point, point == left, position)?
+        } else {
+            position
+        };
         if mirror {
             let mouth = (b - a).normalize_or_zero();
-            after[mate] = position - 2. * mouth * (position - apex).dot(mouth);
-        } else if !seam.allow_ease {
+            let reflected = after[base] - 2. * mouth * (after[base] - apex).dot(mouth);
+            after[mate] = if slide {
+                slide_dart_base(
+                    poly,
+                    if mate == 0 { left } else { right },
+                    mate == 0,
+                    reflected,
+                )?
+            } else {
+                reflected
+            };
+        }
+        if (!mirror || slide) && !seam.allow_ease {
             after[1] = project_to_dart_axis(apex, [after[0], after[2]]);
         }
     }

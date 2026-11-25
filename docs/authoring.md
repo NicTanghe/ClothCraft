@@ -96,12 +96,19 @@ by the same amount. Include the tip to translate the whole dart. With only
 the bases selected, the tip of an equal-length straight dart follows along the
 mouth to keep the legs equal. Curved equal-length legs translate as a unit.
 
-Select one dart point to reveal the **Mirror dart** icon in the status bar
-over the upper-left corner of the 2D grid. Clicking the icon toggles mirroring.
+**Mirror dart** is on by default. Its icon stays visible in the status strip
+over the upper-left corner of the 2D grid and is enabled for one selected dart point.
 With mirroring on, dragging one base reflects the other across the dart axis.
 Dragging the tip changes dart depth along the perpendicular bisector of the
 bases. With mirroring off, dragging one base holds the opposite base fixed.
 The tip of an equal-length dart can shift to keep the sewn legs in balance.
+
+Turn on **Slide on edge** for a single contour point. An ordinary point follows
+the nearer of its two adjoining edges. A dart base follows the line of the
+adjoining outer edge, which is the incident edge nearest perpendicular to the
+sewn leg. With mirroring on, the other base slides along its own outer edge.
+The tip can adjust to preserve equal leg lengths when the two outer edges
+have different slopes. Both toggles are disabled for multi-point drags.
 
 This is a **cut-and-sewn dart**, not an uncut fold model or a guarantee of fit.
 Intake is 3–150 mm and depth is 8–500 mm; the source must be at least 20 mm

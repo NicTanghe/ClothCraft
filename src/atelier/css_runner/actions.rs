@@ -2,6 +2,7 @@
 
 use super::super::viewport_wireframe;
 use super::board::interaction::set_active_2d_tool;
+use super::board::selection::{has_single_dart_point, has_single_slide_point};
 use super::board::types::ToolDraft2d;
 use super::editing::{
     confirm_pending_sew, round_selected_corner, toggle_selected_curve, undo_redo_2d,
@@ -119,6 +120,7 @@ pub enum RunnerUiOp {
     Reset2dZoomSpeed,
     SetCornerMode(bool),
     ToggleMirrorDartBases,
+    ToggleSlideOnEdge,
     SetCornerRule(CornerRule),
     SetShadingMode(clothcraft::usd_scene::ShadingMode),
     ToggleShading,
@@ -581,7 +583,16 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             state.corner_preview_active = true;
             state.status_message = format!("Continuity rule: {:?}", rule);
         }
-        RunnerUiOp::ToggleMirrorDartBases => state.mirror_dart_bases = !state.mirror_dart_bases,
+        RunnerUiOp::ToggleMirrorDartBases => {
+            if has_single_dart_point(state) {
+                state.mirror_dart_bases = !state.mirror_dart_bases;
+            }
+        }
+        RunnerUiOp::ToggleSlideOnEdge => {
+            if has_single_slide_point(state) {
+                state.slide_on_edge = !state.slide_on_edge;
+            }
+        }
         RunnerUiOp::SetShadingMode(mode) => {
             if state.shading != mode {
                 state.shading = mode;
