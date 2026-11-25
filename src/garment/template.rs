@@ -256,14 +256,15 @@ impl GarmentTemplate {
         crate::document::atomic_write(path, &data)
     }
     pub fn compile(&self) -> Result<CompiledGarment, String> {
-        let first = self.compile_with_boundary_seeds(&BTreeMap::new())?;
-        let seeds = super::seam_sampling::plan(self, &first)?;
+        let ranges = super::seam_sampling::sewn_ranges(self);
+        let first = self.compile_with_boundary_seeds(&BTreeMap::new(), &ranges)?;
+        let seeds = super::seam_sampling::plan(self, &first, true)?;
         if seeds.is_empty() {
             return Ok(first);
         }
         drop(first);
-        let matched = self.compile_with_boundary_seeds(&seeds)?;
-        if !super::seam_sampling::plan(self, &matched)?.is_empty() {
+        let matched = self.compile_with_boundary_seeds(&seeds, &ranges)?;
+        if !super::seam_sampling::plan(self, &matched, false)?.is_empty() {
             return Err("Mesh refinement could not retain matching seam stations".into());
         }
         Ok(matched)
@@ -309,6 +310,7 @@ impl GarmentTemplate {
     fn compile_with_boundary_seeds(
         &self,
         seeds: &BTreeMap<String, Vec<DVec2>>,
+        sewn_ranges: &BTreeMap<&str, crate::mesh_resolution::preparation::SewnRanges>,
     ) -> Result<CompiledGarment, String> {
         if !matches!(self.measurement_precision(), 8 | 10 | 16) {
             return Err("Measurement precision must be 8, 10 or 16 bits".into());
@@ -473,9 +475,13 @@ impl GarmentTemplate {
                         .unwrap();
                     plan.bending_nm = [material.bend_warp, material.bend_weft];
                     plan.axis_degrees = panel.grain_degrees;
-                    prepared.build_with_boundary_seeds(&material, boundary_seeds)?
+                    prepared.build_with_boundary_seeds(
+                        &material,
+                        boundary_seeds,
+                        sewn_ranges.get(panel.id.as_str()),
+                    )?
                 } else {
-                    polygon.build_with_boundary_seeds(&material, boundary_seeds)?
+                    polygon.build_with_boundary_seeds(&material, boundary_seeds, None)?
                 };
                 (built.mesh, built.boundaries)
             } else {

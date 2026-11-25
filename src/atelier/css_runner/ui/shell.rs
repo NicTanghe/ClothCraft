@@ -31,6 +31,7 @@ pub fn build_runner_ui(state: &CssRunnerState) -> Node {
             {build_runner_command_palette(state)}
             {build_runner_settings(state)}
             {build_runner_import_dialog(state)}
+            {super::super::mesh_preparation::render_value_editor(state)}
         </div>
     }
 }

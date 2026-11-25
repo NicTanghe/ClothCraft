@@ -50,12 +50,11 @@ in PR 8. #link("https://github.com/erythrofr/ClothCraft/pull/230")[Upstream PR 2
 
 = How the samples match
 
-The first pass measures the vertices selected by each panel’s sizing field.
-The compiler maps both sets into one seam coordinate using normalized rest
-arclength and the stitch integrator’s reversal and notch rules. It adds the
-trim endpoints, chain joints and notch stations. The final pass inserts
-the missing samples into the authored contour segments and refines the
-panels separately.
+The compiler maps authored contour vertices, trim endpoints, chain joints
+and notch correspondences into a shared seam coordinate. Between these
+anchors it subdivides once, using the longer mapped rest-arclength interval
+and the finest requested spacing. The final pass replaces optional first-pass
+samples in those spans and protects the resulting constraints.
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr, 1fr, 1fr),
@@ -71,23 +70,25 @@ panels separately.
 Here the notch pairs 50% of side A with 75% of side B. The stations to either
 side follow the piecewise linear mapping between notch and endpoint.
 
-= Scope and quality checks
+= Spacing controls
 
-A seam participates when all its segments are on polygon panels and at least
-one panel has been prepared with seam matching. An ordinary polygon can receive samples from a
-prepared mate. Other seams continue to use interpolated coupling. The
-final triangulation preserves boundary samples and checks its area and vertex
-budgets. Protected constraints can prevent the angle target from being
-reached locally, especially when stations are close. Matching can add
-vertices and rebuild work. Older plans retain their mesh topology and saved
-drape. Reapplying physics-inspired preparation enables the new sampling.
+Click any mesh setting value to open its number editor. *Sewn edge / base
+spacing* ranges from 0.1 to 1.0 and defaults to 1.0. It sets the shared station
+density and the local sizing band. *Boundary / base spacing* applies to free
+spans, including the unsewn parts of partially sewn edges. Nearby features
+can still refine the area. Select *Prepare physics mesh and reset* to remesh.
+
+A seam can share samples when all its segments belong to polygons and at
+least one panel uses matching. An ordinary polygon can receive samples from
+its prepared mate. The mesher still checks area and vertex limits. Protected
+constraints may locally limit triangle angles. Older plans retain their
+topology and drape until preparation is reapplied.
 
 = Verification
 
-45 focused CPU tests passed. Regression tests check actual paired vertices for a trimmed, reversed and
-eased seam between prepared and ordinary polygons. They also check a
-chain joint, independent panel indices, reproducible rebuilds and sample
-positions on unsewn boundaries. Existing area, mass, seam measure and
-CPU gathered-sewing checks cover the resulting meshes. These checks
-establish correspondence and mesh validity. Wrinkle quality and solver
-speedup are open measurements.
+The CPU regressions verify actual paired vertices on curved, trimmed,
+reversed and eased seams, including mates with different preparation
+settings. On the straight-side fixture, changing the finer panel from 0.25
+to 1.0 more than halves the seam samples on both sides and lowers nearby
+vertex density. The saved USDA rebuilds the same mesh. Wrinkle quality and
+solver speedup remain unmeasured.

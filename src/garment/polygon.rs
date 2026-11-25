@@ -445,13 +445,14 @@ impl PolygonPattern {
             .collect()
     }
     pub fn build(&self, m: &Material) -> Result<MeshedPolygon, String> {
-        self.build_with_boundary_seeds(m, &[])
+        self.build_with_boundary_seeds(m, &[], None)
     }
 
     pub(super) fn build_with_boundary_seeds(
         &self,
         m: &Material,
         seeds: &[DVec2],
+        sewn_ranges: Option<&crate::mesh_resolution::preparation::SewnRanges>,
     ) -> Result<MeshedPolygon, String> {
         m.validate()?;
         let n = self.points.len();
@@ -542,6 +543,7 @@ impl PolygonPattern {
                 plan,
                 &named,
                 seeds,
+                sewn_ranges,
             )?
         } else {
             meshing::triangulate_domain_with_seeds(

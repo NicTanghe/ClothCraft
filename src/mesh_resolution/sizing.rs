@@ -175,6 +175,9 @@ pub enum Feature {
     Polyline {
         points: Vec<DVec2>,
     },
+    Polylines {
+        paths: Vec<Vec<DVec2>>,
+    },
     Region {
         center: DVec2,
         radius_m: f64,
@@ -195,13 +198,20 @@ pub struct Source {
 }
 impl Source {
     fn distance(&self, p: DVec2, radius: f64) -> Option<f64> {
-        let distance = match &self.feature {
-            Feature::Polyline { points } => points
+        let path_distance = |points: &[DVec2]| {
+            points
                 .windows(2)
                 .map(|w| {
                     let d = w[1] - w[0];
                     p.distance(w[0] + d * ((p - w[0]).dot(d) / d.length_squared()).clamp(0., 1.))
                 })
+                .fold(f64::INFINITY, f64::min)
+        };
+        let distance = match &self.feature {
+            Feature::Polyline { points } => path_distance(points),
+            Feature::Polylines { paths } => paths
+                .iter()
+                .map(|p| path_distance(p))
                 .fold(f64::INFINITY, f64::min),
             Feature::Region { center, radius_m } => (p.distance(*center) - radius_m).max(0.),
             Feature::DirectedPoint { origin, direction } => {
@@ -247,18 +257,27 @@ impl SizingMap {
                 return Err("Invalid source spacing or transition exponent (0.1..2)".into());
             }
             positive(s.doubling_distance_m, "Source doubling distance")?;
+            let mut validate_path = |p: &[DVec2]| -> Result<(), String> {
+                points += p.len();
+                if p.len() < 2
+                    || p.iter()
+                        .any(|p| !p.is_finite() || p.abs().max_element() > 1e4)
+                    || p.windows(2).any(|w| w[0].distance(w[1]) < 1e-9)
+                {
+                    return Err(
+                        "Source polyline needs distinct finite points in material metres".into(),
+                    );
+                }
+                Ok(())
+            };
             match &s.feature {
-                Feature::Polyline { points: p } => {
-                    points += p.len();
-                    if p.len() < 2
-                        || p.iter()
-                            .any(|p| !p.is_finite() || p.abs().max_element() > 1e4)
-                        || p.windows(2).any(|w| w[0].distance(w[1]) < 1e-9)
-                    {
-                        return Err(
-                            "Source polyline needs distinct finite points in material metres"
-                                .into(),
-                        );
+                Feature::Polyline { points } => validate_path(points)?,
+                Feature::Polylines { paths } => {
+                    if paths.is_empty() {
+                        return Err("Source polylines need at least one path".into());
+                    }
+                    for path in paths {
+                        validate_path(path)?;
                     }
                 }
                 Feature::Region { center, radius_m } => {

@@ -60,6 +60,15 @@ fn prepare(t: &GarmentTemplate) -> GarmentTemplate {
 
 #[test]
 fn prepared_seam_matches_trimmed_reversed_and_eased_stations() {
+    check_trimmed_seam(None);
+}
+
+#[test]
+fn explicit_spacing_retains_curved_constraints_and_matches_eased_stations() {
+    check_trimmed_seam(Some(0.75));
+}
+
+fn check_trimmed_seam(ratio: Option<f64>) {
     let project = preparation::simulation_demo("unused.obj".into()).unwrap();
     let mut template = project.template;
     // The mating edge has a different mesh density and the seam has two
@@ -75,18 +84,43 @@ fn prepared_seam_matches_trimmed_reversed_and_eased_stations() {
     template.seams[0].a.range = [0.15, 0.8];
     template.seams[0].b.range = [0.1, 0.9];
     template.seams[0].notches = vec![[0.35, 0.55]];
+    let skirt = template.panels[0].polygon.as_mut().unwrap();
+    if ratio.is_some() {
+        skirt.curves.insert(
+            "waist".into(),
+            [DVec2::new(0.18, 0.03), DVec2::new(0.28, 0.03)],
+        );
+        skirt
+            .meshing
+            .as_mut()
+            .unwrap()
+            .physics_sizing
+            .as_mut()
+            .unwrap()
+            .sewn_edge_ratio = ratio;
+    }
     let garment = template.compile().unwrap();
     assert_eq!(garment.mesh.uv, template.compile().unwrap().mesh.uv);
-    let mut unsewn = template.clone();
-    unsewn.seams.clear();
-    let unsewn = unsewn.compile().unwrap();
-    for (before, after) in unsewn.panels.iter().zip(&garment.panels) {
-        let before = &before.boundaries["left"];
-        let after = &after.boundaries["left"];
-        assert_eq!(before.len(), after.len());
-        for (&a, &b) in before.iter().zip(after) {
-            assert!(unsewn.mesh.uv[a].distance(garment.mesh.uv[b]) < 1e-9);
+    if ratio.is_none() {
+        let mut unsewn = template.clone();
+        unsewn.seams.clear();
+        let unsewn = unsewn.compile().unwrap();
+        for (before, after) in unsewn.panels.iter().zip(&garment.panels) {
+            let before = &before.boundaries["left"];
+            let after = &after.boundaries["left"];
+            assert_eq!(before.len(), after.len());
+            for (&a, &b) in before.iter().zip(after) {
+                assert!(unsewn.mesh.uv[a].distance(garment.mesh.uv[b]) < 1e-9);
+            }
         }
+    }
+    let skirt = template.panels[0].polygon.as_ref().unwrap();
+    for point in skirt.named_boundary("waist").unwrap() {
+        assert!(
+            garment.panels[0].boundaries["waist"]
+                .iter()
+                .any(|&v| garment.mesh.uv[v].distance(point) < 1e-9)
+        );
     }
     let seam = &template.seams[0];
     let curve = |panel: usize, r: &BoundaryRef, reverse| {
@@ -121,6 +155,87 @@ fn prepared_seam_matches_trimmed_reversed_and_eased_stations() {
             assert!(garment.panels[panel].vertices.contains(&vertex));
         }
     }
+}
+
+#[test]
+fn sewn_ratio_changes_both_mates_and_nearby_density_and_survives_usd_reload() {
+    let mut template = fixture();
+    let mut mate = template.panels[0].clone();
+    mate.id = "mate".into();
+    let reference = |panel: &str| BoundaryRef {
+        panel: panel.into(),
+        edge: Some("b".into()),
+        side: Side::Right,
+        range: [0., 1.],
+        reversed: false,
+    };
+    template.seams.push(SeamSpec {
+        id: "side".into(),
+        a: reference(&template.panels[0].id),
+        b: reference(&mate.id),
+        a_tail: vec![],
+        b_tail: vec![],
+        reverse_b: false,
+        notches: vec![],
+        stiffness: 50_000.,
+        allow_ease: false,
+    });
+    template.panels.push(mate);
+    let mut template = prepare(&template);
+    let with_ratio = |template: &mut GarmentTemplate, ratios: [f64; 2]| {
+        for (panel, ratio) in template.panels.iter_mut().zip(ratios) {
+            let poly = panel.polygon.as_mut().unwrap();
+            let plan = poly
+                .meshing
+                .as_mut()
+                .unwrap()
+                .physics_sizing
+                .as_mut()
+                .unwrap();
+            plan.sewn_edge_ratio = Some(ratio);
+        }
+    };
+    with_ratio(&mut template, [0.25, 1.0]);
+    let fine = template.compile().unwrap();
+    with_ratio(&mut template, [1.0; 2]);
+    let coarse = template.compile().unwrap();
+    for mesh in [&coarse, &fine] {
+        let [a, b] = [0, 1].map(|i| &mesh.panels[i].boundaries["b"]);
+        assert_eq!(a.len(), b.len());
+        assert!(
+            a.iter()
+                .zip(b)
+                .all(|(&i, &j)| i != j && mesh.mesh.uv[i].distance(mesh.mesh.uv[j]) < 1e-9)
+        );
+    }
+    assert!(coarse.panels[0].boundaries["b"].len() * 2 < fine.panels[0].boundaries["b"].len());
+    let nearby = |mesh: &clothcraft::garment::template::CompiledGarment| {
+        mesh.panels[0]
+            .vertices
+            .clone()
+            .filter(|&i| {
+                let p = mesh.mesh.uv[i];
+                (0.13..0.159).contains(&p.x) && (0.06..0.14).contains(&p.y)
+            })
+            .count()
+    };
+    assert!(nearby(&coarse) < nearby(&fine));
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("sewn-spacing.usda");
+    template.save(&path).unwrap();
+    let loaded = GarmentTemplate::load(&path).unwrap();
+    assert_eq!(loaded.compile().unwrap().mesh.uv, coarse.mesh.uv);
+    assert_eq!(
+        loaded.panels[0]
+            .polygon
+            .as_ref()
+            .unwrap()
+            .meshing_settings()
+            .physics_sizing
+            .unwrap()
+            .sewn_edge_ratio,
+        Some(1.0)
+    );
 }
 
 #[test]

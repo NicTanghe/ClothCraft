@@ -13,6 +13,8 @@ use glam::DVec2;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(crate) type SewnRanges = BTreeMap<String, Vec<[f64; 2]>>;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PhysicsSizing {
@@ -32,6 +34,9 @@ pub struct PhysicsSizing {
     /// Older plans keep their original topology so cached drapes still load.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub match_seams: bool,
+    /// Spacing on sewn spans relative to the estimated base. Absent in older plans.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sewn_edge_ratio: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<super::features::MeshFeature>,
 }
@@ -60,6 +65,12 @@ impl PhysicsSizing {
                 "Physics sizing needs boundary spacing ratio 0.1..1 and transition 1..1000 mm"
                     .into(),
             );
+        }
+        if self
+            .sewn_edge_ratio
+            .is_some_and(|ratio| !(0.1..=1.).contains(&ratio))
+        {
+            return Err("Sewn edge spacing ratio must be 0.1..1".into());
         }
         Ok(())
     }
@@ -93,6 +104,72 @@ impl PhysicsSizing {
         } else {
             vec![]
         };
+        Ok(SizingMap::new(base, self.axis_degrees, sources)?
+            .with_smooth_transitions(self.smooth_transitions))
+    }
+
+    fn map_with_sewn_ranges(
+        &self,
+        named: &BTreeMap<String, Vec<DVec2>>,
+        ranges: &SewnRanges,
+        sewn_ratio: f64,
+    ) -> Result<SizingMap, String> {
+        let mut unsewn = Vec::new();
+        let mut sewn = Vec::new();
+        for (name, path) in named {
+            let Some(ranges) = ranges.get(name) else {
+                unsewn.push(path.clone());
+                continue;
+            };
+            let mut ranges = ranges.clone();
+            ranges.sort_by(|a, b| a[0].total_cmp(&b[0]));
+            let mut cumulative = vec![0.];
+            for pair in path.windows(2) {
+                cumulative.push(cumulative.last().unwrap() + pair[0].distance(pair[1]));
+            }
+            let length = *cumulative.last().unwrap();
+            let push_span = |target: &mut Vec<Vec<DVec2>>, start: f64, end: f64| {
+                if (end - start) * length < 1e-9 {
+                    return;
+                }
+                let from = crate::garment::curves::arclength_point(path, start);
+                let to = crate::garment::curves::arclength_point(path, end);
+                let inner = path
+                    .iter()
+                    .zip(&cumulative)
+                    .filter_map(|(&point, &distance)| {
+                        (distance > start * length + 1e-9 && distance < end * length - 1e-9)
+                            .then_some(point)
+                    });
+                target.push(
+                    std::iter::once(from)
+                        .chain(inner)
+                        .chain(std::iter::once(to))
+                        .collect(),
+                );
+            };
+            let mut cursor: f64 = 0.;
+            for [start, end] in ranges {
+                if end <= cursor {
+                    continue;
+                }
+                push_span(&mut unsewn, cursor, start);
+                push_span(&mut sewn, cursor.max(start), end);
+                cursor = end;
+            }
+            push_span(&mut unsewn, cursor, 1.);
+        }
+        let base = self.base()?;
+        let sources = [(unsewn, self.boundary_ratio), (sewn, sewn_ratio)]
+            .into_iter()
+            .filter(|(paths, ratio)| *ratio < 1. && !paths.is_empty())
+            .map(|(paths, ratio)| Source {
+                feature: Feature::Polylines { paths },
+                spacing_m: base.map(|h| h * ratio),
+                doubling_distance_m: self.transition_m,
+                exponent: 0.5,
+            })
+            .collect();
         Ok(SizingMap::new(base, self.axis_degrees, sources)?
             .with_smooth_transitions(self.smooth_transitions))
     }
@@ -140,6 +217,7 @@ pub fn configure(
                 spacing_scale: 1.0,
                 smooth_transitions: true,
                 match_seams: true,
+                sewn_edge_ratio: None,
                 features: vec![],
             };
             plan.validate()?;
@@ -191,6 +269,7 @@ pub fn triangulate_with_paths(
         plan,
         named_paths,
         &[],
+        None,
     )
 }
 
@@ -204,6 +283,7 @@ pub(crate) fn triangulate_with_paths_and_seeds(
     plan: &PhysicsSizing,
     named_paths: &BTreeMap<String, Vec<DVec2>>,
     seeds: &[DVec2],
+    sewn_ranges: Option<&SewnRanges>,
 ) -> Result<TriangulatedContour, String> {
     settings.validate()?;
     plan.validate()?;
@@ -265,7 +345,13 @@ pub(crate) fn triangulate_with_paths_and_seeds(
         }
     }
     let extra = super::features::resolve(plan, &named, &mut domain)?;
-    let map = plan.map(&paths)?.with_additional_sources(extra)?;
+    let map = match (plan.sewn_edge_ratio, sewn_ranges) {
+        (Some(ratio), Some(ranges)) if ratio != plan.boundary_ratio => {
+            plan.map_with_sewn_ranges(&named, ranges, ratio)?
+        }
+        _ => plan.map(&paths)?,
+    }
+    .with_additional_sources(extra)?;
     let options = Options {
         seed: plan.seed,
         max_vertices: settings.max_vertices,

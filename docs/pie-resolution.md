@@ -19,23 +19,35 @@ The static preparation introduced in [upstream PR #230](https://github.com/eryth
 and wired into the garment editor by [PR #8](https://github.com/NicTanghe/ClothCraft/pull/8)
 now prepares both sides of an eligible seam together. The compiler uses the
 same normalized rest-arclength mapping as the stitch integrator. It combines
-the samples from both sides with trim endpoints, chain joints and notch
-correspondences, then inserts a separate vertex on each panel at each paired
-station. Reversal and easing can map a station to a different fraction of the
-other edge. The pattern curves stay in material space and each panel keeps
-its own vertices and stitch coupling.
+authored contour vertices with trim endpoints, chain joints and notch
+correspondences, then subdivides those intervals once for both panels.
+Reversal and easing can map a station to a different fraction of the other
+edge. Each panel keeps its material-space geometry, separate vertices and
+stitch coupling.
+
+In **Mesh preparation**, click a number to open its editor and press
+**Enter** or **Apply** to stage the change. **Sewn edge / base spacing**
+ranges from `0.1` to `1.0` and defaults to `1.0`. It controls the sizing band
+along sewn spans. **Boundary / base spacing** controls unsewn spans,
+including the free portion of a partially sewn edge. At `1.0` a sewn span
+uses the base spacing without its own refinement band. Nearby edges and
+explicit feature hints can still refine the area. The common station count
+uses the longer rest-arclength interval and the finest target requested by
+a participating panel.
 
 The pass applies when every seam segment belongs to a polygon panel and at
 least one participating panel has been prepared with seam matching. An ordinary polygon can
 receive matching samples from a prepared mate. Structured rectangles and seams
 between ordinary panels continue to use the existing interpolated stitch path.
-The final triangulation retains the first pass's boundary samples and protects
-its constraints from independent splitting. It checks area and vertex budgets
-again. The angle target can be missed near protected constraints.
+The final triangulation retains first-pass samples outside the replaced sewn
+spans and protects its constraints from independent splitting. It checks
+area and vertex budgets again. The angle target can be missed near protected
+constraints.
 
-Apply **Physics-inspired mesh preparation → Remesh and reset** to enable
-matching. Older saved preparation plans keep their mesh topology and cached
-drape until preparation is reapplied.
+Select **Prepare physics mesh and reset** to apply the settings. Older
+saved preparation plans keep their mesh topology and cached drape until
+preparation is reapplied. Plans from the first matched-sampling implementation
+combine the original samples from both panels until then.
 
 [Seam sampling report (PDF)](reports/pie-seam-sampling.pdf) · [Typst source](reports/pie-seam-sampling.typ)
 
