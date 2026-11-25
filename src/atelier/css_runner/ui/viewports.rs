@@ -14,8 +14,8 @@ use super::super::state::CssRunnerState;
 use super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::icons::{
-    icon_dart_2d, icon_shading_flat, icon_shading_smooth, icon_slide_on_edge, icon_wireframe_off,
-    icon_wireframe_on,
+    icon_dart_2d, icon_mirror_piece, icon_shading_flat, icon_shading_smooth, icon_slide_on_edge,
+    icon_wireframe_off, icon_wireframe_on,
 };
 use clothcraft::usd_scene::ShadingMode;
 use cssimpler::core::{ElementNode, Node};
@@ -418,6 +418,15 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
         icon_slide_on_edge(),
         RunnerUiOp::ToggleSlideOnEdge,
     );
+    let mirror_piece_status = board_status_toggle(
+        state,
+        "mirror-piece",
+        "Mirror piece",
+        selected_panel.is_some_and(|panel| panel.polygon.is_some()),
+        selected_panel.is_some_and(|panel| state.mirrored_pieces.contains(&panel.id)),
+        icon_mirror_piece(),
+        RunnerUiOp::ToggleMirrorPiece,
+    );
 
     ui! {
         <div id="viewport-2d" class="viewport-container">
@@ -437,7 +446,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
             {cad_bar}
             <div class="canvas-area">
                 {board}
-                <div id="board-2d-status" class="board-status-bar">{dart_status}{slide_status}</div>
+                <div id="board-2d-status" class="board-status-bar">{dart_status}{slide_status}{mirror_piece_status}</div>
             </div>
         </div>
     }

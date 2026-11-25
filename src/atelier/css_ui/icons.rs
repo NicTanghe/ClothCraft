@@ -448,6 +448,14 @@ pub fn icon_dart_2d() -> Node {
     }
 }
 
+pub fn icon_mirror_piece() -> Node {
+    ui! {
+        <svg viewBox="0 0 24 24" class="icon tool-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v18M8 6v12L3 15V9zM16 6v12l5-3V9z" />
+        </svg>
+    }
+}
+
 pub fn icon_slide_on_edge() -> Node {
     ui! {
         <svg viewBox="0 0 24 24" class="icon tool-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

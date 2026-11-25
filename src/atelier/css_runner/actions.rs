@@ -121,6 +121,7 @@ pub enum RunnerUiOp {
     SetCornerMode(bool),
     ToggleMirrorDartBases,
     ToggleSlideOnEdge,
+    ToggleMirrorPiece,
     SetCornerRule(CornerRule),
     SetShadingMode(clothcraft::usd_scene::ShadingMode),
     ToggleShading,
@@ -593,6 +594,18 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                 state.slide_on_edge = !state.slide_on_edge;
             }
         }
+        RunnerUiOp::ToggleMirrorPiece => {
+            if let Some(panel) = state
+                .project
+                .template
+                .panels
+                .get(state.selected_piece_index)
+                && panel.polygon.is_some()
+                && !state.mirrored_pieces.remove(&panel.id)
+            {
+                state.mirrored_pieces.insert(panel.id.clone());
+            }
+        }
         RunnerUiOp::SetShadingMode(mode) => {
             if state.shading != mode {
                 state.shading = mode;
@@ -710,6 +723,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                     let next_garment = Arc::new(compiled);
                     let next_state = next_garment.initial_state.clone();
                     state.project.template = next_template;
+                    state.mirrored_pieces.clear();
                     state.frame_all_2d();
                     state.project.state = None;
                     state.project.mesh_signature = None;

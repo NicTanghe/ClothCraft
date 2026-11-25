@@ -326,6 +326,98 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
 }
 
 #[test]
+fn mirror_piece_status_toggle_keeps_modes_per_piece_and_mirrors_point_drags() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = selection_test_state(dir.path());
+    let fabric = state.project.template.panels[0].fabric.clone();
+    assert!(super::super::editing::commit_authoring_command(
+        &mut state,
+        Command::Polygon {
+            points: vec![
+                DVec2::ZERO,
+                DVec2::new(0.3, 0.),
+                DVec2::new(0.3, 0.2),
+                DVec2::new(0., 0.2)
+            ],
+            tangents: vec![],
+            meshing: Default::default(),
+            fabric,
+            replace: true,
+        },
+        "Created mirror test panel"
+    ));
+    let id = state.project.template.panels[0].id.clone();
+    assert!(super::super::editing::commit_authoring_command(
+        &mut state,
+        Command::Duplicate { panel: id.clone() },
+        "Added a second panel"
+    ));
+    let other = state.project.template.panels[1].id.clone();
+    set_active_2d_tool(&mut state, "Edit");
+    let sheet = load_studio_stylesheet().unwrap();
+    let mut app = create_runner_app(state, &sheet);
+    app.state_mut().window_size = (1280., 800.);
+    app.set_viewport(cssimpler::renderer::ViewportSize::new(1280, 800));
+    let tick = |frame_index| FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index,
+    };
+    for (frame, idx) in [(0, 0), (1, 1), (2, 1)] {
+        apply_runner_ui_op(app.state_mut(), RunnerUiOp::SelectPiece(idx));
+        app.invalidate(cssimpler::app::Invalidation::Structure);
+        app.frame(tick(frame * 2));
+        let button = app.find_element_bounds_by_id("#mirror-piece").unwrap();
+        let slide = app.find_element_bounds_by_id("#slide-on-edge").unwrap();
+        assert!((button.y - slide.y).abs() < 1.);
+        assert!(button.x >= slide.x + slide.width);
+        let (x, y) = (button.x + button.width / 2., button.y + button.height / 2.);
+        handle_runner_event(app.state_mut(), &pointer_move_ev(x, y));
+        assert!(!handle_runner_event(app.state_mut(), &pointer_btn_ev(true)));
+        handle_runner_event(app.state_mut(), &pointer_btn_ev(false));
+        assert!(cssimpler::renderer::dispatch_click(app.scene(), x, y));
+        app.frame(tick(frame * 2 + 1));
+        assert!(app.state().mirrored_pieces.contains(&id));
+        assert_eq!(app.state().mirrored_pieces.contains(&other), frame == 1);
+    }
+
+    let state = app.state_mut();
+    let before = state.project.template.clone();
+    let board = |t: &GarmentTemplate, i| {
+        panel_to_board_pt(t, 0, t.panels[0].polygon.as_ref().unwrap().points[i])
+    };
+    let delta = DVec2::new(-0.012, 0.01);
+    let (x, y) = board_to_screen_px(state, board(&before, 3));
+    let (end_x, end_y) = board_to_screen_px(state, board(&before, 3) + delta);
+    handle_runner_event(state, &pointer_move_ev(x, y));
+    assert!(handle_runner_event(state, &pointer_btn_ev(true)));
+    handle_runner_event(state, &pointer_move_ev(end_x, end_y));
+    let verify = |t: &GarmentTemplate| {
+        assert!(board(t, 3).distance(board(&before, 3) + delta) < 1e-6);
+        assert!(board(t, 2).distance(board(&before, 2) + DVec2::new(-delta.x, delta.y)) < 1e-6);
+        assert_eq!(
+            t.panels[1].polygon.as_ref().unwrap().points,
+            before.panels[1].polygon.as_ref().unwrap().points
+        );
+    };
+    verify(
+        state
+            .preview_template
+            .as_ref()
+            .expect("mirrored live preview"),
+    );
+    assert!(handle_runner_event(state, &pointer_btn_ev(false)));
+    verify(&state.project.template);
+    assert!(undo_redo_2d(state, false));
+    assert_eq!(
+        serde_json::to_value(&state.project.template).unwrap(),
+        serde_json::to_value(&before).unwrap()
+    );
+}
+
+#[test]
 fn test_2d_canvas_click_corner_round_bezier_drag_and_undo() {
     let _guard = worker::WORKER_TEST_LOCK
         .lock()

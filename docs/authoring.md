@@ -108,7 +108,7 @@ the nearer of its two adjoining edges. A dart base follows the line of the
 adjoining outer edge, which is the incident edge nearest perpendicular to the
 sewn leg. With mirroring on, the other base slides along its own outer edge.
 The tip can adjust to preserve equal leg lengths when the two outer edges
-have different slopes. Both toggles are disabled for multi-point drags.
+have different slopes. These two toggles are disabled for multi-point drags.
 
 This is a **cut-and-sewn dart**, not an uncut fold model or a guarantee of fit.
 Intake is 3–150 mm and depth is 8–500 mm; the source must be at least 20 mm

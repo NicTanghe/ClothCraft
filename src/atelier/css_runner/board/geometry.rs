@@ -72,11 +72,11 @@ pub fn compute_2d_viewport_rect(state: &CssRunnerState) -> Rect2d {
 }
 
 pub(in super::super) fn board_status_rect(canvas: Rect2d) -> Rect2d {
-    // Match the 26px buttons, 4px gap and offset in `.board-status-bar`.
+    // Match the three 26px buttons, 4px gaps and offset in `.board-status-bar`.
     Rect2d {
         x: canvas.x + 8.0,
         y: canvas.y + 8.0,
-        w: 56.0,
+        w: 86.0,
         h: 26.0,
     }
 }

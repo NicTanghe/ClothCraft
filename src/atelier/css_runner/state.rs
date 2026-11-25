@@ -25,6 +25,7 @@ use cssimpler::ActionQueue;
 use cssimpler::app::UpdateHandle;
 use cssimpler::frame_drag::FrameAlignedDrag;
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
@@ -119,6 +120,7 @@ pub struct CssRunnerState {
     pub settings_open: bool,
     pub left_drawer_open: bool,
     pub selected_piece_index: usize,
+    pub mirrored_pieces: BTreeSet<String>,
     /// Uncommitted Arrange field edit; see `placement`.
     pub placement_draft: Option<super::placement::PlacementDraft>,
     pub selected_2d_point: Option<(String, usize)>,
@@ -248,6 +250,7 @@ impl CssRunnerState {
             settings_open: false,
             left_drawer_open: true,
             selected_piece_index: 0,
+            mirrored_pieces: BTreeSet::new(),
             placement_draft: None,
             selected_2d_point: None,
             selected_2d_points: Vec::new(),

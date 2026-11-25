@@ -9,6 +9,7 @@ use clothcraft::{
     },
 };
 use glam::{DVec2, DVec3};
+use std::collections::BTreeSet;
 
 fn drawing() -> clothcraft::garment::GarmentTemplate {
     authoring::apply(
@@ -214,6 +215,137 @@ fn moving_anchor_can_rebase_local_uv_without_moving_untouched_world_points() {
         ) < 1e-12
     );
     assert!(edit.reset_simulation);
+}
+
+#[test]
+fn piece_mirror_moves_selected_pairs_and_keeps_center_points_on_their_axis() {
+    let source = authoring::apply(
+        &drawing(),
+        Command::Polygon {
+            points: vec![
+                DVec2::ZERO,
+                DVec2::new(0.4, 0.),
+                DVec2::new(0.4, 0.4),
+                DVec2::new(0.2, 0.5),
+                DVec2::new(0., 0.4),
+            ],
+            tangents: vec![],
+            meshing: MeshingSettings::default(),
+            fabric: "woven-reference".into(),
+            replace: true,
+        },
+    )
+    .unwrap()
+    .template;
+    let id = source.panels[0].id.clone();
+    let mut source = authoring::apply(&source, Command::Duplicate { panel: id.clone() })
+        .unwrap()
+        .template;
+    source.panels[0].layout_rotation_degrees = 31.;
+    let other_id = source.panels[1].id.clone();
+    let enabled = BTreeSet::from([id.clone()]);
+    let delta = DVec2::new(0.012, 0.008);
+    let local_to_board = |delta| authoring::rotate_2d(delta, 31.);
+    let board_delta = local_to_board(delta);
+    let points = vec![
+        (id.clone(), 2),
+        (id, 4),
+        (source.panels[0].id.clone(), 3),
+        (other_id, 2),
+    ];
+    let mut preview = source.clone();
+    authoring::corner_tool::preview_move_groups_with_piece_mirroring(
+        &source,
+        &mut preview,
+        &points,
+        board_delta,
+        &enabled,
+    )
+    .unwrap();
+    let edit = authoring::apply_with_piece_mirroring(
+        &source,
+        Command::MovePointGroupsConnected {
+            points,
+            board_delta,
+        },
+        &enabled,
+    )
+    .unwrap();
+    let board_point = |t: &clothcraft::garment::GarmentTemplate, panel: usize, point| {
+        let p = &t.panels[panel];
+        authoring::layout(t, panel)
+            + authoring::rotate_2d(
+                p.polygon.as_ref().unwrap().points[point],
+                p.layout_rotation_degrees,
+            )
+    };
+    for (panel, point, expected) in [
+        (0, 2, board_delta),
+        (0, 4, local_to_board(DVec2::new(-delta.x, delta.y))),
+        (0, 3, local_to_board(DVec2::new(0., delta.y))),
+        (1, 2, board_delta),
+        (1, 4, DVec2::ZERO),
+    ] {
+        let start = board_point(&source, panel, point);
+        let goal = start + expected;
+        assert!(board_point(&edit.template, panel, point).distance(goal) < 1e-10);
+        assert!(board_point(&preview, panel, point).distance(goal) < 1e-10);
+    }
+    let mut history = authoring::History::default();
+    history.record(source.clone());
+    let undo = history.restore(&edit.template, false).unwrap();
+    assert_eq!(
+        serde_json::to_value(undo.template).unwrap(),
+        serde_json::to_value(source).unwrap()
+    );
+    assert!(!history.can_undo());
+}
+
+#[test]
+fn piece_mirror_reflects_bezier_handles_on_paired_and_shared_edges() {
+    let source = drawing();
+    let panel = &source.panels[0];
+    let poly = panel.polygon.as_ref().unwrap();
+    let enabled = BTreeSet::from([panel.id.clone()]);
+    for (edge, mate, position) in [
+        (1, 3, DVec2::new(0.43, 0.12)),
+        (0, 0, DVec2::new(0.11, -0.025)),
+    ] {
+        let rule = authoring::CornerRule::Sharp;
+        let mut preview = source.clone();
+        authoring::corner_tool::preview_adjust_handle_with_piece_mirroring(
+            &source,
+            &mut preview,
+            &panel.id,
+            &poly.edges[edge],
+            0,
+            position,
+            (rule, true),
+        )
+        .unwrap();
+        let edit = authoring::apply_with_piece_mirroring(
+            &source,
+            Command::AdjustCornerHandle {
+                panel: panel.id.clone(),
+                edge: poly.edges[edge].clone(),
+                handle_index: 0,
+                position,
+                rule,
+            },
+            &enabled,
+        )
+        .unwrap();
+        let controls = |t: &clothcraft::garment::GarmentTemplate, index: usize| {
+            let p = &t.panels[0];
+            let local = p.polygon.as_ref().unwrap().curves[&poly.edges[index]];
+            local.map(|point| authoring::layout(t, 0) - authoring::layout(&source, 0) + point)
+        };
+        let expected = DVec2::new(0.4 - position.x, position.y);
+        for t in [&preview, &edit.template] {
+            assert!(controls(t, edge)[0].distance(position) < 1e-10);
+            assert!(controls(t, mate)[1].distance(expected) < 1e-10);
+        }
+    }
 }
 
 #[test]

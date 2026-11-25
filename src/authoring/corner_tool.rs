@@ -1,7 +1,7 @@
 //! Corner rounding and Bézier continuity editing in panel-local rest space.
 use super::*;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Tangent continuity rule governing incident Bézier handles at a corner.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1412,6 +1412,7 @@ struct AdjustHandleSpec<'a> {
     position: DVec2,
     rule: CornerRule,
     check_mirror_frame: bool,
+    mirror_within_piece: bool,
 }
 
 fn adjust_handle_inner(
@@ -1477,22 +1478,24 @@ fn adjust_handle_inner(
         apply_single_handle_edit(poly, spec.edge, spec.handle_index, spec.position, spec.rule)?
     };
 
-    // Propagate primary edge curve (and rule-adjusted neighbor edge if modified) across seams and mirrors
-    propagate_edge_curve_across_seams(
-        source,
-        template,
-        spec.panel,
-        &outcome.primary_edge,
-        outcome.primary_ctrl,
-        &mut edited_rep_panels,
-    )?;
-    if let Some((adj_edge, adj_ctrl)) = outcome.neighbor_updated {
+    let mut changes = vec![(outcome.primary_edge, outcome.primary_ctrl)];
+    changes.extend(outcome.neighbor_updated);
+    if spec.mirror_within_piece {
+        let poly = template
+            .panels
+            .iter_mut()
+            .find(|p| p.id == spec.panel)
+            .and_then(|p| p.polygon.as_mut())
+            .ok_or("This panel has no editable contour")?;
+        piece_mirror::mirror_curve_edits(poly, spec.handle_index, &mut changes);
+    }
+    for (edge, controls) in changes {
         propagate_edge_curve_across_seams(
             source,
             template,
             spec.panel,
-            &adj_edge,
-            adj_ctrl,
+            &edge,
+            controls,
             &mut edited_rep_panels,
         )?;
     }
@@ -1577,23 +1580,31 @@ pub fn preview_adjust_handle(
     position: DVec2,
     rule: CornerRule,
 ) -> Result<(), String> {
-    adjust_handle_inner(
+    preview_adjust_handle_with_piece_mirroring(
         source,
         template,
-        AdjustHandleSpec {
-            panel,
-            edge,
-            handle_index,
-            position,
-            rule,
-            check_mirror_frame: false,
-        },
-    )?;
+        panel,
+        edge,
+        handle_index,
+        position,
+        (rule, false),
+    )
+}
+
+pub fn preview_adjust_handle_with_piece_mirroring(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    panel: &str,
+    edge: &str,
+    handle_index: usize,
+    position: DVec2,
+    mode: (CornerRule, bool),
+) -> Result<(), String> {
+    adjust_handle(source, template, panel, edge, handle_index, position, mode)?;
     let _ = linked::synchronize(source, template);
     Ok(())
 }
 
-/// Adjust a Bézier control handle at a corner and enforce the chosen continuity rule.
 pub(super) fn adjust_handle(
     source: &GarmentTemplate,
     template: &mut GarmentTemplate,
@@ -1601,7 +1612,7 @@ pub(super) fn adjust_handle(
     edge: &str,
     handle_index: usize,
     position: DVec2,
-    rule: CornerRule,
+    (rule, mirror_within_piece): (CornerRule, bool),
 ) -> Result<(), String> {
     adjust_handle_inner(
         source,
@@ -1613,6 +1624,7 @@ pub(super) fn adjust_handle(
             position,
             rule,
             check_mirror_frame: false,
+            mirror_within_piece,
         },
     )
 }
@@ -1819,6 +1831,12 @@ fn dart_deltas(
     planned
 }
 
+#[derive(Clone, Copy)]
+pub struct DartPointOptions {
+    pub mirror: bool,
+    pub slide: bool,
+}
+
 pub fn preview_move_dart_point(
     source: &GarmentTemplate,
     template: &mut GarmentTemplate,
@@ -1828,7 +1846,35 @@ pub fn preview_move_dart_point(
     mirror: bool,
     slide: bool,
 ) -> Result<(), String> {
-    move_dart_point(source, template, panel, point, position, mirror, slide)?;
+    preview_dart_point_with_piece_mirroring(
+        source,
+        template,
+        panel,
+        point,
+        position,
+        DartPointOptions { mirror, slide },
+        &BTreeSet::new(),
+    )
+}
+
+pub fn preview_dart_point_with_piece_mirroring(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    panel: &str,
+    point: usize,
+    position: DVec2,
+    options: DartPointOptions,
+    mirrored_pieces: &BTreeSet<String>,
+) -> Result<(), String> {
+    move_dart_point(
+        source,
+        template,
+        panel,
+        point,
+        position,
+        options,
+        mirrored_pieces,
+    )?;
     let _ = linked::synchronize(source, template);
     Ok(())
 }
@@ -1839,8 +1885,8 @@ pub(super) fn move_dart_point(
     panel: &str,
     point: usize,
     position: DVec2,
-    mirror: bool,
-    slide: bool,
+    DartPointOptions { mirror, slide }: DartPointOptions,
+    mirrored_pieces: &BTreeSet<String>,
 ) -> Result<(), String> {
     if !position.is_finite() {
         return Err("Point coordinates must be finite".into());
@@ -1899,7 +1945,7 @@ pub(super) fn move_dart_point(
         point,
     };
     let seeds = vec![(seed.clone(), preferred[&seed])];
-    move_connected_corner_deltas(source, template, seeds, &preferred)
+    move_connected_corner_deltas(source, template, seeds, preferred, mirrored_pieces)
 }
 
 fn propagate_corner_deltas(
@@ -2271,6 +2317,44 @@ pub(super) fn curve_points_connected(
     Ok(())
 }
 
+pub fn preview_move_piece_corner(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    panel: &str,
+    point: usize,
+    position: DVec2,
+    mirrored_pieces: &BTreeSet<String>,
+) -> Result<(), String> {
+    move_piece_corner(source, template, panel, point, position, mirrored_pieces)?;
+    let _ = linked::synchronize(source, template);
+    Ok(())
+}
+
+pub(super) fn move_piece_corner(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    panel: &str,
+    point: usize,
+    position: DVec2,
+    mirrored_pieces: &BTreeSet<String>,
+) -> Result<(), String> {
+    let before = source
+        .panels
+        .iter()
+        .find(|p| p.id == panel)
+        .and_then(|p| p.polygon.as_ref())
+        .and_then(|p| p.points.get(point))
+        .ok_or("Select an editable contour point")?;
+    move_points_with_piece_mirroring(
+        source,
+        template,
+        panel,
+        &[point],
+        position - *before,
+        mirrored_pieces,
+    )
+}
+
 /// Live preview variant of multi-panel connected point movement in board metres.
 pub fn preview_move_point_groups_connected(
     source: &GarmentTemplate,
@@ -2278,16 +2362,33 @@ pub fn preview_move_point_groups_connected(
     points: &[(String, usize)],
     board_delta: DVec2,
 ) -> Result<(), String> {
-    move_point_groups_connected(source, template, points, board_delta)?;
-    let _ = linked::synchronize(source, template);
-    Ok(())
+    preview_move_groups_with_piece_mirroring(
+        source,
+        template,
+        points,
+        board_delta,
+        &BTreeSet::new(),
+    )
 }
 
-pub(super) fn move_point_groups_connected(
+pub fn preview_move_groups_with_piece_mirroring(
     source: &GarmentTemplate,
     template: &mut GarmentTemplate,
     points: &[(String, usize)],
     board_delta: DVec2,
+    mirrored_pieces: &BTreeSet<String>,
+) -> Result<(), String> {
+    move_point_groups_with_piece_mirroring(source, template, points, board_delta, mirrored_pieces)?;
+    let _ = linked::synchronize(source, template);
+    Ok(())
+}
+
+pub(super) fn move_point_groups_with_piece_mirroring(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    points: &[(String, usize)],
+    board_delta: DVec2,
+    mirrored_pieces: &BTreeSet<String>,
 ) -> Result<(), String> {
     if !board_delta.is_finite() || points.is_empty() {
         return Err("Select points and use a finite move delta".into());
@@ -2319,16 +2420,18 @@ pub(super) fn move_point_groups_connected(
     }
 
     let preferred = dart_deltas(source, &seeds);
-    move_connected_corner_deltas(source, template, seeds, &preferred)
+    move_connected_corner_deltas(source, template, seeds, preferred, mirrored_pieces)
 }
 
 fn move_connected_corner_deltas(
     source: &GarmentTemplate,
     template: &mut GarmentTemplate,
     seeds: Vec<(CornerRef, DVec2)>,
-    preferred: &BTreeMap<CornerRef, DVec2>,
+    mut preferred: BTreeMap<CornerRef, DVec2>,
+    mirrored_pieces: &BTreeSet<String>,
 ) -> Result<(), String> {
     freeze_implicit_layouts(source, template);
+    piece_mirror::mirror_corner_edits(source, mirrored_pieces, &seeds, &mut preferred);
 
     let mut representative_by_panel: std::collections::BTreeMap<String, String> =
         std::collections::BTreeMap::new();
@@ -2347,7 +2450,7 @@ fn move_connected_corner_deltas(
         }
     }
 
-    let corner_deltas = propagate_corner_deltas(source, seeds, preferred);
+    let corner_deltas = propagate_corner_deltas(source, seeds, &preferred);
     let mut by_panel: std::collections::BTreeMap<String, Vec<(usize, DVec2)>> =
         std::collections::BTreeMap::new();
     for (cref, d) in &corner_deltas {
@@ -2393,6 +2496,17 @@ pub(super) fn move_points_connected(
     points: &[usize],
     delta: DVec2,
 ) -> Result<(), String> {
+    move_points_with_piece_mirroring(source, template, panel, points, delta, &BTreeSet::new())
+}
+
+pub(super) fn move_points_with_piece_mirroring(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    panel: &str,
+    points: &[usize],
+    delta: DVec2,
+    mirrored_pieces: &BTreeSet<String>,
+) -> Result<(), String> {
     if !delta.is_finite() {
         return Err("Move delta must be finite".into());
     }
@@ -2422,7 +2536,7 @@ pub(super) fn move_points_connected(
             .any(|c| connected_seam_corners(source, &c.panel, c.point).len() > 1)
     });
     freeze_implicit_layouts(source, template);
-    if !any_sewn {
+    if !any_sewn && !mirrored_pieces.contains(panel) {
         let p = template
             .panels
             .iter_mut()
@@ -2446,6 +2560,9 @@ pub(super) fn move_points_connected(
         })
         .collect();
     let preferred = dart_deltas(source, &seeds);
+    if mirrored_pieces.contains(panel) {
+        return move_connected_corner_deltas(source, template, seeds, preferred, mirrored_pieces);
+    }
     let corner_deltas = propagate_corner_deltas(source, seeds, &preferred);
 
     let mut edited_reps = std::collections::BTreeSet::new();

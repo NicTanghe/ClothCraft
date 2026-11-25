@@ -16,6 +16,7 @@ pub mod clipboard;
 pub mod constructions;
 pub mod corner_tool;
 pub mod cutout;
+mod piece_mirror;
 pub use corner_tool::CornerRule;
 pub use cutout::{CutoutPolicy, CutoutSeamPolicy, CutoutShape, SynchronizedCutoutParams};
 mod geometry;
@@ -1547,6 +1548,15 @@ fn remove_point_inner(
 }
 
 pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String> {
+    apply_with_piece_mirroring(source, command, &std::collections::BTreeSet::new())
+}
+
+/// Apply one authoring transaction with the 2D editor's active per-piece mirror modes.
+pub fn apply_with_piece_mirroring(
+    source: &GarmentTemplate,
+    command: Command,
+    mirrored_pieces: &std::collections::BTreeSet<String>,
+) -> Result<Edit, String> {
     let held = |id: &str| {
         source.pin_targets.iter().any(|p| p.panel == id)
             || source.frozen_panels.iter().any(|p| p.panel == id)
@@ -2126,7 +2136,16 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             let any_sewn = corner_tool::connected_corners(source, &panel, anchor)
                 .iter()
                 .any(|c| corner_tool::connected_seam_corners(source, &c.panel, c.point).len() > 1);
-            if any_sewn {
+            if mirrored_pieces.contains(&panel) {
+                corner_tool::move_piece_corner(
+                    source,
+                    &mut template,
+                    &panel,
+                    anchor,
+                    position,
+                    mirrored_pieces,
+                )?;
+            } else if any_sewn {
                 let current = *source
                     .panels
                     .iter()
@@ -2166,7 +2185,14 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             points,
             delta,
         } => {
-            corner_tool::move_points_connected(source, &mut template, &panel, &points, delta)?;
+            corner_tool::move_points_with_piece_mirroring(
+                source,
+                &mut template,
+                &panel,
+                &points,
+                delta,
+                mirrored_pieces,
+            )?;
             selected = Some(panel);
         }
         Command::MovePointGroups {
@@ -2198,7 +2224,13 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             board_delta,
         } => {
             selected = points.first().map(|(p, _)| p.clone());
-            corner_tool::move_point_groups_connected(source, &mut template, &points, board_delta)?;
+            corner_tool::move_point_groups_with_piece_mirroring(
+                source,
+                &mut template,
+                &points,
+                board_delta,
+                mirrored_pieces,
+            )?;
         }
         Command::MoveDartPoint {
             panel,
@@ -2213,8 +2245,8 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                 &panel,
                 point,
                 position,
-                mirror,
-                slide,
+                corner_tool::DartPointOptions { mirror, slide },
+                mirrored_pieces,
             )?;
             selected = Some(panel);
         }
@@ -2229,7 +2261,14 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             // Metric steps convert once, by division, so 1 mm and 10 mm are the
             // exact f64 0.001 and 0.01.
             let delta = delta_mm / 1000.0;
-            corner_tool::move_points_connected(source, &mut template, &panel, &points, delta)?;
+            corner_tool::move_points_with_piece_mirroring(
+                source,
+                &mut template,
+                &panel,
+                &points,
+                delta,
+                mirrored_pieces,
+            )?;
             selected = Some(panel);
         }
         Command::SplitBoundary { panel, edge, at_m } => {
@@ -2330,7 +2369,7 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                 &edge,
                 handle_index,
                 position,
-                rule,
+                (rule, mirrored_pieces.contains(&panel)),
             )?;
             selected = Some(panel);
         }
@@ -2373,11 +2412,18 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             anchor,
             curved,
         } => {
-            corner_tool::curve_point_connected(source, &mut template, &panel, anchor, curved)?;
+            if mirrored_pieces.contains(&panel) {
+                let mut points = vec![(panel.clone(), anchor)];
+                piece_mirror::include_corner_partners(source, mirrored_pieces, &mut points);
+                corner_tool::curve_points_connected(source, &mut template, &points, curved)?;
+            } else {
+                corner_tool::curve_point_connected(source, &mut template, &panel, anchor, curved)?;
+            }
             selected = Some(panel);
         }
-        Command::CurvePoints { points, curved } => {
+        Command::CurvePoints { mut points, curved } => {
             let first = points.first().map(|(p, _)| p.clone());
+            piece_mirror::include_corner_partners(source, mirrored_pieces, &mut points);
             corner_tool::curve_points_connected(source, &mut template, &points, curved)?;
             selected = first;
         }
