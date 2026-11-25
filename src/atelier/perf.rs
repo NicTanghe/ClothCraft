@@ -102,6 +102,8 @@ impl PerfRun {
             "physics_steps_per_second": speed / dt,
             "ui_frames_per_second": fps,
             "ui_frame_interval_p95_ms": self.intervals[(self.intervals.len() * 95 / 100).min(self.intervals.len() - 1)],
+            "ui_frame_interval_p99_ms": self.intervals[(self.intervals.len() * 99 / 100).min(self.intervals.len() - 1)],
+            "ui_frame_interval_max_ms": self.intervals.last(),
             "scope": "Actual window cadence and delivered simulated time; one second warmup, five seconds measured. Acceptance: >=0.95x simulation and >=55 UI frames/s."
         }))
     }

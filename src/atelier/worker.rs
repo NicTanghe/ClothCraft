@@ -190,6 +190,18 @@ fn accept(active: &mut Option<Work>, mut new: Work, deadline: &mut Instant) {
     }
     *active = Some(new);
 }
+
+fn next_step_deadline(deadline: Instant, finished: Instant, dt: Duration, gpu: bool) -> Instant {
+    let next = deadline + dt;
+    if gpu && next <= finished {
+        // Drop overdue GPU catch-up work and leave a window for viewport submission.
+        finished + (dt / 2).min(Duration::from_millis(8))
+    } else {
+        // Preserve wall-clock phase with bounded catch-up for CPU playback.
+        next.max(finished - dt * 4)
+    }
+}
+
 pub fn start(
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -400,14 +412,47 @@ fn start_inner(
                     let _ = hooks.published.send(w.generation);
                 }
                 w.signal.request_repaint();
-                // Keep the wall-clock phase through isolated BVH rebuilds and OS
-                // wakeup jitter. Bound catch-up to four steps; never change the
-                // physical dt or iteration budget when the machine is overloaded.
                 let dt = Duration::from_secs_f64(w.settings.dt);
-                deadline = (deadline + dt).max(Instant::now() - dt * 4);
+                deadline = next_step_deadline(deadline, Instant::now(), dt, w.gpu);
             }
         })?;
     Ok((tx, latest, thread))
+}
+
+#[cfg(test)]
+mod playback_timing_tests {
+    use super::*;
+
+    #[test]
+    fn gpu_playback_yields_after_an_overrun_then_resumes_normal_pacing() {
+        let start = Instant::now();
+        let dt = Duration::from_millis(16);
+        let finished = start + Duration::from_millis(80);
+        let next = next_step_deadline(start, finished, dt, true);
+        assert_eq!(next, finished + Duration::from_millis(8));
+        assert_eq!(
+            next_step_deadline(next, next + Duration::from_millis(4), dt, true),
+            next + dt
+        );
+        assert_eq!(
+            next_step_deadline(start, finished, dt, false),
+            finished - dt * 4
+        );
+    }
+
+    #[test]
+    fn gpu_yield_scales_with_timestep_and_has_a_cap() {
+        let start = Instant::now();
+        let finished = start + Duration::from_secs(1);
+        assert_eq!(
+            next_step_deadline(start, finished, Duration::from_millis(4), true),
+            finished + Duration::from_millis(2)
+        );
+        assert_eq!(
+            next_step_deadline(start, finished, Duration::from_millis(40), true),
+            finished + Duration::from_millis(8)
+        );
+    }
 }
 
 #[cfg(test)]
