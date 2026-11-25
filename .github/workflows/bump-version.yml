@@ -64,12 +64,14 @@ jobs:
           PR_NUMBER: ${{ matrix.pr }}
         run: |
           pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq \
-            "select(.state == \"open\" and .draft == false and .base.ref == \"main\" and .head.repo.full_name == \"$GITHUB_REPOSITORY\" and .head.ref != \"main\") | [.head.ref, .head.sha, .base.sha] | @tsv")
+            "select(.state == \"open\" and .draft == false and .base.ref == \"main\" and .head.repo.full_name == \"$GITHUB_REPOSITORY\" and .head.ref != \"main\") | [.head.ref, .head.sha] | @tsv")
           if [[ -z "$pr" ]]; then
             exit 0
           fi
-          read -r head_ref head_sha base_sha <<< "$pr"
-          git fetch --no-tags origin "$base_sha" "$head_sha"
+          read -r head_ref head_sha <<< "$pr"
+          # The base SHA in the PR API may lag behind the actual main ref.
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main' "$head_sha"
+          base_sha=$(git rev-parse refs/remotes/origin/main)
           worktree="$RUNNER_TEMP/clothcraft-version"
           git worktree add --detach "$worktree" "$head_sha"
           git -C "$worktree" switch -c prepare-version
