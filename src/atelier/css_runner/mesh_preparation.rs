@@ -359,6 +359,7 @@ pub fn render(state: &CssRunnerState) -> Node {
                 seed: 42,
                 spacing_scale: state.mesh_draft.scale(),
                 smooth_transitions: true,
+                match_seams: false,
                 features: vec![],
             }
             .base()

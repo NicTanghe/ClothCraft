@@ -6,7 +6,7 @@ use clothcraft::{
         meshing::MeshingSettings,
         polygon::PolygonPattern,
         presets::{self, GarmentKind},
-        seam::{BoundaryRef, SeamSpec, Side},
+        seam::{BoundaryCurve, BoundaryRef, SeamSpec, Side},
     },
     mesh_resolution::preparation,
     vbd::{VbdSettings, VbdSolver},
@@ -57,6 +57,144 @@ fn prepare(t: &GarmentTemplate) -> GarmentTemplate {
     )
     .unwrap()
 }
+
+#[test]
+fn prepared_seam_matches_trimmed_reversed_and_eased_stations() {
+    let project = preparation::simulation_demo("unused.obj".into()).unwrap();
+    let mut template = project.template;
+    // The mating edge has a different mesh density and the seam has two
+    // different local easing ratios. Only the skirt uses physics sizing.
+    template.panels[1]
+        .polygon
+        .as_mut()
+        .unwrap()
+        .meshing
+        .as_mut()
+        .unwrap()
+        .physics_sizing = None;
+    template.seams[0].a.range = [0.15, 0.8];
+    template.seams[0].b.range = [0.1, 0.9];
+    template.seams[0].notches = vec![[0.35, 0.55]];
+    let garment = template.compile().unwrap();
+    assert_eq!(garment.mesh.uv, template.compile().unwrap().mesh.uv);
+    let mut unsewn = template.clone();
+    unsewn.seams.clear();
+    let unsewn = unsewn.compile().unwrap();
+    for (before, after) in unsewn.panels.iter().zip(&garment.panels) {
+        let before = &before.boundaries["left"];
+        let after = &after.boundaries["left"];
+        assert_eq!(before.len(), after.len());
+        for (&a, &b) in before.iter().zip(after) {
+            assert!(unsewn.mesh.uv[a].distance(garment.mesh.uv[b]) < 1e-9);
+        }
+    }
+    let seam = &template.seams[0];
+    let curve = |panel: usize, r: &BoundaryRef, reverse| {
+        BoundaryCurve::new(
+            &garment.mesh,
+            garment.panels[panel].boundaries[r.edge.as_ref().unwrap()].clone(),
+            r.range,
+            reverse,
+        )
+        .unwrap()
+    };
+    let a = curve(0, &seam.a, false);
+    let b = curve(1, &seam.b, true);
+    let mut a_stations = a.breakpoints();
+    let mut b_stations = b.breakpoints();
+    // Trim endpoints can appear twice through floating-point round-off.
+    a_stations.dedup_by(|s, t| (*s - *t).abs() < 1e-8);
+    b_stations.dedup_by(|s, t| (*s - *t).abs() < 1e-8);
+    assert!(a_stations.len() > 3);
+    assert_eq!(a_stations.len(), b_stations.len());
+    assert!(a_stations.iter().any(|s| (s - 0.35).abs() < 1e-8));
+    for (s, t) in a_stations.into_iter().zip(b_stations) {
+        let mapped = if s <= 0.35 {
+            0.55 * s / 0.35
+        } else {
+            0.55 + 0.45 * (s - 0.35) / 0.65
+        };
+        assert!((mapped - t).abs() < 1e-8, "{s} maps to {mapped}, got {t}");
+        for (panel, point) in [a.point(s), b.point(t)].into_iter().enumerate() {
+            let &(vertex, weight) = point.iter().max_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
+            assert!((weight - 1.).abs() < 1e-8, "station lies between vertices");
+            assert!(garment.panels[panel].vertices.contains(&vertex));
+        }
+    }
+}
+
+#[test]
+fn prepared_seam_matches_a_chain_joint_to_a_vertex_on_the_other_panel() {
+    let mut template = fixture();
+    let mut second = template.panels[0].clone();
+    second.id = "second".into();
+    let mut mate = second.clone();
+    mate.id = "mate".into();
+    template.panels.extend([second, mate]);
+    let reference = |panel: &str, end| BoundaryRef {
+        panel: panel.into(),
+        edge: Some("a".into()),
+        side: Side::Top,
+        range: [0., end],
+        reversed: false,
+    };
+    template.seams.push(SeamSpec {
+        id: "chain".into(),
+        a: reference(&template.panels[0].id, 0.37),
+        a_tail: vec![reference("second", 0.63)],
+        b: reference("mate", 1.),
+        b_tail: vec![],
+        reverse_b: false,
+        notches: vec![],
+        stiffness: 50_000.,
+        allow_ease: false,
+    });
+    let garment = prepare(&template).compile().unwrap();
+    for (panel, station) in [(0, 0.37), (1, 0.63), (2, 0.37)] {
+        let vertex = garment.panels[panel].boundaries["a"]
+            .iter()
+            .find(|&&v| (garment.mesh.uv[v].x / 0.16 - station).abs() < 1e-8)
+            .expect("seam joint must be a vertex on this panel");
+        assert!(garment.panels[panel].vertices.contains(vertex));
+    }
+}
+
+#[test]
+fn older_preparation_plans_keep_their_saved_drape() {
+    let directory = tempfile::tempdir().unwrap();
+    let avatar = directory.path().join("avatar.obj");
+    std::fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").unwrap();
+    let mut project = preparation::simulation_demo(avatar).unwrap();
+    for panel in &mut project.template.panels {
+        panel
+            .polygon
+            .as_mut()
+            .unwrap()
+            .meshing
+            .as_mut()
+            .unwrap()
+            .physics_sizing
+            .as_mut()
+            .unwrap()
+            .match_seams = false;
+    }
+    let scene = project.compile().unwrap();
+    let mut drape = scene.state;
+    drape.time = 0.25;
+    project.state = Some(drape.clone());
+    let path = directory.path().join("legacy-prepared.usda");
+    project.save(&path).unwrap();
+    assert!(
+        !std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("match_seams")
+    );
+    let loaded = FittingProject::load(&path).unwrap().compile().unwrap();
+    assert_eq!(loaded.garment.mesh.uv, scene.garment.mesh.uv);
+    assert_eq!(loaded.state.x, drape.x);
+    assert_eq!(loaded.state.time, drape.time);
+}
+
 #[test]
 fn physical_compile_preserves_material_geometry_mass_seams_and_boundary_identity() {
     let mut t = fixture();

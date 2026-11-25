@@ -13,6 +13,32 @@ It now includes opt-in static mesh preparation for the native simulator. It is
 not a new solver backend, automatic physical calibration, a full reproduction
 of the paper's simulator, or proof of optimal resolution.
 
+## Matched samples on sewn boundaries
+
+The static preparation introduced in [upstream PR #230](https://github.com/erythrofr/ClothCraft/pull/230)
+and wired into the garment editor by [PR #8](https://github.com/NicTanghe/ClothCraft/pull/8)
+now prepares both sides of an eligible seam together. The compiler uses the
+same normalized rest-arclength mapping as the stitch integrator. It combines
+the samples from both sides with trim endpoints, chain joints and notch
+correspondences, then inserts a separate vertex on each panel at each paired
+station. Reversal and easing can map a station to a different fraction of the
+other edge. The pattern curves stay in material space and each panel keeps
+its own vertices and stitch coupling.
+
+The pass applies when every seam segment belongs to a polygon panel and at
+least one participating panel has been prepared with seam matching. An ordinary polygon can
+receive matching samples from a prepared mate. Structured rectangles and seams
+between ordinary panels continue to use the existing interpolated stitch path.
+The final triangulation retains the first pass's boundary samples and protects
+its constraints from independent splitting. It checks area and vertex budgets
+again. The angle target can be missed near protected constraints.
+
+Apply **Physics-inspired mesh preparation → Remesh and reset** to enable
+matching. Older saved preparation plans keep their mesh topology and cached
+drape until preparation is reapplied.
+
+[Seam sampling report (PDF)](reports/pie-seam-sampling.pdf) · [Typst source](reports/pie-seam-sampling.typ)
+
 ## Run a simulation example
 
 The default cloth-over-sphere demo now exposes the same static mesher:

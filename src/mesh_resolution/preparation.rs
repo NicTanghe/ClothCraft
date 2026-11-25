@@ -28,6 +28,10 @@ pub struct PhysicsSizing {
     pub spacing_scale: f64,
     #[serde(default = "default_smooth_transitions")]
     pub smooth_transitions: bool,
+    /// Preserve matching seam stations when preparing garment polygon panels.
+    /// Older plans keep their original topology so cached drapes still load.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub match_seams: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<super::features::MeshFeature>,
 }
@@ -135,6 +139,7 @@ pub fn configure(
                 seed: 42,
                 spacing_scale: 1.0,
                 smooth_transitions: true,
+                match_seams: true,
                 features: vec![],
             };
             plan.validate()?;
@@ -176,6 +181,29 @@ pub fn triangulate_with_paths(
     settings: &MeshingSettings,
     plan: &PhysicsSizing,
     named_paths: &BTreeMap<String, Vec<DVec2>>,
+) -> Result<TriangulatedContour, String> {
+    triangulate_with_paths_and_seeds(
+        points,
+        names,
+        holes,
+        lines,
+        settings,
+        plan,
+        named_paths,
+        &[],
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn triangulate_with_paths_and_seeds(
+    points: &[DVec2],
+    names: &[String],
+    holes: &[Hole],
+    lines: &[InternalLine],
+    settings: &MeshingSettings,
+    plan: &PhysicsSizing,
+    named_paths: &BTreeMap<String, Vec<DVec2>>,
+    seeds: &[DVec2],
 ) -> Result<TriangulatedContour, String> {
     settings.validate()?;
     plan.validate()?;
@@ -243,12 +271,13 @@ pub fn triangulate_with_paths(
         max_vertices: settings.max_vertices,
         ..Default::default()
     };
-    let output = mesh::generate_with_quality(
+    let output = mesh::generate_with_boundary_seeds(
         &domain,
         &map,
         &options,
         &|| false,
         Some(settings.min_angle_degrees),
+        seeds,
     )?;
     let mut boundaries = output.boundaries;
     for (safe, name) in safe.iter().zip(names) {

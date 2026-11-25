@@ -24,6 +24,7 @@ fn prepared() -> Project {
             seed: 42,
             spacing_scale: 1.0,
             smooth_transitions: true,
+            match_seams: false,
             features: vec![],
         }),
         ..Default::default()
