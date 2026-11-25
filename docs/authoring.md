@@ -91,17 +91,17 @@ boundary or leaving Edit discards the draft. Ctrl+Z outside a text field cancels
 a pending draft first. A successful Apply is one undo/redo entry and survives
 ordinary Save/Open; it resets the edited cloth's simulation caches.
 
-In **Edit**, Shift-select both dart bases and drag either one to move both by
-the same amount. With mirroring off, including the tip translates the whole
-dart. With only the bases selected, an equal-length straight dart's tip follows along the mouth
-to keep the legs equal. An equal-length dart with curved legs translates its
-tip with the bases to keep the existing curves and their lengths.
-To widen or narrow the dart symmetrically, select both bases and enable
-**Mirror dart** in the toolbar above the 2D grid. Drag either base to mirror
-the other. A selected tip follows the perpendicular part of the base drag
-and stays on the bisector of the mouth.
-With all three points selected, drag the tip itself to change the depth
-along the perpendicular bisector while keeping both bases fixed.
+In **Edit**, Shift-select both dart bases and drag either one to move both
+by the same amount. Include the tip to translate the whole dart. With only
+the bases selected, the tip of an equal-length straight dart follows along the
+mouth to keep the legs equal. Curved equal-length legs translate as a unit.
+
+Select one dart point to reveal the **Mirror dart** icon in the status bar
+over the upper-left corner of the 2D grid. Clicking the icon toggles mirroring.
+With mirroring on, dragging one base reflects the other across the dart axis.
+Dragging the tip changes dart depth along the perpendicular bisector of the
+bases. With mirroring off, dragging one base holds the opposite base fixed.
+The tip of an equal-length dart can shift to keep the sewn legs in balance.
 
 This is a **cut-and-sewn dart**, not an uncut fold model or a guarantee of fit.
 Intake is 3–150 mm and depth is 8–500 mm; the source must be at least 20 mm

@@ -6,12 +6,14 @@ use super::super::board::geometry::{
 };
 use super::super::board::native::board_node;
 use super::super::board::rendering::render_runner_2d_paths;
-use super::super::board::selection::{compute_connected_2d_highlight, effective_selected_points};
+use super::super::board::selection::{
+    compute_connected_2d_highlight, effective_selected_points, has_single_dart_point,
+};
 use super::super::state::CssRunnerState;
 use super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::icons::{
-    icon_shading_flat, icon_shading_smooth, icon_wireframe_off, icon_wireframe_on,
+    icon_dart_2d, icon_shading_flat, icon_shading_smooth, icon_wireframe_off, icon_wireframe_on,
 };
 use clothcraft::usd_scene::ShadingMode;
 use cssimpler::core::Node;
@@ -204,19 +206,6 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
     let redo_btn = ui! {
         <button id="cad-redo-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::Redo2d)} title="Redo (Ctrl+Shift+Z)">{redo_label}</button>
     };
-    let mirror_class = if state.mirror_dart_bases {
-        "cad-2d-pill active"
-    } else {
-        "cad-2d-pill"
-    };
-    let mirror_dart_btn = ui! {
-        <button id="mirror-dart-bases" class={mirror_class}
-            aria-pressed={if state.mirror_dart_bases { "true" } else { "false" }}
-            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleMirrorDartBases)}
-            title="Mirror the two selected dart bases and constrain a selected tip to their perpendicular bisector">
-            "Mirror dart"
-        </button>
-    };
     let mode_radius_btn = ui! {
         <button id="cad-corner-radius-mode" class={radius_mode_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerMode(true))} title="Circular fillet mode">"Radius"</button>
     };
@@ -264,7 +253,6 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                 <div class="cad-2d-group">
                     {undo_btn}
                     {redo_btn}
-                    {mirror_dart_btn}
                 </div>
                 <div class={corner_group_class}>
                     <span class="cad-2d-label">"Corner"</span>
@@ -293,7 +281,6 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                 <div class="cad-2d-row">
                     {undo_btn}
                     {redo_btn}
-                    {mirror_dart_btn}
                     <span class="cad-2d-label">"Rule"</span>
                     {rule_sharp_btn}
                     {rule_smooth_btn}
@@ -331,7 +318,6 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                     {tension_dec_btn}
                     {tension_val}
                     {tension_inc_btn}
-                    {mirror_dart_btn}
                 </div>
                 <div class="cad-2d-row">
                     {rule_sharp_btn}
@@ -367,7 +353,6 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                     {rule_sharp_btn}
                     {rule_smooth_btn}
                     {rule_sym_btn}
-                    {mirror_dart_btn}
                 </div>
             </div>
         },
@@ -376,12 +361,36 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                 <div class="cad-2d-row">{undo_btn}{redo_btn}</div>
                 <div class={corner_row_class}>{mode_radius_btn}{mode_shape_btn}</div>
                 <div class={corner_row_class}>{radius_dec_btn}{radius_val}{radius_inc_btn}</div>
-                <div class={corner_row_class}>{apply_round_btn}{mirror_dart_btn}</div>
+                <div class={corner_row_class}>{apply_round_btn}</div>
                 <div class={corner_row_class}>{tension_dec_btn}{tension_val}{tension_inc_btn}</div>
                 <div class="cad-2d-row">{curve_on_btn}{curve_off_btn}</div>
                 <div class="cad-2d-row">{rule_sharp_btn}{rule_smooth_btn}{rule_sym_btn}</div>
             </div>
         },
+    };
+
+    let dart_status = if has_single_dart_point(state) {
+        let mirrored = state.mirror_dart_bases;
+        let (class, title) = if mirrored {
+            (
+                "viewport-tool-btn icon-only active",
+                "Dart mirroring on. Click to turn off.",
+            )
+        } else {
+            (
+                "viewport-tool-btn icon-only",
+                "Dart mirroring off. Click to turn on.",
+            )
+        };
+        ui! {
+            <button id="mirror-dart-bases" class={class}
+                aria-label="Mirror dart" aria-pressed={mirrored.to_string()} title={title}
+                onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleMirrorDartBases)}>
+                {icon_dart_2d()}
+            </button>
+        }
+    } else {
+        ui! { <span class="hidden" /> }
     };
 
     ui! {
@@ -402,6 +411,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
             {cad_bar}
             <div class="canvas-area">
                 {board}
+                <div id="board-2d-status" class="board-status-bar">{dart_status}</div>
             </div>
         </div>
     }

@@ -56,7 +56,6 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
     let cad_control_ids = [
         "#cad-undo-btn",
         "#cad-redo-btn",
-        "#mirror-dart-bases",
         "#cad-corner-radius-mode",
         "#cad-corner-shape-mode",
         "#cad-radius-dec",
@@ -196,9 +195,6 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
                     && b.y + b.height <= vp2d.y + vp2d.height + 1.0,
                 "control {cid} unclipped inside #viewport-2d at {w}x{h} (clean={clean_view}, drawer={drawer_open}): {b:?} vs {vp2d:?}"
             );
-            if cid == "#mirror-dart-bases" {
-                assert!(b.y >= bar_bounds.y && b.y + b.height <= bar_bounds.y + bar_bounds.height);
-            }
         }
     }
 
@@ -213,14 +209,9 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
         frame_index: 20,
     });
 
-    for (idx, selector) in [
-        "#cad-corner-shape-mode",
-        "#cad-radius-inc",
-        "#cad-rule-sym",
-        "#mirror-dart-bases",
-    ]
-    .into_iter()
-    .enumerate()
+    for (idx, selector) in ["#cad-corner-shape-mode", "#cad-radius-inc", "#cad-rule-sym"]
+        .into_iter()
+        .enumerate()
     {
         let btn = app.find_element_bounds_by_id(selector).unwrap();
         assert!(
@@ -239,7 +230,84 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
     assert!(!app.state().corner_mode_radius);
     assert!((app.state().corner_radius_mm - 12.0).abs() < 1e-6);
     assert_eq!(app.state().corner_rule, CornerRule::Symmetric);
-    assert!(app.state().mirror_dart_bases);
+    let fabric = app.state().project.template.panels[0].fabric.clone();
+    assert!(super::super::editing::commit_authoring_command(
+        app.state_mut(),
+        Command::Polygon {
+            points: vec![
+                DVec2::ZERO,
+                DVec2::new(0.3, 0.),
+                DVec2::new(0.3, 0.2),
+                DVec2::new(0., 0.2)
+            ],
+            tangents: vec![],
+            meshing: Default::default(),
+            fabric,
+            replace: true,
+        },
+        "Created dart panel",
+    ));
+    let panel = app.state().project.template.panels[0].id.clone();
+    let edge = app.state().project.template.panels[0]
+        .polygon
+        .as_ref()
+        .unwrap()
+        .edges[0]
+        .clone();
+    assert!(super::super::editing::commit_authoring_command(
+        app.state_mut(),
+        Command::DartCutSew {
+            panel: panel.clone(),
+            edge,
+            left_t: 0.35,
+            right_t: 0.45,
+            apex: DVec2::new(0.12, 0.08),
+        },
+        "Created sewn dart",
+    ));
+
+    let tick = |index| FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: index,
+    };
+    app.state_mut().set_single_2d_point(panel.clone(), 0);
+    app.invalidate(cssimpler::app::Invalidation::Structure);
+    app.frame(tick(30));
+    assert!(
+        app.find_element_bounds_by_id("#mirror-dart-bases")
+            .is_none()
+    );
+    app.state_mut().set_single_2d_point(panel.clone(), 1);
+    app.invalidate(cssimpler::app::Invalidation::Structure);
+    app.frame(tick(31));
+    let button = app
+        .find_element_bounds_by_id("#mirror-dart-bases")
+        .expect("single dart point shows mirror toggle");
+    let grid = app.find_element_bounds_by_id("#board-2d").unwrap();
+    let toolbar = app.find_element_bounds_by_id("#cad-2d-bar").unwrap();
+    assert!(button.y >= toolbar.y + toolbar.height && button.y >= grid.y);
+    assert!(button.x >= grid.x && button.x + button.width <= grid.x + grid.width);
+
+    let x = button.x + button.width / 2.;
+    let y = button.y + button.height / 2.;
+    for (frame, mirrored) in [(32, true), (33, false)] {
+        handle_runner_event(app.state_mut(), &pointer_move_ev(x, y));
+        assert!(!handle_runner_event(app.state_mut(), &pointer_btn_ev(true)));
+        assert!(app.state().drag_2d.is_none());
+        handle_runner_event(app.state_mut(), &pointer_btn_ev(false));
+        assert!(cssimpler::renderer::dispatch_click(app.scene(), x, y));
+        app.frame(tick(frame));
+        assert_eq!(app.state().mirror_dart_bases, mirrored);
+        assert_eq!(app.state().selected_2d_point, Some((panel.clone(), 1)));
+    }
+
+    app.state_mut().toggle_2d_point(panel, 3);
+    app.invalidate(cssimpler::app::Invalidation::Structure);
+    app.frame(tick(34));
+    assert!(
+        app.find_element_bounds_by_id("#mirror-dart-bases")
+            .is_none()
+    );
 }
 
 #[test]
@@ -963,14 +1031,39 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
         let delta = DVec2::new(0.010, 0.006);
         let reflected = DVec2::new(-delta.x, delta.y);
         let perpendicular = DVec2::new(0., delta.y);
-        for (drag_tip, mirror, grabbed, expected) in [
-            (false, false, 1, [delta, DVec2::new(delta.x, 0.), delta]),
-            (true, false, 6, [delta; 3]),
-            (false, true, 1, [reflected, DVec2::ZERO, delta]),
-            (false, true, 6, [delta, DVec2::ZERO, reflected]),
-            (true, true, 1, [reflected, perpendicular, delta]),
-            (true, true, 6, [delta, perpendicular, reflected]),
-            (true, true, 0, [DVec2::ZERO, perpendicular, DVec2::ZERO]),
+        for (selection, mirror, grabbed, expected) in [
+            (
+                &[6, 1][..],
+                false,
+                1,
+                [Some(delta), Some(DVec2::new(delta.x, 0.)), Some(delta)],
+            ),
+            (
+                &[6, 1][..],
+                true,
+                6,
+                [Some(delta), Some(DVec2::new(delta.x, 0.)), Some(delta)],
+            ),
+            (&[6, 0, 1][..], true, 0, [Some(delta); 3]),
+            (&[1][..], false, 1, [Some(DVec2::ZERO), None, Some(delta)]),
+            (
+                &[1][..],
+                true,
+                1,
+                [Some(reflected), Some(DVec2::ZERO), Some(delta)],
+            ),
+            (
+                &[6][..],
+                true,
+                6,
+                [Some(delta), Some(DVec2::ZERO), Some(reflected)],
+            ),
+            (
+                &[0][..],
+                true,
+                0,
+                [Some(DVec2::ZERO), Some(perpendicular), Some(DVec2::ZERO)],
+            ),
         ] {
             let before = state.project.template.clone();
             let corner_at = |template: &GarmentTemplate, point| {
@@ -978,10 +1071,9 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
                 panel_to_board_pt(template, 0, local)
             };
             let panel = before.panels[0].id.clone();
-            state.set_single_2d_point(panel.clone(), 6);
-            state.toggle_2d_point(panel.clone(), 1);
-            if drag_tip {
-                state.toggle_2d_point(panel, 0);
+            state.set_single_2d_point(panel.clone(), selection[0]);
+            for &point in &selection[1..] {
+                state.toggle_2d_point(panel.clone(), point);
             }
             if state.mirror_dart_bases != mirror {
                 apply_runner_ui_op(&mut state, RunnerUiOp::ToggleMirrorDartBases);
@@ -997,7 +1089,9 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
             let assert_move = |after: &GarmentTemplate| {
                 for (index, expected_delta) in [6, 0, 1].into_iter().zip(expected) {
                     let actual_delta = corner_at(after, index) - corner_at(&before, index);
-                    let expected_delta = to_board(expected_delta);
+                    let Some(expected_delta) = expected_delta.map(to_board) else {
+                        continue;
+                    };
                     assert!(
                         actual_delta.distance(expected_delta) < 1e-6,
                         "dart point {index} moved {actual_delta} instead of {expected_delta}"

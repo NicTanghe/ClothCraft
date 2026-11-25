@@ -3,7 +3,7 @@
 use super::super::state::CssRunnerState;
 use super::corners::resolve_corner_edge;
 use super::types::Hover2dTarget;
-use clothcraft::authoring::corner_tool::{connected_corners, connected_edges};
+use clothcraft::authoring::corner_tool::{connected_corners, connected_edges, is_sewn_dart_point};
 use clothcraft::garment::GarmentTemplate;
 
 pub(in super::super) struct Connected2dHighlight {
@@ -29,6 +29,16 @@ pub(in super::super) fn effective_selected_points(state: &CssRunnerState) -> Vec
     } else {
         Vec::new()
     }
+}
+
+pub(in super::super) fn has_single_dart_point(state: &CssRunnerState) -> bool {
+    state.selected_2d_points.len() <= 1
+        && state
+            .selected_2d_point
+            .as_ref()
+            .is_some_and(|(panel, point)| {
+                is_sewn_dart_point(&state.project.template, panel, *point)
+            })
 }
 
 pub(in super::super) fn batch_corners_for_points(

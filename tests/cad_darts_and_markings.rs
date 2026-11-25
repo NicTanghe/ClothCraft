@@ -314,10 +314,12 @@ fn translating_dart_bases_preserves_curved_legs_and_respects_explicit_easing() {
             assert!((lengths[0] - lengths[1]).abs() > 1e-5);
             let mirrored = authoring::apply(
                 &before,
-                Command::MovePointGroupsMirroredDarts {
-                    points: [1, 2, 3].map(|i| (panel.clone(), i)).to_vec(),
-                    grabbed: (panel.clone(), 2),
-                    board_delta,
+                Command::MoveDartPoint {
+                    panel: panel.clone(),
+                    point: 2,
+                    position: before.panels[0].polygon.as_ref().unwrap().points[2]
+                        + DVec2::new(0.005, 0.009),
+                    mirror: true,
                 },
             )
             .unwrap();

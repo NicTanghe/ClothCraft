@@ -176,7 +176,6 @@ pub(in super::super) fn handle_motion(state: &mut CssRunnerState, event: &Engine
                                             state,
                                             &points,
                                             board_m - start_board_m,
-                                            (&panel_id, point_idx),
                                         );
                                     } else {
                                         update_preview_point(

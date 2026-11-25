@@ -1,6 +1,7 @@
 //! Board layout, metric geometry and coordinate mapping.
 
 use super::super::state::CssRunnerState;
+use super::selection::has_single_dart_point;
 use super::types::Rect2d;
 use clothcraft::authoring;
 use clothcraft::css_ui::ViewLayoutMode;
@@ -69,6 +70,15 @@ pub fn compute_2d_viewport_rect(state: &CssRunnerState) -> Rect2d {
         w: vp2d_w,
         h: (body_h - top_chrome_h).max(1.0),
     }
+}
+
+pub(in super::super) fn dart_status_rect(state: &CssRunnerState, canvas: Rect2d) -> Option<Rect2d> {
+    has_single_dart_point(state).then_some(Rect2d {
+        x: canvas.x + 8.0,
+        y: canvas.y + 8.0,
+        w: 26.0,
+        h: 26.0,
+    })
 }
 
 /// Exact CSS layout rect for `#viewport-3d`'s `.canvas-area` (for 3D camera orbit gating).
