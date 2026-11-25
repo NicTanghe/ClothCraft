@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
-"""Advance ClothCraft's patch version for commits on main's first-parent history."""
+"""Prepare or verify ClothCraft's package version before merging a PR."""
 
+import argparse
 import re
 import subprocess
 import tomllib
 from pathlib import Path
 
-SCRIPT_PATH = "scripts/bump-version.py"
 
-
-def git(*args):
-    return subprocess.check_output(["git", *args], text=True).strip()
-
-
-def manifest_version(revision):
-    return tomllib.loads(git("show", f"{revision}:Cargo.toml"))["package"]["version"]
+def version_tuple(version):
+    if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version):
+        raise SystemExit(f"Expected a major.minor.patch version, got {version!r}")
+    return tuple(map(int, version.split(".")))
 
 
 def replace_version(block, previous, version):
@@ -26,33 +23,42 @@ def replace_version(block, previous, version):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("base", nargs="?", default="origin/main", help="Git revision being merged into")
+    parser.add_argument("--check", action="store_true", help="Verify the version without editing files")
+    args = parser.parse_args()
+    virtual_base = subprocess.check_output(
+        ["git", "show", f"{args.base}:Cargo.toml"], text=True
+    )
+    base_version = tomllib.loads(virtual_base)["package"]["version"]
+    base = version_tuple(base_version)
     manifest = Path("Cargo.toml")
     lock = Path("Cargo.lock")
     manifest_text = manifest.read_text()
     lock_text = lock.read_text()
-    previous = manifest_version("HEAD")
-    if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", previous):
-        raise SystemExit(f"Expected a major.minor.patch version, got {previous!r}")
+    previous = tomllib.loads(manifest_text)["package"]["version"]
+    current = version_tuple(previous)
+    lock_entries = [
+        entry for entry in tomllib.loads(lock_text)["package"]
+        if entry["name"] == "clothcraft" and "source" not in entry
+    ]
+    if len(lock_entries) != 1 or lock_entries[0]["version"] != previous:
+        raise SystemExit("ClothCraft versions must match in Cargo.toml and Cargo.lock")
 
-    # Start at adoption so older repository history does not generate bumps.
-    # Stop at the latest actual version change, including a manual version edit.
-    adoption = git("log", "-1", "--first-parent", "--diff-merges=first-parent", "--no-patch",
-                   "--diff-filter=A", "--format=%H", "--", SCRIPT_PATH)
-    if not adoption:
-        raise SystemExit("Could not find the version automation's first-parent history")
-    base = git("rev-parse", f"{adoption}^")
-    for commit in git("log", "--first-parent", "--diff-merges=first-parent", "--no-patch",
-                      "--format=%H", f"{base}..HEAD", "--", "Cargo.toml").splitlines():
-        if manifest_version(commit) != manifest_version(f"{commit}^"):
-            base = commit
-            break
-
-    count = int(git("rev-list", "--first-parent", "--count", f"{base}..HEAD"))
-    if count == 0:
+    if current > base:
+        print(f"ClothCraft {previous} is newer than {base_version}")
         return
+    if args.check:
+        raise SystemExit(
+            f"ClothCraft {previous} must be newer than {base_version}. "
+            "Run python3 scripts/bump-version.py and commit both Cargo files."
+        )
 
-    major, minor, patch = previous.split(".")
-    version = f"{major}.{minor}.{int(patch) + count}"
+    branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    if branch == "main" or not branch:
+        raise SystemExit("Prepare the version on a PR branch")
+    major, minor, patch = base
+    version = f"{major}.{minor}.{patch + 1}"
     sections = re.split(r"(?=^\[)", manifest_text, flags=re.M)
     packages = [i for i, section in enumerate(sections) if section.startswith("[package]\n")]
     lock_sections = re.split(r"(?=^\[\[package\]\])", lock_text, flags=re.M)
@@ -65,10 +71,9 @@ def main():
         raise SystemExit("Expected one ClothCraft package in the manifest and lockfile")
     sections[packages[0]] = replace_version(sections[packages[0]], previous, version)
     lock_sections[entries[0]] = replace_version(lock_sections[entries[0]], previous, version)
-
     manifest.write_text("".join(sections))
     lock.write_text("".join(lock_sections))
-    print(version)
+    print(f"Prepared ClothCraft {version}")
 
 
 if __name__ == "__main__":
