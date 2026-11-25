@@ -93,8 +93,8 @@ This does not authorize unrelated releases, destructive history changes or GPU r
    If a configured review integration is unavailable, record that limitation and
    perform a local review; do not claim an external review happened.
 5. Inspect the current PR head and checks with `gh pr view` and `gh pr checks`.
-   Resolve relevant findings and conflicts, then run `bash scripts/merge-pr.sh`
-   from the PR branch.
+   Resolve relevant findings and conflicts, wait for automatic version
+   preparation as described below, then squash merge with `gh pr merge --squash`.
    Do not bypass failed checks or branch protections with `--admin`. If rules
    require approval, wait for that approval rather than treating standing task
    authorization as a GitHub reviewer approval.
@@ -120,13 +120,13 @@ independent of queue ownership. No GPU test is added to the default suite.
 
 ## Package versions
 
-Run `bash scripts/merge-pr.sh` from the checked-out PR branch. It prepares a
-patch increment against `origin/main`, commits and pushes the Cargo files on
-the PR branch, then waits for checks before squash merging. The version lands
-on `main` in the same commit as the feature, and builds use that version.
+GitHub Actions prepares the next patch version in both Cargo files on ready
+PR branches in this repository. It also refreshes open PRs when `main` advances.
+A higher version already set in both files is preserved. After the bot pushes
+a version, it starts CI for that branch. Use the usual squash merge after those
+checks pass. The version and feature then land together in one commit on `main`.
 
-The `Check merge version` job compares the proposed merge with its base and
-requires matching Cargo files and a newer version. For web merges or fork
-PRs, fetch `origin/main`, run `python3 scripts/bump-version.py` on the PR
-branch, and include the two Cargo files before squash merging. An explicitly
-chosen higher version is preserved.
+The workflow can write branches in this repository. For a PR from a fork,
+use a maintainer-owned branch here if it needs automatic version preparation.
+A merge conflict needs to be resolved before the workflow can prepare the version.
+Direct pushes and merges made before preparation completes bypass the automation.

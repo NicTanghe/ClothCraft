@@ -50,8 +50,7 @@ def main():
         return
     if args.check:
         raise SystemExit(
-            f"ClothCraft {previous} must be newer than {base_version}. "
-            "Run python3 scripts/bump-version.py and commit both Cargo files."
+            f"ClothCraft {previous} must be newer than {base_version}."
         )
 
     branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
