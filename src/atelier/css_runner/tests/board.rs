@@ -929,8 +929,62 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
             .map(|p| glam::DVec3::new((p.x - 0.15).abs(), p.y, 0.0))
             .collect::<Vec<_>>();
         assert!(seam.max_gap(&folded) < 1e-10);
+
+        set_active_2d_tool(&mut state, "Edit");
+        let delta = DVec2::new(0.010, 0.006);
+        let reflected = DVec2::new(-delta.x, delta.y);
+        for (drag_tip, mirror, grabbed, expected) in [
+            (false, false, 1, [delta, DVec2::new(delta.x, 0.), delta]),
+            (true, false, 6, [delta; 3]),
+            (false, true, 1, [reflected, DVec2::ZERO, delta]),
+            (false, true, 6, [delta, DVec2::ZERO, reflected]),
+            (true, true, 1, [delta; 3]),
+        ] {
+            let before = state.project.template.clone();
+            let corner_at = |template: &GarmentTemplate, point| {
+                let local = template.panels[0].polygon.as_ref().unwrap().points[point];
+                panel_to_board_pt(template, 0, local)
+            };
+            let panel = before.panels[0].id.clone();
+            state.set_single_2d_point(panel.clone(), 6);
+            state.toggle_2d_point(panel.clone(), 1);
+            if drag_tip {
+                state.toggle_2d_point(panel, 0);
+            }
+            if state.mirror_dart_bases != mirror {
+                apply_runner_ui_op(&mut state, RunnerUiOp::ToggleMirrorDartBases);
+            }
+
+            let start = corner_at(&before, grabbed);
+            let (x, y) = board_to_screen_px(&state, start);
+            let (end_x, end_y) = board_to_screen_px(&state, start + delta);
+            handle_runner_event(&mut state, &pointer_move_ev(x, y));
+            assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
+            handle_runner_event(&mut state, &pointer_move_ev(end_x, end_y));
+
+            let assert_move = |after: &GarmentTemplate| {
+                for (index, expected_delta) in [6, 0, 1].into_iter().zip(expected) {
+                    let actual_delta = corner_at(after, index) - corner_at(&before, index);
+                    assert!(
+                        actual_delta.distance(expected_delta) < 1e-6,
+                        "dart point {index} moved {actual_delta} instead of {expected_delta}"
+                    );
+                }
+            };
+            assert_move(state.preview_template.as_ref().expect("live dart preview"));
+            assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
+            assert_move(&state.project.template);
+            let [a, b] = state.scene.garment.seams[0].lengths;
+            assert!((a - b).abs() < 1e-9);
+            assert!(undo_redo_2d(&mut state, false));
+            assert_eq!(
+                serde_json::to_value(&state.project.template).unwrap(),
+                serde_json::to_value(&before).unwrap()
+            );
+        }
         assert!(undo_redo_2d(&mut state, false));
         assert!(state.scene.garment.seams.is_empty());
+        set_active_2d_tool(&mut state, "Sew");
     }
 }
 

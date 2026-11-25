@@ -8,8 +8,8 @@ use super::board::selection::{
 use super::board::types::ToolDraft2d;
 use super::state::CssRunnerState;
 use clothcraft::authoring::corner_tool::{
-    CIRCLE_TENSION, preview_adjust_handle, preview_move_corner,
-    preview_move_point_groups_connected, validate_fillet_batch,
+    CIRCLE_TENSION, preview_adjust_handle, preview_move_corner, preview_move_point_groups,
+    validate_fillet_batch,
 };
 use clothcraft::authoring::{self, Command};
 use clothcraft::fitting::FittingScene;
@@ -327,10 +327,17 @@ pub(super) fn update_preview_point_groups(
     state: &mut CssRunnerState,
     points: &[(String, usize)],
     board_delta: DVec2,
+    grabbed: (&str, usize),
 ) {
     let mut draft = state.project.template.clone();
-    if preview_move_point_groups_connected(&state.project.template, &mut draft, points, board_delta)
-        .is_ok()
+    if preview_move_point_groups(
+        &state.project.template,
+        &mut draft,
+        points,
+        board_delta,
+        state.mirror_dart_bases.then_some(grabbed),
+    )
+    .is_ok()
     {
         state.preview_template = Some(draft);
     }

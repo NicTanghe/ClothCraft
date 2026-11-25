@@ -166,6 +166,12 @@ pub enum Command {
         points: Vec<(String, usize)>,
         board_delta: DVec2,
     },
+    /// As above, reflecting the other base when both dart bases are selected.
+    MovePointGroupsMirroredDarts {
+        points: Vec<(String, usize)>,
+        grabbed: (String, usize),
+        board_delta: DVec2,
+    },
     /// Move contour points by an exact metric step given in millimetres.
     Nudge {
         panel: String,
@@ -2190,8 +2196,28 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             board_delta,
         } => {
             let first = points.first().map(|(p, _)| p.clone());
-            corner_tool::move_point_groups_connected(source, &mut template, &points, board_delta)?;
+            corner_tool::move_point_groups_connected(
+                source,
+                &mut template,
+                &points,
+                board_delta,
+                None,
+            )?;
             selected = first;
+        }
+        Command::MovePointGroupsMirroredDarts {
+            points,
+            grabbed,
+            board_delta,
+        } => {
+            selected = points.first().map(|(p, _)| p.clone());
+            corner_tool::move_point_groups_connected(
+                source,
+                &mut template,
+                &points,
+                board_delta,
+                Some((&grabbed.0, grabbed.1)),
+            )?;
         }
         Command::Nudge {
             panel,

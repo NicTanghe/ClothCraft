@@ -117,6 +117,7 @@ pub enum RunnerUiOp {
     Adjust2dZoomSpeed(f64),
     Reset2dZoomSpeed,
     SetCornerMode(bool),
+    ToggleMirrorDartBases,
     SetCornerRule(CornerRule),
     SetShadingMode(clothcraft::usd_scene::ShadingMode),
     ToggleShading,
@@ -574,6 +575,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             state.corner_preview_active = true;
             state.status_message = format!("Continuity rule: {:?}", rule);
         }
+        RunnerUiOp::ToggleMirrorDartBases => state.mirror_dart_bases = !state.mirror_dart_bases,
         RunnerUiOp::SetShadingMode(mode) => {
             if state.shading != mode {
                 state.shading = mode;

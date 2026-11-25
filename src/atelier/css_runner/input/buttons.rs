@@ -1093,12 +1093,21 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                     .unwrap_or(last_board_m)
                                     - start_board_m;
                                 let count = points.len();
-                                commit_authoring_command(
-                                    state,
+                                let command = if state.mirror_dart_bases {
+                                    Command::MovePointGroupsMirroredDarts {
+                                        points,
+                                        grabbed: (panel_id, point_idx),
+                                        board_delta,
+                                    }
+                                } else {
                                     Command::MovePointGroupsConnected {
                                         points,
                                         board_delta,
-                                    },
+                                    }
+                                };
+                                commit_authoring_command(
+                                    state,
+                                    command,
                                     format!(
                                         "Moved {count} corners ({:.1}, {:.1}) mm",
                                         board_delta.x * 1000.0,

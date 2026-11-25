@@ -252,6 +252,74 @@ fn real_dart_authoring_transaction_and_solver_seam() {
 }
 
 #[test]
+fn translating_dart_bases_preserves_curved_legs_and_respects_explicit_easing() {
+    let source = rectangle_template(0.3, 0.2);
+    let panel = source.panels[0].id.clone();
+    let edge = source.panels[0].polygon.as_ref().unwrap().edges[0].clone();
+    let dart = authoring::apply(
+        &source,
+        Command::DartCutSew {
+            panel: panel.clone(),
+            edge,
+            left_t: 0.35,
+            right_t: 0.45,
+            apex: DVec2::new(0.12, 0.08),
+        },
+    )
+    .unwrap()
+    .template;
+
+    for ease in [false, true] {
+        let mut before = dart.clone();
+        before.seams[0].allow_ease = ease;
+        before.panels[0].layout_rotation_degrees = 31.0;
+        let poly = before.panels[0].polygon.as_mut().unwrap();
+        let [left, tip, right] = [1, 2, 3].map(|i| poly.points[i]);
+        if ease {
+            poly.points[2].x += 0.004;
+        } else {
+            let left_handles = [0.3, 0.7].map(|t| left.lerp(tip, t) + DVec2::new(-0.002, 0.));
+            let right_handles =
+                [left_handles[1], left_handles[0]].map(|p| DVec2::new(2. * tip.x - p.x, p.y));
+            poly.curves.insert(poly.edges[1].clone(), left_handles);
+            poly.curves.insert(poly.edges[2].clone(), right_handles);
+        }
+        assert!(right.x > tip.x);
+        let prior = before.compile().unwrap().seams[0].lengths;
+        let board_point = |template: &GarmentTemplate, index| {
+            let p = &template.panels[0];
+            authoring::layout(template, 0)
+                + authoring::rotate_2d(
+                    p.polygon.as_ref().unwrap().points[index],
+                    p.layout_rotation_degrees,
+                )
+        };
+        let board_delta = authoring::rotate_2d(DVec2::new(0.005, 0.009), 31.);
+        let after = authoring::apply(
+            &before,
+            Command::MovePointGroupsConnected {
+                points: vec![(panel.clone(), 3), (panel.clone(), 1)],
+                board_delta,
+            },
+        )
+        .unwrap();
+        let tip_delta = if ease { DVec2::ZERO } else { board_delta };
+        for (index, expected) in [(1, board_delta), (2, tip_delta), (3, board_delta)] {
+            let delta = board_point(&after.template, index) - board_point(&before, index);
+            assert!(delta.distance(expected) < 1e-10);
+        }
+        let lengths = after.garment.seams[0].lengths;
+        if ease {
+            assert!(after.template.seams[0].allow_ease);
+            assert!((lengths[0] - lengths[1]).abs() > 1e-5);
+        } else {
+            assert!((lengths[0] - prior[0]).abs() < 1e-10);
+            assert!((lengths[1] - prior[1]).abs() < 1e-10);
+        }
+    }
+}
+
+#[test]
 fn dart_inherits_seam_allowances_across_all_cut_edges() {
     let source = rectangle_template(0.3, 0.2);
     let panel = source.panels[0].id.clone();
