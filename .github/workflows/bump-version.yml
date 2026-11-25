@@ -1,19 +1,100 @@
-name: PR package version
+name: Prepare package version
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  version:
-    name: Check merge version
+  select:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.select.outputs.prs }}
+    steps:
+      - id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [[ -n "$PR_NUMBER" ]]; then
+            prs="[$PR_NUMBER]"
+          else
+            prs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&base=main&per_page=100" \
+              --jq ".[] | select(.draft == false and .head.repo.full_name == \"$GITHUB_REPOSITORY\") | .number" |
+              jq -sc .)
+          fi
+          echo "prs=$prs" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    needs: select
+    if: needs.select.outputs.prs != '[]'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.select.outputs.prs) }}
+    concurrency:
+      group: package-version-pr-${{ matrix.pr }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: read
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-      - name: Check the version in the proposed merge
-        run: python3 scripts/bump-version.py --check HEAD^1
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Prepare both Cargo files on the PR branch
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ matrix.pr }}
+        run: |
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq \
+            "select(.state == \"open\" and .draft == false and .base.ref == \"main\" and .head.repo.full_name == \"$GITHUB_REPOSITORY\" and .head.ref != \"main\") | [.head.ref, .head.sha] | @tsv")
+          if [[ -z "$pr" ]]; then
+            exit 0
+          fi
+          read -r head_ref head_sha <<< "$pr"
+          # The base SHA in the PR API may lag behind the actual main ref.
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main' "$head_sha"
+          base_sha=$(git rev-parse refs/remotes/origin/main)
+          worktree="$RUNNER_TEMP/clothcraft-version"
+          git worktree add --detach "$worktree" "$head_sha"
+          git -C "$worktree" switch -c prepare-version
+          git -C "$worktree" config user.name 'github-actions[bot]'
+          git -C "$worktree" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          bash scripts/prepare-pr-version.sh "$worktree" "$base_sha"
+          prepared_sha=$(git -C "$worktree" rev-parse HEAD)
+          if [[ "$prepared_sha" != "$head_sha" ]]; then
+            # The new commit descends from head_sha. Reject any concurrent ref change.
+            git -C "$worktree" push \
+              --force-with-lease="refs/heads/$head_ref:$head_sha" origin "HEAD:refs/heads/$head_ref"
+          elif [[ "$GITHUB_RUN_ATTEMPT" == 1 ||
+                  "$(git -C "$worktree" log -1 --format=%s)" != 'Prepare ClothCraft package version' ]]; then
+            exit 0
+          fi
+          echo "ref=$head_ref" >> "$GITHUB_OUTPUT"
+      - name: Start CI for the updated branch
+        if: steps.prepare.outputs.ref != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ steps.prepare.outputs.ref }}
+        run: |
+          # GITHUB_TOKEN pushes do not start normal, unattended PR validation.
+          for workflow in cpu.yml build.yml release-windows.yml; do
+            gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+          done
