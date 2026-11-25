@@ -163,6 +163,53 @@ pub fn triangulate_domain(
     lines: &[super::domain::InternalLine],
     settings: &MeshingSettings,
 ) -> Result<TriangulatedContour, String> {
+    triangulate_domain_with_seeds(points, names, holes, lines, settings, &[])
+}
+
+/// Recover the prepared vertices on an authored segment, projecting them back
+/// onto its exact line after the first pass's metric round trip.
+pub(crate) fn prepared_segment(a: DVec2, b: DVec2, seeds: &[DVec2]) -> Option<Vec<DVec2>> {
+    if seeds.is_empty() {
+        return None;
+    }
+    let d = b - a;
+    let tolerance = 1e-9 / d.length();
+    let mut stations = Vec::new();
+    let (mut start, mut end) = (false, false);
+    for &p in seeds {
+        let t = (p - a).dot(d) / d.length_squared();
+        if t < -tolerance || t > 1. + tolerance || (p - a - t * d).length() > 1e-9 {
+            continue;
+        }
+        if t <= tolerance {
+            start = true;
+        } else if t >= 1. - tolerance {
+            end = true;
+        } else {
+            stations.push(t);
+        }
+    }
+    if !start || !end {
+        return None;
+    }
+    stations.sort_by(f64::total_cmp);
+    stations.dedup_by(|a, b| (*a - *b).abs() <= tolerance);
+    Some(
+        std::iter::once(a)
+            .chain(stations.into_iter().map(|t| a + t * d))
+            .chain(std::iter::once(b))
+            .collect(),
+    )
+}
+
+pub(super) fn triangulate_domain_with_seeds(
+    points: &[DVec2],
+    names: &[String],
+    holes: &[super::domain::Hole],
+    lines: &[super::domain::InternalLine],
+    settings: &MeshingSettings,
+    seeds: &[DVec2],
+) -> Result<TriangulatedContour, String> {
     settings.validate()?;
     if let Some(plan) = &settings.physics_sizing {
         return crate::mesh_resolution::preparation::triangulate(
@@ -176,11 +223,16 @@ pub fn triangulate_domain(
         let a = metric[i];
         let b = metric[(i + 1) % points.len()];
         let count = a.distance(b).ceil().max(1.0) as usize;
+        let prepared = prepared_segment(points[i], points[(i + 1) % points.len()], seeds);
+        let count = prepared.as_ref().map_or(count, |p| p.len() - 1);
         if handles.len().saturating_add(count) > settings.max_vertices {
             return Err("Contour exceeds meshing vertex budget".into());
         }
         for k in 0..count {
-            let p = a.lerp(b, k as f64 / count as f64);
+            let p = prepared.as_ref().map_or_else(
+                || a.lerp(b, k as f64 / count as f64),
+                |p| settings.to_metric(p[k]),
+            );
             handles.push(
                 cdt.insert(Point2::new(p.x, p.y))
                     .map_err(|e| e.to_string())?,
@@ -207,6 +259,8 @@ pub fn triangulate_domain(
             let a = settings.to_metric(pair[0]);
             let b = settings.to_metric(pair[1]);
             let count = a.distance(b).ceil().max(1.) as usize;
+            let prepared = prepared_segment(pair[0], pair[1], seeds);
+            let count = prepared.as_ref().map_or(count, |p| p.len() - 1);
             if cdt.num_vertices().saturating_add(count.saturating_add(1)) > settings.max_vertices {
                 return Err("Internal constraints exceed meshing vertex budget".into());
             }
@@ -214,7 +268,9 @@ pub fn triangulate_domain(
             for k in 0..=count {
                 // Keep shared endpoints bit-identical; rounded lerp(1) can
                 // otherwise create a near-duplicate constraint vertex.
-                let q = if k == count {
+                let q = if let Some(p) = &prepared {
+                    settings.to_metric(p[k])
+                } else if k == count {
                     b
                 } else {
                     a.lerp(b, k as f64 / count as f64)
@@ -275,7 +331,11 @@ pub fn triangulate_domain(
             .with_max_allowed_area(3.0_f64.sqrt() / 4.0)
             .with_angle_limit(AngleLimit::from_deg(settings.min_angle_degrees))
             .with_max_additional_vertices(settings.max_vertices.saturating_sub(cdt.num_vertices()));
-        let result = cdt.refine(parameters);
+        let result = cdt.refine(if seeds.is_empty() {
+            parameters
+        } else {
+            parameters.keep_constraint_edges()
+        });
         if !result.refinement_complete {
             return Err(format!(
                 "Delaunay refinement incomplete at {} / {} vertices; increase target size or budget",

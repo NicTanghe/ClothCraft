@@ -120,12 +120,15 @@ impl BoundaryCurve {
         })
     }
     pub fn breakpoints(&self) -> Vec<f64> {
+        self.breakpoints_where(&|_| true)
+    }
+    pub(super) fn breakpoints_where(&self, keep: &impl Fn(usize) -> bool) -> Vec<f64> {
         if !self.chain.is_empty() {
             let mut offset = 0.;
             let mut out = Vec::new();
             for c in &self.chain {
                 out.extend(
-                    c.breakpoints()
+                    c.breakpoints_where(keep)
                         .into_iter()
                         .map(|t| (offset + t * c.length) / self.length),
                 );
@@ -136,19 +139,30 @@ impl BoundaryCurve {
             return out;
         }
         let mut out = vec![0.0, 1.0];
-        for k in &self.knots {
-            if *k > self.range[0] && *k < self.range[1] {
-                let t = (*k - self.range[0]) / (self.range[1] - self.range[0]);
+        for (&k, &vertex) in self.knots.iter().zip(&self.vertices) {
+            if k > self.range[0] && k < self.range[1] && keep(vertex) {
+                let t = (k - self.range[0]) / (self.range[1] - self.range[0]);
                 out.push(if self.reverse { 1.0 - t } else { t });
             }
         }
         out.sort_by(f64::total_cmp);
         out
     }
+    pub(super) fn interior_vertices(&self, visit: &mut impl FnMut(usize)) {
+        for curve in &self.chain {
+            curve.interior_vertices(visit);
+        }
+        let tolerance = 1e-9 * (self.range[1] - self.range[0]) / self.length;
+        for (&knot, &vertex) in self.knots.iter().zip(&self.vertices) {
+            if knot > self.range[0] + tolerance && knot < self.range[1] - tolerance {
+                visit(vertex);
+            }
+        }
+    }
     pub fn point(&self, t: f64) -> [(usize, f64); 2] {
         self.point_limit(t, false)
     }
-    fn point_limit(&self, t: f64, left: bool) -> [(usize, f64); 2] {
+    pub(super) fn point_limit(&self, t: f64, left: bool) -> [(usize, f64); 2] {
         if !self.chain.is_empty() {
             let distance = t.clamp(0., 1.) * self.length;
             let mut offset = 0.;
@@ -286,13 +300,39 @@ pub struct CompiledSeam {
 }
 pub type StitchGuide = [[(usize, f64); 2]; 2];
 
-fn interpolate(knots: &[[f64; 2]], u: f64, from: usize) -> f64 {
+pub(super) fn interpolate(knots: &[[f64; 2]], u: f64, from: usize) -> f64 {
     let i = knots
         .partition_point(|k| k[from] <= u)
         .saturating_sub(1)
         .min(knots.len() - 2);
     let t = (u - knots[i][from]) / (knots[i + 1][from] - knots[i][from]);
     knots[i][1 - from] * (1.0 - t) + knots[i + 1][1 - from] * t
+}
+
+pub(super) fn common_stations(
+    a: &BoundaryCurve,
+    b: &BoundaryCurve,
+    knots: &[[f64; 2]],
+) -> Vec<f64> {
+    common_stations_where(a, b, knots, &|_| true)
+}
+
+pub(super) fn common_stations_where(
+    a: &BoundaryCurve,
+    b: &BoundaryCurve,
+    knots: &[[f64; 2]],
+    keep: &impl Fn(usize) -> bool,
+) -> Vec<f64> {
+    let mut stations = a.breakpoints_where(keep);
+    stations.extend(
+        b.breakpoints_where(keep)
+            .into_iter()
+            .map(|t| interpolate(knots, t, 1)),
+    );
+    stations.extend(knots.iter().map(|k| k[0]));
+    stations.sort_by(f64::total_cmp);
+    stations.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+    stations
 }
 
 impl CompiledSeam {
@@ -356,15 +396,7 @@ impl CompiledSeam {
                 spec.id
             ));
         }
-        let mut partition = a.breakpoints();
-        partition.extend(
-            b.breakpoints()
-                .into_iter()
-                .map(|t| interpolate(&knots, t, 1)),
-        );
-        partition.extend(knots.iter().map(|k| k[0]));
-        partition.sort_by(f64::total_cmp);
-        partition.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+        let partition = common_stations(&a, &b, &knots);
         let mut samples = vec![];
         for interval in partition.windows(2) {
             let [lo, hi] = [interval[0], interval[1]];

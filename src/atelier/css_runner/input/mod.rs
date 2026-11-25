@@ -42,6 +42,25 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 }
 
 fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
+    if state.mesh_draft.editing_value.is_some() {
+        match event {
+            EngineEvent::Key(key) => {
+                if key.state == cssimpler::renderer::ButtonState::Pressed
+                    && key.logical_key == cssimpler::renderer::KeyIdentity::Named("Escape".into())
+                {
+                    state.mesh_draft.finish_value(false);
+                    return true;
+                }
+                return false;
+            }
+            EngineEvent::PointerMoved { position, .. } => {
+                state.last_pointer_pos = (position.x, position.y);
+                return false;
+            }
+            EngineEvent::PointerButton { .. } | EngineEvent::Scroll { .. } => return false,
+            _ => {}
+        }
+    }
     use std::sync::atomic::Ordering;
     let text_editing = state.numeric_input_active.load(Ordering::Relaxed);
     let pointer_pressed = matches!(
@@ -68,20 +87,6 @@ fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     {
         return true;
     }
-    // Native numeric text inputs own keyboard events until the next pointer press.
-    if pointer_pressed {
-        state.mesh_input_focus = false;
-    }
-    if let EngineEvent::Key(k) = event
-        && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Tab".into())
-        && state.mesh_draft.open
-    {
-        state.mesh_input_focus = true;
-    }
-    if state.mesh_input_focus && matches!(event, EngineEvent::Key(_)) {
-        return false;
-    }
-
     // Tab enters the native input cycle; preserve keyboard ownership there.
     if tab_pressed {
         state.numeric_input_active.store(true, Ordering::Relaxed);

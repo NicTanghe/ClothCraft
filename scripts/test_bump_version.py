@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("bump-version.py").resolve()
+PREPARE = SCRIPT.with_name("prepare-pr-version.sh")
 
 
 class VersionBumpTest(unittest.TestCase):
@@ -73,6 +74,33 @@ class VersionBumpTest(unittest.TestCase):
         self.git("switch", "-q", "feature")
         self.assertNotEqual(self.run_bump("--check").returncode, 0)
         self.assertEqual(self.run_bump().returncode, 0)
+        self.assert_versions("0.1.4")
+
+    def test_automation_refreshes_a_parallel_pr_before_squashing(self):
+        def prepare():
+            result = subprocess.run(
+                ["bash", PREPARE, self.root, "main"], capture_output=True, text=True
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        prepare()
+        self.assert_versions("0.1.3")
+        self.git("switch", "-q", "main")
+        self.write_version("0.1.3")
+        (self.root / "other.txt").write_text("An earlier PR\n")
+        self.commit("Another PR lands first")
+        self.git("switch", "-q", "feature")
+
+        prepare()
+        self.assert_versions("0.1.4")
+        prepared = self.git("rev-parse", "HEAD")
+        prepare()
+        self.assertEqual(self.git("rev-parse", "HEAD"), prepared)
+        self.git("switch", "-q", "main")
+        self.git("merge", "--squash", "feature")
+        self.commit("Merge feature")
+        self.assertEqual(set(self.git("diff", "--name-only", "HEAD^").splitlines()),
+                         {"feature.txt", "Cargo.toml", "Cargo.lock"})
         self.assert_versions("0.1.4")
 
     def test_manual_version_and_mismatched_lockfile(self):

@@ -102,9 +102,10 @@ pub enum RunnerUiOp {
     MeshToggle(usize),
     MeshChoosePath(String),
     MeshReload,
-    MeshInputFocus,
+    MeshEditValue(usize),
+    MeshValueText(String),
+    MeshFinishValue(bool),
     MeshToggleOpen,
-    MeshField(usize, String),
     PrepareMesh(bool),
 
     CycleMeasurementBits,
@@ -488,8 +489,18 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         RunnerUiOp::MeshToggleOpen => {
             state.mesh_draft.open = !state.mesh_draft.open;
         }
-        RunnerUiOp::MeshInputFocus => {
-            state.mesh_input_focus = true;
+        RunnerUiOp::MeshEditValue(field) => {
+            if let Some(value) = state.mesh_draft.fields.get(field) {
+                state.mesh_draft.editing_value = Some((field, value.clone()));
+            }
+        }
+        RunnerUiOp::MeshValueText(value) => {
+            if let Some((_, draft)) = &mut state.mesh_draft.editing_value {
+                *draft = value;
+            }
+        }
+        RunnerUiOp::MeshFinishValue(commit) => {
+            state.mesh_draft.finish_value(commit);
         }
         RunnerUiOp::MeshToggle(i) => {
             if let Some(option) = state.mesh_draft.options.get_mut(i) {
@@ -517,11 +528,6 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         }
         RunnerUiOp::MeshLevel(level) => {
             state.mesh_draft.level = level.min(16);
-        }
-        RunnerUiOp::MeshField(field, value) => {
-            if let Some(slot) = state.mesh_draft.fields.get_mut(field) {
-                *slot = value;
-            }
         }
         RunnerUiOp::PrepareMesh(physics) => {
             if let Err(error) = mesh_preparation::apply(state, physics) {

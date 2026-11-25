@@ -445,6 +445,15 @@ impl PolygonPattern {
             .collect()
     }
     pub fn build(&self, m: &Material) -> Result<MeshedPolygon, String> {
+        self.build_with_boundary_seeds(m, &[], None)
+    }
+
+    pub(super) fn build_with_boundary_seeds(
+        &self,
+        m: &Material,
+        seeds: &[DVec2],
+        sewn_ranges: Option<&crate::mesh_resolution::preparation::SewnRanges>,
+    ) -> Result<MeshedPolygon, String> {
         m.validate()?;
         let n = self.points.len();
         if !(3..=4096).contains(&n)
@@ -525,7 +534,7 @@ impl PolygonPattern {
                 .enumerate()
                 .map(|(i, name)| Ok((name.clone(), self.edge_points(i)?)))
                 .collect::<Result<BTreeMap<_, _>, String>>()?;
-            crate::mesh_resolution::preparation::triangulate_with_paths(
+            crate::mesh_resolution::preparation::triangulate_with_paths_and_seeds(
                 &points,
                 &segments,
                 &self.holes,
@@ -533,11 +542,18 @@ impl PolygonPattern {
                 &settings,
                 plan,
                 &named,
+                seeds,
+                sewn_ranges,
             )?
-        } else if self.holes.is_empty() && self.lines.is_empty() {
-            meshing::triangulate(&points, &segments, &settings)?
         } else {
-            meshing::triangulate_domain(&points, &segments, &self.holes, &self.lines, &settings)?
+            meshing::triangulate_domain_with_seeds(
+                &points,
+                &segments,
+                &self.holes,
+                &self.lines,
+                &settings,
+                seeds,
+            )?
         };
         let mut boundaries = BTreeMap::<String, Vec<usize>>::new();
         for (part, owner) in segments.iter().zip(owners) {
