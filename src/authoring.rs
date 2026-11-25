@@ -19,6 +19,7 @@ pub mod cutout;
 mod piece_mirror;
 pub use corner_tool::CornerRule;
 pub use cutout::{CutoutPolicy, CutoutSeamPolicy, CutoutShape, SynchronizedCutoutParams};
+pub use piece_mirror::mirrored_seam;
 mod geometry;
 mod linked;
 mod seam_split;
@@ -1089,12 +1090,7 @@ fn parameter_at_arclength(cubic: [DVec2; 4], at_m: f64) -> Result<f64, String> {
     let mut high = 1.0;
     for _ in 0..48 {
         let middle = (low + high) * 0.5;
-        let (left, _) = split_cubic(cubic, middle);
-        let length: f64 = curves::flatten(left, curves::FLATNESS_M)?
-            .windows(2)
-            .map(|pair| pair[0].distance(pair[1]))
-            .sum();
-        if length < at_m {
+        if cubic_prefix_length(cubic, middle)? < at_m {
             low = middle;
         } else {
             high = middle;
@@ -1103,12 +1099,27 @@ fn parameter_at_arclength(cubic: [DVec2; 4], at_m: f64) -> Result<f64, String> {
     Ok((low + high) * 0.5)
 }
 
+fn cubic_prefix_length(cubic: [DVec2; 4], parameter: f64) -> Result<f64, String> {
+    let (left, _) = split_cubic(cubic, parameter);
+    Ok(curves::flatten(left, curves::FLATNESS_M)?
+        .windows(2)
+        .map(|p| p[0].distance(p[1]))
+        .sum())
+}
+
 /// Whether a seam references one named boundary of a panel.
 fn seam_uses(template: &GarmentTemplate, panel: &str, edge: &str) -> bool {
     template.seams.iter().any(|seam| {
         seam.references()
             .any(|r| r.panel == panel && r.edge.as_deref() == Some(edge))
     })
+}
+
+fn push_reflected_seam(template: &mut GarmentTemplate, mate: Option<SeamSpec>) {
+    if let Some(mut mate) = mate {
+        mate.id = unused_id("seam", template.seams.iter().map(|s| s.id.clone()));
+        template.seams.push(mate);
+    }
 }
 
 /// An error leaves the input byte-for-byte unchanged; no partial edit is visible.
@@ -1267,18 +1278,48 @@ pub fn constructed_point(
 /// The caller updates seam references and may split coupled boundaries.
 struct BoundarySplit {
     child: String,
-    new_point: usize,
+    parameter: f64,
+}
+
+enum BoundarySplitAt {
+    Distance(f64),
+    Parameter(f64),
+}
+
+fn boundary_cubic(polygon: &PolygonPattern, index: usize) -> Option<[DVec2; 4]> {
+    let [c1, c2] = *polygon.curves.get(&polygon.edges[index])?;
+    Some([
+        polygon.points[index],
+        c1,
+        c2,
+        polygon.points[(index + 1) % polygon.points.len()],
+    ])
+}
+
+fn exactly_reflected_boundary(polygon: &PolygonPattern, edge: &str, mate: &str) -> bool {
+    let [Some(edge), Some(mate)] =
+        [edge, mate].map(|name| polygon.edges.iter().position(|candidate| candidate == name))
+    else {
+        return false;
+    };
+    let cubic = |i| {
+        let a = polygon.points[i];
+        let b = polygon.points[(i + 1) % polygon.points.len()];
+        boundary_cubic(polygon, i).unwrap_or_else(|| [a, a.lerp(b, 1. / 3.), a.lerp(b, 2. / 3.), b])
+    };
+    let axis = piece_mirror::axis_x(polygon);
+    cubic(edge)
+        .into_iter()
+        .zip(cubic(mate).into_iter().rev())
+        .all(|(a, b)| piece_mirror::reflect(a, axis).distance(b) <= 1e-10)
 }
 
 fn split_boundary_polygon(
     template: &mut GarmentTemplate,
     panel: &str,
     edge: String,
-    at_m: f64,
+    at: BoundarySplitAt,
 ) -> Result<BoundarySplit, String> {
-    if !at_m.is_finite() || at_m <= 0.0 {
-        return Err("Insert position must be a positive finite length".into());
-    }
     if template
         .panels
         .iter()
@@ -1295,7 +1336,7 @@ fn split_boundary_polygon(
         .iter_mut()
         .find(|p| p.id == panel)
         .ok_or("Panel not found")?;
-    let (new_point, child) = {
+    let (parameter, child) = {
         let polygon = p
             .polygon
             .as_mut()
@@ -1307,6 +1348,17 @@ fn split_boundary_polygon(
             .ok_or("Boundary not found")?;
         let current = edge_length(polygon, &edge)?;
         let previous_polygon = polygon.clone();
+        let cubic = boundary_cubic(polygon, index);
+        let at_m = match at {
+            BoundarySplitAt::Distance(distance) => distance,
+            BoundarySplitAt::Parameter(t) => match cubic {
+                Some(cubic) => cubic_prefix_length(cubic, t)?,
+                None => t * current,
+            },
+        };
+        if !at_m.is_finite() || at_m <= 0.0 {
+            return Err("Insert position must be a positive finite length".into());
+        }
         if at_m >= current {
             return Err("Insert position is beyond the boundary".into());
         }
@@ -1323,25 +1375,24 @@ fn split_boundary_polygon(
         let count = polygon.points.len();
         let a = polygon.points[index];
         let b = polygon.points[(index + 1) % count];
-        let controls = polygon.curves.get(&edge).copied();
-        let (point, first, second) = match controls {
+        let parameter = match (at, cubic) {
+            (BoundarySplitAt::Parameter(t), _) => t,
+            (BoundarySplitAt::Distance(_), Some(cubic)) => parameter_at_arclength(cubic, at_m)?,
+            (BoundarySplitAt::Distance(_), None) => at_m / current,
+        };
+        let (point, first, second) = match cubic {
             // Any cubic parameter splits the outline exactly; the point
             // is placed at the requested material arclength.
-            Some([c1, c2]) => {
-                let cubic = [a, c1, c2, b];
-                let parameter = parameter_at_arclength(cubic, at_m)?;
+            Some(cubic) => {
                 let (left, right) = split_cubic(cubic, parameter);
                 (left[3], [left[1], left[2]], [right[1], right[2]])
             }
-            None => {
-                let t = at_m / current;
-                (a.lerp(b, t), [DVec2::ZERO; 2], [DVec2::ZERO; 2])
-            }
+            None => (a.lerp(b, parameter), [DVec2::ZERO; 2], [DVec2::ZERO; 2]),
         };
         polygon.points.insert(index + 1, point);
         let name = split_edge_name(&polygon.edges, &edge);
         polygon.edges.insert(index + 1, name.clone());
-        if controls.is_some() {
+        if cubic.is_some() {
             polygon.curves.insert(edge.clone(), first);
             polygon.curves.insert(name.clone(), second);
         }
@@ -1404,9 +1455,61 @@ fn split_boundary_polygon(
         }
         // Splitting keeps the same outline, so keep its material frame
         // and dimensions even though the control polygon has changed.
-        (index + 1, name)
+        (parameter, name)
     };
-    Ok(BoundarySplit { child, new_point })
+    Ok(BoundarySplit { child, parameter })
+}
+
+fn split_boundary_with_mirror(
+    source: &GarmentTemplate,
+    template: &mut GarmentTemplate,
+    panel: &str,
+    edge: &str,
+    at_m: f64,
+    mirror: bool,
+) -> Result<usize, String> {
+    let mate = mirror
+        .then(|| piece_mirror::boundary_partner(source, panel, edge))
+        .flatten();
+    let exact_mate = mate.filter(|mate| {
+        source
+            .panels
+            .iter()
+            .find(|p| p.id == panel)
+            .and_then(|p| p.polygon.as_ref())
+            .is_some_and(|polygon| exactly_reflected_boundary(polygon, edge, mate))
+    });
+    let split = split_boundary_polygon(
+        template,
+        panel,
+        edge.into(),
+        BoundarySplitAt::Distance(at_m),
+    )?;
+    let cuts = seam_split::after_origin_split(template, panel, edge, &split, exact_mate)?;
+    if let Some(mate) = mate {
+        // For mirrored cubics, t on one side corresponds to 1 - t on the other.
+        // Reverse the parameter before measuring arclength to avoid independent
+        // flattening error moving the reflected point along the curve.
+        let parameter = 1. - split.parameter;
+        if let Some((edge, parameter)) = seam_split::remaining_split(&cuts, panel, mate, parameter)
+        {
+            let reflected = split_boundary_polygon(
+                template,
+                panel,
+                edge.into(),
+                BoundarySplitAt::Parameter(parameter),
+            )?;
+            seam_split::after_origin_split(template, panel, edge, &reflected, None)?;
+        }
+    }
+    // A split on an earlier edge can shift the original click's point index.
+    template
+        .panels
+        .iter()
+        .find(|p| p.id == panel)
+        .and_then(|p| p.polygon.as_ref())
+        .and_then(|p| p.edges.iter().position(|edge| *edge == split.child))
+        .ok_or_else(|| "Inserted point no longer has a boundary".into())
 }
 
 /// Run a staged ruler through the same operation-specific migrations and
@@ -2272,10 +2375,15 @@ pub fn apply_with_piece_mirroring(
             selected = Some(panel);
         }
         Command::SplitBoundary { panel, edge, at_m } => {
-            let split = split_boundary_polygon(&mut template, &panel, edge.clone(), at_m)?;
-            seam_split::after_origin_split(&mut template, &panel, &edge, &split.child)?;
+            new_point = Some(split_boundary_with_mirror(
+                source,
+                &mut template,
+                &panel,
+                &edge,
+                at_m,
+                mirrored_pieces.contains(&panel),
+            )?);
             selected = Some(panel);
-            new_point = Some(split.new_point);
         }
         Command::DartCutSew {
             panel,
@@ -2694,7 +2802,7 @@ pub fn apply_with_piece_mirroring(
             ease,
         } => {
             let id = unused_id("seam", template.seams.iter().map(|s| s.id.clone()));
-            template.seams.push(SeamSpec {
+            let seam = SeamSpec {
                 a_tail: vec![],
                 b_tail: vec![],
                 id,
@@ -2704,7 +2812,10 @@ pub fn apply_with_piece_mirroring(
                 allow_ease: ease,
                 notches: vec![],
                 stiffness: 50_000.,
-            });
+            };
+            let mate = mirrored_seam(source, mirrored_pieces, &seam)?;
+            template.seams.push(seam);
+            push_reflected_seam(&mut template, mate);
         }
         Command::SewChain {
             seam,
@@ -2728,10 +2839,11 @@ pub fn apply_with_piece_mirroring(
             } else {
                 None
             };
+            let creating = seam.is_none();
             let id = seam
                 .unwrap_or_else(|| unused_id("seam", template.seams.iter().map(|s| s.id.clone())));
             template.seams.retain(|s| s.id != id);
-            template.seams.push(SeamSpec {
+            let seam = SeamSpec {
                 id,
                 a: a.remove(0),
                 b: b.remove(0),
@@ -2741,7 +2853,14 @@ pub fn apply_with_piece_mirroring(
                 allow_ease: ease,
                 stiffness: old.as_ref().map_or(50_000., |s| s.stiffness),
                 notches: old.map_or_else(Vec::new, |s| s.notches),
-            });
+            };
+            let mate = if creating {
+                mirrored_seam(source, mirrored_pieces, &seam)?
+            } else {
+                None
+            };
+            template.seams.push(seam);
+            push_reflected_seam(&mut template, mate);
         }
         Command::RemoveSeam { seam } => {
             if !template.seams.iter().any(|s| s.id == seam) {

@@ -9,7 +9,10 @@
 //! Supported: seams with a single segment per side and no notches. Anything else
 //! that a split crosses is refused, and the caller returns that error without
 //! changing the template.
-use super::{GarmentTemplate, edge_length, split_boundary_polygon, split_edge_name, unused_id};
+use super::{
+    BoundarySplit, BoundarySplitAt, GarmentTemplate, edge_length, split_boundary_polygon,
+    split_edge_name, unused_id,
+};
 use crate::garment::seam::{BoundaryRef, SeamSpec};
 use std::collections::BTreeSet;
 
@@ -21,11 +24,13 @@ const SAME_POINT: f64 = 1e-6;
 /// A boundary that gets a new point at fraction `f` of its original length. The
 /// piece before the point keeps `edge`; the piece after it is `child`.
 #[derive(Clone, Debug)]
-struct Cut {
+pub(super) struct Cut {
     panel: String,
     edge: String,
     child: String,
     f: f64,
+    /// The original cubic parameter, either known from reflection or measured after splitting.
+    parameter: Option<f64>,
     /// The polygon is already split: this is the edited boundary.
     done: bool,
 }
@@ -149,8 +154,9 @@ pub(super) fn after_origin_split(
     t: &mut GarmentTemplate,
     panel: &str,
     edge: &str,
-    child: &str,
-) -> Result<(), String> {
+    origin: &BoundarySplit,
+    exact_mate: Option<&str>,
+) -> Result<Vec<Cut>, String> {
     let polygon = t
         .panels
         .iter()
@@ -158,15 +164,16 @@ pub(super) fn after_origin_split(
         .and_then(|p| p.polygon.as_ref())
         .ok_or("This panel has no editable contour")?;
     let left = edge_length(polygon, edge)?;
-    let right = edge_length(polygon, child)?;
+    let right = edge_length(polygon, &origin.child)?;
     let mut cuts = Vec::new();
     add_cut(
         &mut cuts,
         Cut {
             panel: panel.into(),
             edge: edge.into(),
-            child: child.into(),
+            child: origin.child.clone(),
             f: left / (left + right),
+            parameter: Some(origin.parameter),
             done: true,
         },
     )?;
@@ -208,8 +215,19 @@ pub(super) fn after_origin_split(
                         seam.id, cut.edge
                     ));
                 }
-                let u = param_of(rx, reverse_of(seam, origin_b, rx), cut.f);
-                let g = at(&ry, reverse_of(seam, !origin_b, &ry), u);
+                let rev_x = reverse_of(seam, origin_b, rx);
+                let rev_y = reverse_of(seam, !origin_b, &ry);
+                let u = param_of(rx, rev_x, cut.f);
+                let g = at(&ry, rev_y, u);
+                // The two halves of a reflected curve flatten independently.
+                // Split this exact sewn counterpart by its cubic parameter so
+                // both new seams still have the same sampled lengths.
+                let exact = next == 0
+                    && ry.panel == panel
+                    && exact_mate == Some(partner_edge.as_str())
+                    && rx.range == [0., 1.]
+                    && ry.range == [0., 1.]
+                    && rev_x != rev_y;
                 let child = child_name(t, &ry.panel, &partner_edge)?;
                 let partner = add_cut(
                     &mut cuts,
@@ -218,6 +236,7 @@ pub(super) fn after_origin_split(
                         edge: partner_edge,
                         child,
                         f: g,
+                        parameter: exact.then_some(1. - origin.parameter),
                         done: false,
                     },
                 )?;
@@ -235,19 +254,19 @@ pub(super) fn after_origin_split(
     // Split the explicit partners. Their actual split point is measured on the
     // split polygon, as for the edited boundary.
     for cut in cuts.iter_mut().filter(|c| !c.done) {
-        let before = {
-            let p = t
-                .panels
-                .iter()
-                .find(|p| p.id == cut.panel)
-                .ok_or("Panel not found")?;
-            let polygon = p
-                .polygon
-                .as_ref()
-                .ok_or("This panel has no editable contour")?;
-            edge_length(polygon, &cut.edge)?
+        let at = match cut.parameter {
+            Some(parameter) => BoundarySplitAt::Parameter(parameter),
+            None => {
+                let polygon = t
+                    .panels
+                    .iter()
+                    .find(|p| p.id == cut.panel)
+                    .and_then(|p| p.polygon.as_ref())
+                    .ok_or("This panel has no editable contour")?;
+                BoundarySplitAt::Distance(cut.f * edge_length(polygon, &cut.edge)?)
+            }
         };
-        let split = split_boundary_polygon(t, &cut.panel, cut.edge.clone(), cut.f * before)?;
+        let split = split_boundary_polygon(t, &cut.panel, cut.edge.clone(), at)?;
         if split.child != cut.child {
             return Err(format!("Boundary names differ on {}", cut.edge));
         }
@@ -265,6 +284,7 @@ pub(super) fn after_origin_split(
             edge_length(polygon, &cut.child)?,
         );
         cut.f = left / (left + right);
+        cut.parameter = Some(split.parameter);
     }
 
     // Spanning seams are rebuilt below, so the plain remap leaves them alone.
@@ -314,5 +334,26 @@ pub(super) fn after_origin_split(
         second.id = unused_id("seam", t.seams.iter().map(|s| s.id.clone()));
         t.seams.push(second);
     }
-    Ok(())
+    Ok(cuts)
+}
+
+/// Resolve an original boundary parameter after the first insertion, including
+/// cuts already made through sewing. Coincident insertions share one point.
+pub(super) fn remaining_split<'a>(
+    cuts: &'a [Cut],
+    panel: &str,
+    edge: &'a str,
+    parameter: f64,
+) -> Option<(&'a str, f64)> {
+    let Some(cut) = cuts.iter().find(|c| c.panel == panel && c.edge == edge) else {
+        return Some((edge, parameter));
+    };
+    let split = cut.parameter.expect("each cut has been applied");
+    if (parameter - split).abs() <= SAME_POINT {
+        None
+    } else if parameter < split {
+        Some((edge, parameter / split))
+    } else {
+        Some((&cut.child, (parameter - split) / (1. - split)))
+    }
 }

@@ -38,6 +38,16 @@ straighten commands also reflect across matching boundaries. Counterparts are
 matched within 0.25 mm. Unmatched geometry can still be edited independently.
 The mirrored edits preview together and commit as one undo entry.
 
+Use **Split** or double-click a boundary to insert a point and its counterpart.
+An insertion on the centerline creates one point. Boundary markings and any
+seams that cross an insertion follow the resulting boundary segments.
+
+For **Sew**, enable **Mirror piece** on each piece taking part. After picking
+the two boundaries, the 2D board highlights their counterparts before you
+confirm. Both seams commit in one undo entry. If either pair differs in length,
+choose **Sew with easing**. If the seam maps back onto itself, it is created
+once. Split a shared boundary first if the two seams would overlap.
+
 ## Linked mirrored pieces
 
 In Piece properties or **Quick (Q)**, use **Linked copy X/Y**. This creates a

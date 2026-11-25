@@ -268,8 +268,9 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                         };
                                         let a = (first_pid, first_edge);
                                         let b = (pid, edge_name);
-                                        state.status_message =
-                                            sew_confirm_prompt(&a, &b, a_len_m, b_len_m);
+                                        state.status_message = sew_confirm_prompt(
+                                            state, &a, &b, a_len_m, b_len_m, reverse,
+                                        );
                                         state.draft_2d = Some(ToolDraft2d::SewConfirm {
                                             a,
                                             b,

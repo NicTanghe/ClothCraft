@@ -349,6 +349,188 @@ fn piece_mirror_reflects_bezier_handles_on_paired_and_shared_edges() {
 }
 
 #[test]
+fn mirrored_insertions_share_the_centerline_and_select_the_clicked_point() {
+    let mut source = drawing();
+    let panel = &mut source.panels[0];
+    let polygon = panel.polygon.as_mut().unwrap();
+    polygon.curves.clear();
+    let id = panel.id.clone();
+    let edge = polygon.edges[0].clone();
+    let [start, end] = [polygon.points[0], polygon.points[1]];
+    let enabled = BTreeSet::from([id.clone()]);
+    for (distance, expected) in [(0.08, 6), (0.32, 6), (0.2, 5)] {
+        let edit = authoring::apply_with_piece_mirroring(
+            &source,
+            Command::SplitBoundary {
+                panel: id.clone(),
+                edge: edge.clone(),
+                at_m: distance,
+            },
+            &enabled,
+        )
+        .unwrap();
+        let poly = edit.template.panels[0].polygon.as_ref().unwrap();
+        assert_eq!(poly.points.len(), expected);
+        let clicked = start.lerp(end, distance / start.distance(end));
+        let reflected = start + end - clicked;
+        assert!(poly.points[edit.new_point.unwrap()].distance(clicked) < 1e-10);
+        assert!(poly.points.iter().any(|p| p.distance(reflected) < 1e-10));
+        let mut history = authoring::History::default();
+        history.record(source.clone());
+        let undo = history.restore(&edit.template, false).unwrap();
+        assert_eq!(
+            serde_json::to_value(undo.template).unwrap(),
+            serde_json::to_value(&source).unwrap()
+        );
+        assert!(!history.can_undo());
+    }
+}
+
+#[test]
+fn mirrored_curve_insertion_uses_the_reverse_parameter_and_handles_existing_seams() {
+    let mut source = drawing();
+    let panel = &mut source.panels[0];
+    let id = panel.id.clone();
+    let poly = panel.polygon.as_mut().unwrap();
+    poly.curves.clear();
+    let right = poly.edges[1].clone();
+    let left = poly.edges[3].clone();
+    poly.curves.insert(
+        right.clone(),
+        [DVec2::new(0.34, 0.14), DVec2::new(0.38, 0.31)],
+    );
+    poly.curves.insert(
+        left.clone(),
+        [DVec2::new(0.02, 0.31), DVec2::new(0.06, 0.14)],
+    );
+    let enabled = BTreeSet::from([id.clone()]);
+    let split = || Command::SplitBoundary {
+        panel: id.clone(),
+        edge: left.clone(),
+        at_m: 0.13,
+    };
+    let edited = authoring::apply_with_piece_mirroring(&source, split(), &enabled).unwrap();
+    let points = &edited.template.panels[0].polygon.as_ref().unwrap().points;
+    assert_eq!(points.len(), 6);
+    let clicked = points[edited.new_point.unwrap()];
+    assert!(clicked.x < 0.2);
+    assert!(
+        points
+            .iter()
+            .any(|p| p.distance(DVec2::new(0.4 - clicked.x, clicked.y)) < 1e-10)
+    );
+
+    // On curved counterparts already sewn together, the sewing split
+    // places the reflected point and subdivides the seam. It must not run twice.
+    let side = |edge: String| BoundaryRef {
+        panel: id.clone(),
+        side: Side::Right,
+        edge: Some(edge),
+        range: [0., 1.],
+        reversed: false,
+    };
+    let sewn = authoring::apply_with_piece_mirroring(
+        &source,
+        Command::Sew {
+            a: side(right),
+            b: side(left.clone()),
+            reverse: true,
+            ease: false,
+        },
+        &enabled,
+    )
+    .unwrap();
+    assert_eq!(sewn.template.seams.len(), 1);
+    let edited = authoring::apply_with_piece_mirroring(&sewn.template, split(), &enabled).unwrap();
+    assert_eq!(
+        edited.template.panels[0]
+            .polygon
+            .as_ref()
+            .unwrap()
+            .points
+            .len(),
+        6
+    );
+    assert_eq!(edited.template.seams.len(), 2);
+}
+
+#[test]
+fn mirror_sewing_keeps_pairing_orientation_and_refuses_overlapping_edits_atomically() {
+    let mut source = drawing();
+    source.panels[0].polygon.as_mut().unwrap().curves.clear();
+    let first = source.panels[0].id.clone();
+    let source = authoring::apply(
+        &source,
+        Command::Duplicate {
+            panel: first.clone(),
+        },
+    )
+    .unwrap()
+    .template;
+    let second = source.panels[1].id.clone();
+    let edge = |panel: usize, index: usize, range: [f64; 2]| BoundaryRef {
+        panel: source.panels[panel].id.clone(),
+        side: Side::Right,
+        edge: Some(source.panels[panel].polygon.as_ref().unwrap().edges[index].clone()),
+        range,
+        reversed: false,
+    };
+    let sew = || Command::Sew {
+        a: edge(0, 1, [0.1, 0.6]),
+        b: edge(1, 1, [0.2, 0.7]),
+        reverse: true,
+        ease: false,
+    };
+    let enabled = BTreeSet::from([first.clone(), second]);
+    let sewn = authoring::apply_with_piece_mirroring(&source, sew(), &enabled).unwrap();
+    let [original, reflected] = sewn.template.seams.as_slice() else {
+        panic!("expected a pair of seams")
+    };
+    assert!(
+        original.reverse_b && reflected.reverse_b && reflected.a.reversed && reflected.b.reversed
+    );
+    assert_eq!(reflected.a.edge, edge(0, 3, [0., 1.]).edge);
+    assert_eq!(reflected.b.edge, edge(1, 3, [0., 1.]).edge);
+    for (actual, expected) in reflected
+        .a
+        .range
+        .into_iter()
+        .chain(reflected.b.range)
+        .zip([0.4, 0.9, 0.3, 0.8])
+    {
+        assert!((actual - expected).abs() < 1e-12);
+    }
+    let split = authoring::apply_with_piece_mirroring(
+        &sewn.template,
+        Command::SplitBoundary {
+            panel: first.clone(),
+            edge: edge(0, 1, [0., 1.]).edge.unwrap(),
+            at_m: 0.18,
+        },
+        &enabled,
+    )
+    .unwrap();
+    assert_eq!(split.template.seams.len(), 4);
+    for panel in &split.template.panels {
+        assert_eq!(panel.polygon.as_ref().unwrap().points.len(), 6);
+    }
+    let one =
+        authoring::apply_with_piece_mirroring(&source, sew(), &BTreeSet::from([first])).unwrap();
+    assert_eq!(one.template.seams.len(), 1);
+    let over_axis = Command::Sew {
+        a: edge(0, 0, [0., 1.]),
+        b: edge(1, 1, [0., 1.]),
+        reverse: false,
+        ease: true,
+    };
+    let error = authoring::apply_with_piece_mirroring(&source, over_axis, &enabled)
+        .err()
+        .unwrap();
+    assert!(error.contains("overlaps the original"));
+    assert!(source.seams.is_empty());
+}
+
+#[test]
 fn multi_panel_point_move_uses_one_board_delta_and_one_undo() {
     let mut t = drawing();
     let id = t.panels[0].id.clone();

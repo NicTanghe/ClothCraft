@@ -415,6 +415,28 @@ fn mirror_piece_status_toggle_keeps_modes_per_piece_and_mirrors_point_drags() {
         serde_json::to_value(&state.project.template).unwrap(),
         serde_json::to_value(&before).unwrap()
     );
+
+    let clicked = board(&before, 1).midpoint(board(&before, 2));
+    let reflected = board(&before, 3).midpoint(board(&before, 0));
+    for (tool, clicks) in [("Split", 1), ("Edit", 2)] {
+        set_active_2d_tool(state, tool);
+        let (x, y) = board_to_screen_px(state, clicked);
+        handle_runner_event(state, &pointer_move_ev(x, y));
+        for _ in 0..clicks {
+            handle_runner_event(state, &pointer_btn_ev(true));
+            handle_runner_event(state, &pointer_btn_ev(false));
+        }
+        let template = &state.project.template;
+        assert_eq!(template.panels[0].polygon.as_ref().unwrap().points.len(), 6);
+        assert_eq!(template.panels[1].polygon.as_ref().unwrap().points.len(), 4);
+        assert!(board(template, 2).distance(clicked) < 0.001);
+        assert!(board(template, 5).distance(reflected) < 0.001);
+        assert!(undo_redo_2d(state, false));
+        assert_eq!(
+            serde_json::to_value(&state.project.template).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+    }
 }
 
 #[test]
