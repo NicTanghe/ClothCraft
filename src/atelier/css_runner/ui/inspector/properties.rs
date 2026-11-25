@@ -165,24 +165,6 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
     };
     let sel_pts = effective_selected_points(state);
     let has_sel_pts = !sel_pts.is_empty();
-    let mirror_dart_control = if sel_pts.len() > 1 {
-        let (class, label) = if state.mirror_dart_bases {
-            ("btn-action btn-action-accent", "Mirror dart bases (on)")
-        } else {
-            ("btn-action", "Mirror dart bases (off)")
-        };
-        ui! {
-            <div class="quick-actions-row">
-                <button id="mirror-dart-bases" class={class}
-                    title="Reflect the other base when dragging either of two selected dart bases"
-                    onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleMirrorDartBases)}>
-                    {label}
-                </button>
-            </div>
-        }
-    } else {
-        ui! { <span class="hidden" /> }
-    };
     let corner_menu_active =
         state.active_2d_tool == "Corner" || (state.corner_preview_active && has_sel_pts);
     let corner_menu_box_class = if corner_menu_active {
@@ -374,7 +356,6 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
                             <span class="prop-label">"2D Selection"</span>
                             <span class="prop-value">{sel_info.0}</span>
                         </div>
-                        {mirror_dart_control}
                         <div class="prop-row">
                             <span class="prop-label">"Linked Pieces"</span>
                             <span class="prop-value">{connected_label}</span>

@@ -312,6 +312,20 @@ fn translating_dart_bases_preserves_curved_legs_and_respects_explicit_easing() {
         if ease {
             assert!(after.template.seams[0].allow_ease);
             assert!((lengths[0] - lengths[1]).abs() > 1e-5);
+            let mirrored = authoring::apply(
+                &before,
+                Command::MovePointGroupsMirroredDarts {
+                    points: [1, 2, 3].map(|i| (panel.clone(), i)).to_vec(),
+                    grabbed: (panel.clone(), 2),
+                    board_delta,
+                },
+            )
+            .unwrap();
+            let [a, tip, b] = [1, 2, 3].map(|i| board_point(&mirrored.template, i));
+            assert!(a.distance(board_point(&before, 1)) < 1e-10);
+            assert!(b.distance(board_point(&before, 3)) < 1e-10);
+            assert!((tip - a.midpoint(b)).dot((b - a).normalize()).abs() < 1e-10);
+            assert!((tip.distance(a) - tip.distance(b)).abs() < 1e-10);
         } else {
             assert!((lengths[0] - prior[0]).abs() < 1e-10);
             assert!((lengths[1] - prior[1]).abs() < 1e-10);

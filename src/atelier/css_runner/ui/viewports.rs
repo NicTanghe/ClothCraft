@@ -204,6 +204,19 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
     let redo_btn = ui! {
         <button id="cad-redo-btn" class="cad-2d-pill" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::Redo2d)} title="Redo (Ctrl+Shift+Z)">{redo_label}</button>
     };
+    let mirror_class = if state.mirror_dart_bases {
+        "cad-2d-pill active"
+    } else {
+        "cad-2d-pill"
+    };
+    let mirror_dart_btn = ui! {
+        <button id="mirror-dart-bases" class={mirror_class}
+            aria-pressed={if state.mirror_dart_bases { "true" } else { "false" }}
+            onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleMirrorDartBases)}
+            title="Mirror the two selected dart bases and constrain a selected tip to their perpendicular bisector">
+            "Mirror dart"
+        </button>
+    };
     let mode_radius_btn = ui! {
         <button id="cad-corner-radius-mode" class={radius_mode_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetCornerMode(true))} title="Circular fillet mode">"Radius"</button>
     };
@@ -251,6 +264,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                 <div class="cad-2d-group">
                     {undo_btn}
                     {redo_btn}
+                    {mirror_dart_btn}
                 </div>
                 <div class={corner_group_class}>
                     <span class="cad-2d-label">"Corner"</span>
@@ -279,6 +293,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                 <div class="cad-2d-row">
                     {undo_btn}
                     {redo_btn}
+                    {mirror_dart_btn}
                     <span class="cad-2d-label">"Rule"</span>
                     {rule_sharp_btn}
                     {rule_smooth_btn}
@@ -316,6 +331,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                     {tension_dec_btn}
                     {tension_val}
                     {tension_inc_btn}
+                    {mirror_dart_btn}
                 </div>
                 <div class="cad-2d-row">
                     {rule_sharp_btn}
@@ -351,6 +367,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                     {rule_sharp_btn}
                     {rule_smooth_btn}
                     {rule_sym_btn}
+                    {mirror_dart_btn}
                 </div>
             </div>
         },
@@ -359,7 +376,7 @@ pub fn build_runner_2d_viewport(state: &CssRunnerState) -> Node {
                 <div class="cad-2d-row">{undo_btn}{redo_btn}</div>
                 <div class={corner_row_class}>{mode_radius_btn}{mode_shape_btn}</div>
                 <div class={corner_row_class}>{radius_dec_btn}{radius_val}{radius_inc_btn}</div>
-                <div class={corner_row_class}>{apply_round_btn}</div>
+                <div class={corner_row_class}>{apply_round_btn}{mirror_dart_btn}</div>
                 <div class={corner_row_class}>{tension_dec_btn}{tension_val}{tension_inc_btn}</div>
                 <div class="cad-2d-row">{curve_on_btn}{curve_off_btn}</div>
                 <div class="cad-2d-row">{rule_sharp_btn}{rule_smooth_btn}{rule_sym_btn}</div>

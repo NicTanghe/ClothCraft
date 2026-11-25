@@ -56,6 +56,7 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
     let cad_control_ids = [
         "#cad-undo-btn",
         "#cad-redo-btn",
+        "#mirror-dart-bases",
         "#cad-corner-radius-mode",
         "#cad-corner-shape-mode",
         "#cad-radius-dec",
@@ -92,6 +93,22 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
             980,
             ViewLayoutMode::TwoDOnly,
             RunnerAction::View2d,
+            false,
+            true,
+        ),
+        (
+            1600,
+            980,
+            ViewLayoutMode::TwoDOnly,
+            RunnerAction::View2d,
+            true,
+            false,
+        ),
+        (
+            1480,
+            900,
+            ViewLayoutMode::Split,
+            RunnerAction::ViewSplit,
             false,
             true,
         ),
@@ -179,6 +196,9 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
                     && b.y + b.height <= vp2d.y + vp2d.height + 1.0,
                 "control {cid} unclipped inside #viewport-2d at {w}x{h} (clean={clean_view}, drawer={drawer_open}): {b:?} vs {vp2d:?}"
             );
+            if cid == "#mirror-dart-bases" {
+                assert!(b.y >= bar_bounds.y && b.y + b.height <= bar_bounds.y + bar_bounds.height);
+            }
         }
     }
 
@@ -193,9 +213,14 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
         frame_index: 20,
     });
 
-    for (idx, selector) in ["#cad-corner-shape-mode", "#cad-radius-inc", "#cad-rule-sym"]
-        .into_iter()
-        .enumerate()
+    for (idx, selector) in [
+        "#cad-corner-shape-mode",
+        "#cad-radius-inc",
+        "#cad-rule-sym",
+        "#mirror-dart-bases",
+    ]
+    .into_iter()
+    .enumerate()
     {
         let btn = app.find_element_bounds_by_id(selector).unwrap();
         assert!(
@@ -214,6 +239,7 @@ fn test_2d_native_full_canvas_bounds_and_cad_bar() {
     assert!(!app.state().corner_mode_radius);
     assert!((app.state().corner_radius_mm - 12.0).abs() < 1e-6);
     assert_eq!(app.state().corner_rule, CornerRule::Symmetric);
+    assert!(app.state().mirror_dart_bases);
 }
 
 #[test]
@@ -931,14 +957,20 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
         assert!(seam.max_gap(&folded) < 1e-10);
 
         set_active_2d_tool(&mut state, "Edit");
+        let angle = if order[0] == 6 { 0. } else { 27. };
+        state.project.template.panels[0].layout_rotation_degrees = angle;
+        let to_board = |local| authoring::rotate_2d(local, angle);
         let delta = DVec2::new(0.010, 0.006);
         let reflected = DVec2::new(-delta.x, delta.y);
+        let perpendicular = DVec2::new(0., delta.y);
         for (drag_tip, mirror, grabbed, expected) in [
             (false, false, 1, [delta, DVec2::new(delta.x, 0.), delta]),
             (true, false, 6, [delta; 3]),
             (false, true, 1, [reflected, DVec2::ZERO, delta]),
             (false, true, 6, [delta, DVec2::ZERO, reflected]),
-            (true, true, 1, [delta; 3]),
+            (true, true, 1, [reflected, perpendicular, delta]),
+            (true, true, 6, [delta, perpendicular, reflected]),
+            (true, true, 0, [DVec2::ZERO, perpendicular, DVec2::ZERO]),
         ] {
             let before = state.project.template.clone();
             let corner_at = |template: &GarmentTemplate, point| {
@@ -957,7 +989,7 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
 
             let start = corner_at(&before, grabbed);
             let (x, y) = board_to_screen_px(&state, start);
-            let (end_x, end_y) = board_to_screen_px(&state, start + delta);
+            let (end_x, end_y) = board_to_screen_px(&state, start + to_board(delta));
             handle_runner_event(&mut state, &pointer_move_ev(x, y));
             assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
             handle_runner_event(&mut state, &pointer_move_ev(end_x, end_y));
@@ -965,6 +997,7 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
             let assert_move = |after: &GarmentTemplate| {
                 for (index, expected_delta) in [6, 0, 1].into_iter().zip(expected) {
                     let actual_delta = corner_at(after, index) - corner_at(&before, index);
+                    let expected_delta = to_board(expected_delta);
                     assert!(
                         actual_delta.distance(expected_delta) < 1e-6,
                         "dart point {index} moved {actual_delta} instead of {expected_delta}"

@@ -1690,22 +1690,29 @@ fn dart_deltas(
 
         let along_mouth = (base_b - base_a).normalize_or_zero();
         let mouth_delta = along_mouth * delta.dot(along_mouth);
+        let selected_tip_delta = selected.get(&tip_corner);
         let (left_delta, right_delta) = match mirror_from {
             Some((panel, point))
                 if panel == seam.a.panel
-                    && (point == left || point == right)
-                    && !selected.contains_key(&tip_corner) =>
+                    && (point == left
+                        || point == right
+                        || point == tip && selected_tip_delta.is_some()) =>
             {
-                // Reflect around the dart axis. Keep the grabbed base under the pointer.
+                if selected_tip_delta.is_some() {
+                    // The axis passes through the mouth midpoint. When the bases
+                    // move, their midpoint follows the same perpendicular delta.
+                    let to_axis = along_mouth * (base_a.midpoint(base_b) - apex).dot(along_mouth);
+                    planned.insert(tip_corner, to_axis + (delta - mouth_delta));
+                }
                 let reflected = delta - 2. * mouth_delta;
-                if point == right {
-                    (reflected, right_delta)
-                } else {
-                    (delta, reflected)
+                match point {
+                    _ if point == left => (delta, reflected),
+                    _ if point == right => (reflected, right_delta),
+                    _ => (DVec2::ZERO, DVec2::ZERO),
                 }
             }
             _ => {
-                if let Some(&tip_delta) = selected.get(&tip_corner) {
+                if let Some(&tip_delta) = selected_tip_delta {
                     planned.insert(tip_corner, tip_delta);
                 } else if !seam.allow_ease {
                     // Straight legs stay equal by keeping the tip on the mouth's
