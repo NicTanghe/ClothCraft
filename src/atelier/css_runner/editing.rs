@@ -73,6 +73,7 @@ pub(super) fn install_authoring_edit(
         state.board_2d_fit = fit_2d_board(&edit.template);
     }
     state.project.template = edit.template;
+    state.files.modified = true;
     state
         .mirrored_pieces
         .retain(|id| state.project.template.panels.iter().any(|p| p.id == *id));

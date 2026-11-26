@@ -1,5 +1,6 @@
 //! Keyboard shortcuts and cancellation.
 
+use super::super::actions::RunnerAction;
 use super::super::board::interaction::set_active_2d_tool;
 use super::super::board::selection::effective_selected_points;
 use super::super::board::types::{Drag2d, ToolDraft2d};
@@ -32,6 +33,29 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                     return true;
                 }
                 let ctrl = k.modifiers.control || k.modifiers.super_key;
+                if ctrl && let cssimpler::renderer::KeyIdentity::Character(ch) = &k.logical_key {
+                    let action = match (ch.as_str(), k.modifiers.shift) {
+                        ("o" | "O", false) => Some(RunnerAction::Open),
+                        ("s" | "S", false) => Some(RunnerAction::Save),
+                        ("s" | "S", true) => Some(RunnerAction::SaveAs),
+                        _ => None,
+                    };
+                    if let Some(action) = action {
+                        if !k.repeat {
+                            state.actions.push(action);
+                            state.update_handle.request_update();
+                        }
+                        return true;
+                    }
+                }
+                if state.file_menu_open {
+                    if matches!(&k.logical_key, cssimpler::renderer::KeyIdentity::Named(name) if name == "Escape")
+                    {
+                        state.file_menu_open = false;
+                        return true;
+                    }
+                    return false;
+                }
                 if let cssimpler::renderer::KeyIdentity::Character(ref ch) = k.logical_key {
                     if ch == " " {
                         state.playing = !state.playing;
@@ -40,10 +64,6 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                     }
                     if ch == "k" && ctrl {
                         state.command_palette_open = !state.command_palette_open;
-                        return true;
-                    }
-                    if ch == "s" && ctrl {
-                        state.save_project();
                         return true;
                     }
                     if (ch == "z" || ch == "Z") && ctrl {

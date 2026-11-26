@@ -378,10 +378,10 @@ fn test_css_runner_headless_frame_and_rendering() {
         },
     );
     assert_ne!(read_points(app.state()), initial_points);
-    // Save the visible accepted checkpoint, not the launch-time project cache.
-    app.state_mut().save_project();
-    let saved =
-        FittingProject::load(&app.state().files.output.join("fitting-project.usda")).unwrap();
+    // Save the visible accepted checkpoint to a destination chosen by the user.
+    let path = dir.path().join("checkpoint.usda");
+    app.state_mut().save_project_to_path(&path);
+    let saved = FittingProject::load(&path).unwrap();
     let checkpoint = saved.state.unwrap();
     assert_eq!(checkpoint.x, app.state().scene.state.x);
     assert_eq!(checkpoint.v, app.state().scene.state.v);

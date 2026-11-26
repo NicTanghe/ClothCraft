@@ -42,6 +42,9 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 }
 
 fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
+    if state.file_menu_open && matches!(event, EngineEvent::Key(_)) {
+        return keyboard::handle_keyboard(state, event);
+    }
     if state.mesh_draft.editing_value.is_some() {
         match event {
             EngineEvent::Key(key) => {

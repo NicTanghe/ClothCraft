@@ -15,6 +15,18 @@ use cssimpler::renderer::gpu::usd::{UsdRenderer, UsdShadowSettings, UsdStudioLig
 use cssimpler::renderer::{FrameInfo, WindowConfig};
 use cssimpler::style::Stylesheet;
 
+pub(super) fn fitting_viewport_usda(
+    scene: &FittingScene,
+    surface: &clothcraft::avatar::SurfaceMesh,
+    theme: clothcraft::usd_scene::StudioBackdropTheme,
+) -> Result<String, String> {
+    use clothcraft::usd_scene;
+
+    let usda = usd_scene::garment_stage_usda(&scene.garment, &scene.state)?;
+    let usda = usd_scene::append_viewport_surface(usda, surface);
+    Ok(usd_scene::append_infinity_cove(usda, theme))
+}
+
 #[allow(clippy::type_complexity)]
 pub fn create_runner_app<'a>(
     mut state: CssRunnerState,
@@ -28,10 +40,12 @@ pub fn create_runner_app<'a>(
 > {
     use clothcraft::usd_scene;
 
-    let usda = usd_scene::garment_stage_usda(&state.scene.garment, &state.scene.state)
-        .expect("publish garment viewport geometry");
-    let usda = usd_scene::append_viewport_surface(usda, state.avatar_display_surface());
-    let usda = usd_scene::append_infinity_cove(usda, state.studio_backdrop_theme());
+    let usda = fitting_viewport_usda(
+        &state.scene,
+        state.avatar_display_surface(),
+        state.studio_backdrop_theme(),
+    )
+    .expect("publish garment viewport geometry");
     let usd_scene = usd_scene::viewport_scene_from_usda(&usda)
         .and_then(|scene| {
             scene

@@ -587,7 +587,6 @@ impl CssRunnerState {
                 if issues > 0 {
                     message.push_str(&format!("; {issues} excluded or converted item(s)"));
                 }
-                self.files.modified = true;
                 editing::install_authoring_edit(self, edit, Some(old), message);
             }
             Err(error) => {

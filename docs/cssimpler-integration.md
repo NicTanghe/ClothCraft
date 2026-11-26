@@ -59,9 +59,20 @@ to ClothCraft because cssimpler does not expose relative pointer capture; the
 coalescing and scheduling come from cssimpler. Frame-aligned input is opt-in per
 app, so the Studio V2 editor keeps its existing immediate event path.
 
-## Export patterns from the fitting editor
+## Fitting editor File menu
 
-**Export** opens a save dialog for a single-sheet true-scale SVG. It uses the
+**File → Open** loads an editable ClothCraft USD project (`.usda` or text
+`.usd`) and restores its pattern, avatar and saved simulation state. The editor
+pauses the simulation and clears the previous document's undo history after
+the replacement validates. Opening over unsaved edits asks for confirmation.
+
+**File → Save** writes the current USD project. When the session has no
+USD path, Save opens the same picker as **Save As**. Successful Save As
+sets the destination for future saves. Move the adjacent `.assets` directory
+with the saved project so its avatar remains available. Use Ctrl+O,
+Ctrl+S or Ctrl+Shift+S (Command on macOS) for these commands.
+
+**File → Export SVG** opens a save dialog for a single-sheet true-scale SVG. It uses the
 same millimetre sheet layout, draft markings and 100 mm calibration ruler as
 the CLI print export. CSSimpler streams the sewing outlines with their cubic
 controls to a buffered file. The export uses the committed material geometry

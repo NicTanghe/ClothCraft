@@ -60,9 +60,11 @@ fn settings_controls_close_and_do_not_edit_the_board() {
             delta: Duration::ZERO,
             frame_index: frame,
         });
-        let export = app.find_element_bounds_by_id("#runner-export-btn").unwrap();
+        let file = app
+            .find_element_bounds_by_id("#runner-file-toggle")
+            .unwrap();
         let settings = app.find_element_bounds_by_id("#settings-toggle").unwrap();
-        assert!(settings.x >= export.x + export.width);
+        assert!(settings.x >= file.x + file.width);
         assert!(settings.x + settings.width <= w as f32);
         assert!(app.find_element_bounds_by_id("#settings-panel").is_none());
         click!("#settings-toggle");
