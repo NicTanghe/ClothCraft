@@ -994,13 +994,12 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
         app.find_element_bounds_by_id("#shadow-softness-slider")
             .is_none()
     );
-    let defaults = app
-        .state()
-        .viewport_shadow_levels
-        .get()
-        .apply(UsdShadowSettings::default());
+    let default_levels = app.state().viewport_shadow_levels.get();
+    let defaults = default_levels.apply(UsdShadowSettings::default());
     assert_eq!(defaults.coverage, 0.0);
     assert_eq!(defaults.resolution, 2048);
+    assert!((defaults.light_radius - 0.16).abs() < 1e-6);
+    assert!((default_levels.filter_radius_m() - 0.016).abs() < 1e-6);
 
     for (width, height, mode, clean_view) in [
         (1600, 980, ViewLayoutMode::Split, false),
@@ -1066,7 +1065,8 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                 "slider press should wake the paused editor"
             );
             app.frame(frame);
-            let settings = app.state().viewport_shadow_levels.get().apply(defaults);
+            let levels = app.state().viewport_shadow_levels.get();
+            let settings = levels.apply(defaults);
             let drag_x = match id {
                 "shadow-strength-slider" => {
                     assert!(
@@ -1091,7 +1091,8 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                         (settings.light_radius - 0.20).abs() < 0.005,
                         "{track:?} {settings:?}"
                     );
-                    None
+                    assert!((levels.filter_radius_m() - 0.02).abs() <= 0.0005);
+                    Some(track.x + track.width + 20.0)
                 }
             };
             if let Some(x) = drag_x {
@@ -1109,8 +1110,8 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
         assert_eq!(settings.strength, 0.0);
         assert_eq!(settings.coverage, 0.32);
         assert_eq!(settings.resolution, 4096);
-        assert!((levels.filter_radius_m() - 0.02).abs() <= 0.0004);
-        assert!((settings.light_radius - 0.20).abs() < 0.005);
+        assert!((levels.filter_radius_m() - 0.16).abs() < 1e-6);
+        assert_eq!(settings.light_radius, 0.5);
         assert!(!app.state().dragging_3d && !app.state().pointer_down);
     }
 }

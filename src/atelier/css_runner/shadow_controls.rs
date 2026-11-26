@@ -12,7 +12,6 @@ const READOUT_WIDTH: f32 = 68.0;
 // Keep the editor's range near the subject. The renderer eases toward the
 // full floor footprint with a cubic curve.
 const MAX_STUDIO_SHADOW_COVERAGE: f32 = 0.32;
-const MAX_SHADOW_FILTER_RADIUS_M: f32 = 0.04;
 const RESOLUTIONS: [u32; 4] = [512, 1024, 2048, 4096];
 
 #[derive(Default)]
@@ -78,8 +77,7 @@ impl ShadowLevels {
     }
 
     pub(in crate::atelier) fn apply(self, mut settings: UsdShadowSettings) -> UsdShadowSettings {
-        let softness = f32::from(self.softness) / 100.0;
-        settings.light_radius = 0.4 * softness;
+        settings.light_radius = self.softness_response(0.4, 0.1);
         settings.strength = f32::from(self.strength) / 100.0;
         settings.coverage = MAX_STUDIO_SHADOW_COVERAGE * (f32::from(self.coverage) / 100.0);
         settings.resolution = RESOLUTIONS[usize::from(self.resolution)];
@@ -87,7 +85,15 @@ impl ShadowLevels {
     }
 
     pub(in crate::atelier) fn filter_radius_m(self) -> f32 {
-        MAX_SHADOW_FILTER_RADIUS_M * (f32::from(self.softness) / 100.0)
+        self.softness_response(0.04, 0.12)
+    }
+
+    fn softness_response(self, linear_scale: f32, upper_extension: f32) -> f32 {
+        let softness = f32::from(self.softness) / 100.0;
+        // Extend the soft end smoothly while preserving the lower half and
+        // the 40% default.
+        let upper = (2.0 * softness - 1.0).max(0.0);
+        linear_scale * softness + upper_extension * upper.powi(2)
     }
 }
 
