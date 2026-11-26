@@ -13,7 +13,7 @@ Implemented on 2026-10-15. CPU authoring operations, independent of the physical
 - **Sew** pairs that line with another piece's boundary in 2D or 3D. Alternatively select the line and **Create and sew a ruffle**: width in mm, length ratio 1–4. A ratio of 1.5 creates a strip 50% longer than the receiving line with explicit ease. Adjust its initial 3D placement before simulation, especially along a curve. This is gathered material with a finite seam penalty, not guaranteed folds or collision-free placement.
 - **Delete line** removes an unsewn line. Remove its seam first if needed; Ctrl+Z restores edits.
 
-Still missing: offsets, intersecting/joined paths, darts, allowances, symmetry within one panel and automatic ruffle arrangement. Partial/chain sewing and paired linked mirrors are now implemented. Internal lines add no fold/crease energy. Hole rims can be selected/sewn; dedicated hole point editing is absent.
+Still missing: offsets, intersecting/joined paths, darts, allowances and automatic ruffle arrangement. Partial/chain sewing, paired linked mirrors and [left/right contour editing within one piece](panel-tools.md#mirror-edits-within-a-piece) are implemented. Internal lines add no fold/crease energy. Hole rims can be selected/sewn; dedicated hole point editing is absent.
 
 ## Persistent model
 

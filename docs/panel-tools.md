@@ -23,14 +23,38 @@ saved dimensional constraint. Boundary arclength and target-length controls rema
 separate. Panel selection brings the Piece inspector forward; its material button
 opens Fabric controls. Rest area and triangle count are displayed beside dimensions.
 
+## Mirror edits within a piece
+
+Select a piece and toggle **Mirror piece** in the 2D grid's status strip.
+The setting is off by default and remembered separately for each piece during
+the editing session. The axis runs up the piece through the midpoint between
+its leftmost and rightmost contour points, in the piece's own material
+coordinates. Rotating the piece on the board rotates this axis with it.
+
+Moving a contour point reflects its motion onto the matching point on the
+opposite side. With both points selected, the grabbed point leads the drag.
+Centerline points move along the axis. Bézier handle edits and curve or
+straighten commands also reflect across matching boundaries. Counterparts are
+matched within 0.25 mm. Unmatched geometry can still be edited independently.
+The mirrored edits preview together and commit as one undo entry.
+
+Use **Split** or double-click a boundary to insert a point and its counterpart.
+An insertion on the centerline creates one point. Boundary markings and any
+seams that cross an insertion follow the resulting boundary segments.
+
+For **Sew**, enable **Mirror piece** on each piece taking part. After picking
+the two boundaries, the 2D board highlights their counterparts before you
+confirm. Both seams commit in one undo entry. If either pair differs in length,
+choose **Sew with easing**. If the seam maps back onto itself, it is created
+once. Split a shared boundary first if the two seams would overlap.
+
 ## Linked mirrored pieces
 
 In Piece properties or **Quick (Q)**, use **Linked copy X/Y**. This creates a
 separate mirrored piece and a bidirectional edit relation. Edits to contours,
 curves, internal lines, material pins and grain propagate on commit/mouse release
 from either piece. Both updates are one history transaction. The existing partner
-keeps its identity, fabric, board position and 3D placement. There is no live
-partner preview during the drag and no symmetry within a single panel yet.
+keeps its identity, fabric, board position and 3D placement.
 
 **Unlink mirror** removes only the relation, leaving geometry and drape intact.
 Independent mirror/copy commands remain available. Each panel has at most one

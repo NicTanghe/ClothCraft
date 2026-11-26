@@ -33,6 +33,20 @@ pub(in super::super) fn effective_selected_points(state: &CssRunnerState) -> Vec
     }
 }
 
+pub(in super::super) fn point_drag_selection(
+    state: &CssRunnerState,
+    mut points: Vec<(String, usize)>,
+    panel: &str,
+    point: usize,
+) -> Vec<(String, usize)> {
+    if state.mirrored_pieces.contains(panel)
+        && let Some(index) = points.iter().position(|(p, i)| p == panel && *i == point)
+    {
+        points[..=index].rotate_right(1);
+    }
+    points
+}
+
 pub(in super::super) fn has_single_dart_point(state: &CssRunnerState) -> bool {
     state.selected_2d_points.len() <= 1
         && state

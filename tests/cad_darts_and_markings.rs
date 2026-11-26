@@ -16,9 +16,11 @@ use clothcraft::{
         polygon::PolygonPattern,
         presets::{self, GarmentKind},
         seam::{BoundaryRef, Side},
+        shapes::MirrorAxis,
     },
 };
 use glam::DVec2;
+use std::collections::BTreeSet;
 
 fn rectangle_template(width: f64, height: f64) -> GarmentTemplate {
     authoring::apply(
@@ -264,6 +266,35 @@ fn ordinary_edge_slide_uses_either_incident_path_without_merging_corners() {
 }
 
 #[test]
+fn linked_corner_slide_uses_the_pair_line_in_the_rotated_board() {
+    let source = rectangle_template(0.3, 0.2);
+    let panel = source.panels[0].id.clone();
+    let mut linked = authoring::apply(
+        &source,
+        Command::LinkedMirror {
+            panel: panel.clone(),
+            axis: MirrorAxis::X,
+        },
+    )
+    .unwrap()
+    .template;
+    for (index, piece) in linked.panels.iter_mut().enumerate() {
+        piece.layout_2d = Some(DVec2::new(0., 0.4 * index as f64));
+        piece.layout_rotation_degrees = 90.;
+    }
+    for angle in [-19_f64, -17., 17., 19.] {
+        let offset = 0.02 * angle.to_radians().tan();
+        let position = slide_corner_position(&linked, &panel, 0, DVec2::new(offset, 0.02)).unwrap();
+        let expected = if angle.abs() < 18. {
+            DVec2::new(0., 0.02)
+        } else {
+            DVec2::new(offset.max(0.), 0.)
+        };
+        assert!(position.distance(expected) < 1e-12, "{angle}°: {position}");
+    }
+}
+
+#[test]
 fn mirrored_dart_slide_follows_each_outer_edge_and_preserves_equal_legs() {
     let points = vec![
         DVec2::ZERO,
@@ -326,6 +357,33 @@ fn mirrored_dart_slide_follows_each_outer_edge_and_preserves_equal_legs() {
     }
     let [a, b] = moved.garment.seams[0].lengths;
     assert!((a - b).abs() < 1e-9);
+
+    // Inside the perpendicular band, either active mirror mode switches to the sewn legs.
+    let enabled = BTreeSet::from([panel.id.clone()]);
+    for (mirror, pieces) in [(true, &BTreeSet::new()), (false, &enabled)] {
+        let position = points[1] + DVec2::new(0.008, 0.04);
+        let moved = authoring::apply_with_piece_mirroring(
+            &sewn,
+            Command::MoveDartPoint {
+                panel: panel.id.clone(),
+                point: 1,
+                position,
+                mirror,
+                slide: true,
+            },
+            pieces,
+        )
+        .unwrap();
+        let after = &moved.template.panels[0].polygon.as_ref().unwrap().points;
+        for base in [1, 3] {
+            let leg = (points[2] - points[base]).normalize();
+            let delta = after[base] - points[base];
+            assert!(delta.dot(leg) > 0.001);
+            assert!(delta.perp_dot(leg).abs() < 1e-10);
+        }
+        let [a, b] = moved.garment.seams[0].lengths;
+        assert!((a - b).abs() < 1e-9);
+    }
 }
 
 #[test]

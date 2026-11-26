@@ -1,6 +1,6 @@
 //! Native vector board scenes and visual overlays.
 
-use super::super::state::CssRunnerState;
+use super::super::{editing::reflected_sew_preview, state::CssRunnerState};
 use super::corners::{
     active_fillet_previews, connected_fillet_max_radius_m, fillet_drag_handle_local,
 };
@@ -999,16 +999,26 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
                 }
             }
             ToolDraft2d::Sew { .. } | ToolDraft2d::SewConfirm { .. } => {
-                let pending: Vec<&(String, String)> = match draft {
-                    ToolDraft2d::Sew { first_edge } => first_edge.iter().collect(),
-                    ToolDraft2d::SewConfirm { a, b, .. } => vec![a, b],
+                let pending: Vec<_> = match draft {
+                    ToolDraft2d::Sew { first_edge } => first_edge
+                        .iter()
+                        .cloned()
+                        .map(|edge| (edge, false))
+                        .collect(),
+                    ToolDraft2d::SewConfirm { a, b, reverse, .. } => {
+                        let mut edges = vec![(a.clone(), false), (b.clone(), false)];
+                        if let Ok(Some(mate)) = reflected_sew_preview(state, a, b, *reverse) {
+                            edges.extend(mate.edges.into_iter().map(|edge| (edge, true)));
+                        }
+                        edges
+                    }
                     _ => Vec::new(),
                 };
-                for (pid, ename) in pending {
-                    let Some(pg) = panel_geos.iter().find(|g| &g.id == pid) else {
+                for ((pid, ename), reflected) in pending {
+                    let Some(pg) = panel_geos.iter().find(|g| g.id == pid) else {
                         continue;
                     };
-                    let Some(eidx) = pg.edge_names.iter().position(|e| e == ename) else {
+                    let Some(eidx) = pg.edge_names.iter().position(|e| *e == ename) else {
                         continue;
                     };
                     let (ax, ay) = pg.points[eidx];
@@ -1030,7 +1040,11 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
                         None,
                         accent_gold,
                         3.2 * px,
-                        "tool-draft-sew",
+                        if reflected {
+                            "tool-draft-sew-reflected"
+                        } else {
+                            "tool-draft-sew"
+                        },
                     ));
                 }
             }

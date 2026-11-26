@@ -10,15 +10,16 @@ use super::board::selection::{
 use super::board::types::ToolDraft2d;
 use super::state::CssRunnerState;
 use clothcraft::authoring::corner_tool::{
-    CIRCLE_TENSION, is_sewn_dart_point, preview_adjust_handle, preview_move_corner,
-    preview_move_dart_point, preview_move_point_groups_connected, slide_corner_position,
-    validate_fillet_batch,
+    CIRCLE_TENSION, DartPointOptions, is_sewn_dart_point,
+    preview_adjust_handle_with_piece_mirroring, preview_dart_point_with_piece_mirroring,
+    preview_move_corner, preview_move_groups_with_piece_mirroring, preview_move_piece_corner,
+    slide_corner_position_with_mirroring, validate_fillet_batch,
 };
 use clothcraft::authoring::{self, Command};
 use clothcraft::fitting::FittingScene;
 use clothcraft::garment::GarmentTemplate;
 use clothcraft::garment::meshing::MeshingSettings;
-use clothcraft::garment::seam::{BoundaryCurve, BoundaryRef, Side};
+use clothcraft::garment::seam::{BoundaryCurve, BoundaryRef, SeamSpec, Side};
 use glam::DVec2;
 use std::sync::Arc;
 
@@ -72,6 +73,9 @@ pub(super) fn install_authoring_edit(
         state.board_2d_fit = fit_2d_board(&edit.template);
     }
     state.project.template = edit.template;
+    state
+        .mirrored_pieces
+        .retain(|id| state.project.template.panels.iter().any(|p| p.id == *id));
     if edit.reset_simulation {
         state.project.state = None;
         state.project.mesh_signature = None;
@@ -114,8 +118,15 @@ pub fn commit_authoring_command(
 ) -> bool {
     state.preview_template = None;
     let before = state.project.template.clone();
-    match authoring::apply(&before, cmd) {
+    let replaces_pieces = matches!(
+        &cmd,
+        Command::Polygon { replace: true, .. } | Command::Primitive { replace: true, .. }
+    );
+    match authoring::apply_with_piece_mirroring(&before, cmd, &state.mirrored_pieces) {
         Ok(edit) => {
+            if replaces_pieces {
+                state.mirrored_pieces.clear();
+            }
             install_authoring_edit(state, edit, Some(before), msg.into());
             true
         }
@@ -318,7 +329,13 @@ pub(super) fn point_drag_target(
         && !dart
         && resolve_corner_edge(source, panel_id, point_idx).is_some()
     {
-        slide_corner_position(source, panel_id, point_idx, position)?
+        slide_corner_position_with_mirroring(
+            source,
+            panel_id,
+            point_idx,
+            position,
+            state.mirrored_pieces.contains(panel_id),
+        )?
     } else {
         position
     };
@@ -337,14 +354,26 @@ pub(super) fn update_preview_point(
     let mut draft = state.project.template.clone();
     let source = &state.project.template;
     let preview = if dart {
-        preview_move_dart_point(
+        preview_dart_point_with_piece_mirroring(
             source,
             &mut draft,
             panel_id,
             point_idx,
             local_pos,
-            state.mirror_dart_bases,
-            state.slide_on_edge,
+            DartPointOptions {
+                mirror: state.mirror_dart_bases,
+                slide: state.slide_on_edge,
+            },
+            &state.mirrored_pieces,
+        )
+    } else if state.mirrored_pieces.contains(panel_id) {
+        preview_move_piece_corner(
+            source,
+            &mut draft,
+            panel_id,
+            point_idx,
+            local_pos,
+            &state.mirrored_pieces,
         )
     } else {
         preview_move_corner(source, &mut draft, panel_id, point_idx, local_pos)
@@ -360,8 +389,14 @@ pub(super) fn update_preview_point_groups(
     board_delta: DVec2,
 ) {
     let mut draft = state.project.template.clone();
-    if preview_move_point_groups_connected(&state.project.template, &mut draft, points, board_delta)
-        .is_ok()
+    if preview_move_groups_with_piece_mirroring(
+        &state.project.template,
+        &mut draft,
+        points,
+        board_delta,
+        &state.mirrored_pieces,
+    )
+    .is_ok()
     {
         state.preview_template = Some(draft);
     }
@@ -375,14 +410,14 @@ pub(super) fn update_preview_bezier_handle(
     position: DVec2,
 ) {
     let mut draft = state.project.template.clone();
-    if preview_adjust_handle(
+    if preview_adjust_handle_with_piece_mirroring(
         &state.project.template,
         &mut draft,
         panel_id,
         edge_name,
         handle_index,
         position,
-        state.corner_rule,
+        (state.corner_rule, state.mirrored_pieces.contains(panel_id)),
     )
     .is_ok()
     {
@@ -456,12 +491,86 @@ pub fn sew_lengths_equal(a_len_m: f64, b_len_m: f64) -> bool {
     (a_len_m - b_len_m).abs() <= 1e-8 * a_len_m.max(b_len_m)
 }
 
+fn picked_sew_boundaries(a: &(String, String), b: &(String, String)) -> [BoundaryRef; 2] {
+    [(a, Side::Right), (b, Side::Left)].map(|((panel, edge), side)| BoundaryRef {
+        panel: panel.clone(),
+        edge: Some(edge.clone()),
+        side,
+        range: [0., 1.],
+        reversed: false,
+    })
+}
+
+pub(in super::super) struct ReflectedSewPreview {
+    pub edges: [(String, String); 2],
+    pub lengths: [f64; 2],
+}
+
+impl ReflectedSewPreview {
+    pub fn length_difference_m(&self) -> Option<f64> {
+        let [a, b] = self.lengths;
+        (!sew_lengths_equal(a, b)).then_some((a - b).abs())
+    }
+}
+
+pub(in super::super) fn reflected_sew_preview(
+    state: &CssRunnerState,
+    a: &(String, String),
+    b: &(String, String),
+    reverse: bool,
+) -> Result<Option<ReflectedSewPreview>, String> {
+    let [a, b] = picked_sew_boundaries(a, b);
+    let seam = SeamSpec {
+        id: String::new(),
+        a,
+        b,
+        a_tail: vec![],
+        b_tail: vec![],
+        reverse_b: reverse,
+        allow_ease: false,
+        notches: vec![],
+        stiffness: 50_000.,
+    };
+    let Some(mate) =
+        authoring::mirrored_seam(&state.project.template, &state.mirrored_pieces, &seam)?
+    else {
+        return Ok(None);
+    };
+    let [Some(a), Some(b)] = [mate.a, mate.b].map(|r| r.edge.map(|edge| (r.panel, edge))) else {
+        return Err("The reflected seam needs named boundaries".into());
+    };
+    let lengths = [
+        sew_boundary_length(state, &a.0, &a.1),
+        sew_boundary_length(state, &b.0, &b.1),
+    ];
+    let [Some(a_len), Some(b_len)] = lengths else {
+        return Err("Could not measure the reflected sewing boundaries".into());
+    };
+    Ok(Some(ReflectedSewPreview {
+        edges: [a, b],
+        lengths: [a_len, b_len],
+    }))
+}
+
 pub(super) fn sew_confirm_prompt(
+    state: &CssRunnerState,
     a: &(String, String),
     b: &(String, String),
     a_len_m: f64,
     b_len_m: f64,
+    reverse: bool,
 ) -> String {
+    match reflected_sew_preview(state, a, b, reverse) {
+        Ok(Some(mate)) => {
+            return if !sew_lengths_equal(a_len_m, b_len_m) || mate.length_difference_m().is_some() {
+                "Choose Sew with easing to confirm both seams, or Escape to cancel".into()
+            } else {
+                "Press Enter or Sew to confirm both seams, or Escape to cancel".into()
+            };
+        }
+        Err(error) => return error,
+        Ok(None) => {}
+    }
     let lengths = format!(
         "Sew {}.{} ({:.1} mm) ↔ {}.{} ({:.1} mm)",
         a.0,
@@ -494,16 +603,33 @@ pub fn confirm_pending_sew(state: &mut CssRunnerState, ease: bool) -> bool {
     else {
         return false;
     };
-    let equal = sew_lengths_equal(a_len_m, b_len_m);
-    if !ease && !equal {
+    let mirrored = match reflected_sew_preview(state, &a, &b, reverse) {
+        Ok(mirrored) => mirrored,
+        Err(error) => {
+            state.status_message = error;
+            return false;
+        }
+    };
+    let original_difference =
+        (!sew_lengths_equal(a_len_m, b_len_m)).then_some((a_len_m - b_len_m).abs());
+    let difference = original_difference.or(mirrored
+        .as_ref()
+        .and_then(ReflectedSewPreview::length_difference_m));
+    if let Some(difference) = difference.filter(|_| !ease) {
         state.status_message = format!(
             "Lengths differ by {:.1} mm: choose Sew with easing to accept the mismatch, or Escape to cancel",
-            (a_len_m - b_len_m).abs() * 1e3
+            difference * 1e3
         );
         return false;
     }
-    state.draft_2d = None;
-    let message = if equal {
+    let equal = difference.is_none();
+    let message = if mirrored.is_some() {
+        if equal {
+            "Sewed selected and reflected boundaries".into()
+        } else {
+            "Sewed selected and reflected boundaries with easing".into()
+        }
+    } else if equal {
         format!("Sewed {}.{} ↔ {}.{}", a.0, a.1, b.0, b.1)
     } else {
         format!(
@@ -515,26 +641,19 @@ pub fn confirm_pending_sew(state: &mut CssRunnerState, ease: bool) -> bool {
             (a_len_m - b_len_m).abs() * 1e3
         )
     };
-    commit_authoring_command(
+    let [a, b] = picked_sew_boundaries(&a, &b);
+    let committed = commit_authoring_command(
         state,
         Command::Sew {
-            a: BoundaryRef {
-                reversed: false,
-                panel: a.0,
-                side: Side::Right,
-                edge: Some(a.1),
-                range: [0.0, 1.0],
-            },
-            b: BoundaryRef {
-                reversed: false,
-                panel: b.0,
-                side: Side::Left,
-                edge: Some(b.1),
-                range: [0.0, 1.0],
-            },
+            a,
+            b,
             reverse,
             ease: ease && !equal,
         },
         message,
-    )
+    );
+    if committed {
+        state.draft_2d = None;
+    }
+    committed
 }

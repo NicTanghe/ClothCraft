@@ -7,7 +7,9 @@ use super::super::board::geometry::{
     screen_to_board_unclamped_m, viewport_3d_rect,
 };
 use super::super::board::hit_testing::{hit_test_2d, measurement_pick};
-use super::super::board::selection::{batch_corners_for_points, effective_selected_points};
+use super::super::board::selection::{
+    batch_corners_for_points, effective_selected_points, point_drag_selection,
+};
 use super::super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::super::editing::{
     commit_authoring_command, default_fabric_id, finish_internal_line_draft, finish_pen_draft,
@@ -266,8 +268,9 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                         };
                                         let a = (first_pid, first_edge);
                                         let b = (pid, edge_name);
-                                        state.status_message =
-                                            sew_confirm_prompt(&a, &b, a_len_m, b_len_m);
+                                        state.status_message = sew_confirm_prompt(
+                                            state, &a, &b, a_len_m, b_len_m, reverse,
+                                        );
                                         state.draft_2d = Some(ToolDraft2d::SewConfirm {
                                             a,
                                             b,
@@ -702,9 +705,11 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                             return true;
                                         }
                                         state.drag_2d = Some(Drag2d::Point {
+                                            points: point_drag_selection(
+                                                state, new_pts, &pid, point_idx,
+                                            ),
                                             panel_id: pid,
                                             point_idx,
-                                            points: new_pts,
                                             start_board_m: board_m,
                                             start_pointer: (px, py),
                                             moved: false,
@@ -841,9 +846,11 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                             )
                                         };
                                         state.drag_2d = Some(Drag2d::Point {
+                                            points: point_drag_selection(
+                                                state, active_pts, &pid, point_idx,
+                                            ),
                                             panel_id: pid,
                                             point_idx,
-                                            points: active_pts,
                                             start_board_m: board_m,
                                             start_pointer: (px, py),
                                             moved: false,
