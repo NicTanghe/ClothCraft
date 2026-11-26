@@ -12,6 +12,9 @@ const READOUT_WIDTH: f32 = 68.0;
 // Keep the editor's range near the subject. The renderer eases toward the
 // full floor footprint with a cubic curve.
 const MAX_STUDIO_SHADOW_COVERAGE: f32 = 0.32;
+const DEFAULT_SOFTNESS: u8 = 40;
+const DEFAULT_SHADOW_FILTER_RADIUS_M: f32 = 0.016;
+const MAX_SHADOW_FILTER_RADIUS_M: f32 = 1.0;
 const RESOLUTIONS: [u32; 4] = [512, 1024, 2048, 4096];
 
 #[derive(Default)]
@@ -58,7 +61,7 @@ pub(in crate::atelier) struct ShadowLevels {
 impl Default for ShadowLevels {
     fn default() -> Self {
         Self {
-            softness: 40,
+            softness: DEFAULT_SOFTNESS,
             strength: 78,
             coverage: 0,
             resolution: 2,
@@ -77,7 +80,9 @@ impl ShadowLevels {
     }
 
     pub(in crate::atelier) fn apply(self, mut settings: UsdShadowSettings) -> UsdShadowSettings {
-        settings.light_radius = self.softness_response(0.4, 0.1);
+        let softness = f32::from(self.softness) / 100.0;
+        let upper = (2.0 * softness - 1.0).max(0.0);
+        settings.light_radius = 0.4 * softness + 0.1 * upper.powi(2);
         settings.strength = f32::from(self.strength) / 100.0;
         settings.coverage = MAX_STUDIO_SHADOW_COVERAGE * (f32::from(self.coverage) / 100.0);
         settings.resolution = RESOLUTIONS[usize::from(self.resolution)];
@@ -85,15 +90,13 @@ impl ShadowLevels {
     }
 
     pub(in crate::atelier) fn filter_radius_m(self) -> f32 {
-        self.softness_response(0.04, 0.12)
-    }
-
-    fn softness_response(self, linear_scale: f32, upper_extension: f32) -> f32 {
         let softness = f32::from(self.softness) / 100.0;
-        // Extend the soft end smoothly while preserving the lower half and
-        // the 40% default.
-        let upper = (2.0 * softness - 1.0).max(0.0);
-        linear_scale * softness + upper_extension * upper.powi(2)
+        // Anchor the power curve at the default radius and give small radii
+        // more room on the slider.
+        let default_softness = f32::from(DEFAULT_SOFTNESS) / 100.0;
+        let exponent =
+            (DEFAULT_SHADOW_FILTER_RADIUS_M / MAX_SHADOW_FILTER_RADIUS_M).log(default_softness);
+        MAX_SHADOW_FILTER_RADIUS_M * softness.powf(exponent)
     }
 }
 

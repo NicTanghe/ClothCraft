@@ -10,9 +10,9 @@ The depth map starts with a close fit around the shadow casters. In Settings →
 3D shadows, Coverage widens the fit a short distance toward the floor
 footprint. The cove walls' height has no effect on the fit. The cove receives
 shadows and stays out of the depth draw. Softness
-adjusts the light radius and caps the filter at up to 16 cm in scene units, so
-coverage and resolution changes preserve the intended blur size. The softer range
-starts above the slider midpoint. Strength controls
+adjusts the light radius and caps the filter at up to 1 m in scene units, so
+coverage and resolution changes preserve the intended blur size. The radius
+follows a power curve for finer control over small values. Strength controls
 how much key light is blocked. Resolution offers 512, 1024, 2048 and 4096 px per
 side for the current session. Settings stays over the viewport so shadow
 changes remain visible while adjusting the controls.

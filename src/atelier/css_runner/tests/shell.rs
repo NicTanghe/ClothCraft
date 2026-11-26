@@ -1091,7 +1091,7 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                         (settings.light_radius - 0.20).abs() < 0.005,
                         "{track:?} {settings:?}"
                     );
-                    assert!((levels.filter_radius_m() - 0.02).abs() <= 0.0005);
+                    assert!((levels.filter_radius_m() - 0.044).abs() <= 0.005);
                     Some(track.x + track.width + 20.0)
                 }
             };
@@ -1110,7 +1110,7 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
         assert_eq!(settings.strength, 0.0);
         assert_eq!(settings.coverage, 0.32);
         assert_eq!(settings.resolution, 4096);
-        assert!((levels.filter_radius_m() - 0.16).abs() < 1e-6);
+        assert_eq!(levels.filter_radius_m(), 1.0);
         assert_eq!(settings.light_radius, 0.5);
         assert!(!app.state().dragging_3d && !app.state().pointer_down);
     }
