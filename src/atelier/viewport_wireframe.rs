@@ -6,6 +6,7 @@
 //! ribbon mesh, which had to be re-authored into the stage on every step.
 
 use super::css_runner::shadow_controls::ShadowLevels;
+use super::placement_gizmo::GizmoRenderer;
 use cssimpler::renderer::gpu::usd::{
     UsdMaterial, UsdRenderer, UsdSurface, Wireframe, WireframeMode, WireframeStyle,
 };
@@ -157,6 +158,7 @@ pub struct RunnerViewport {
     camera: Rc<RefCell<clothcraft::render::Camera>>,
     cube_hover: Rc<Cell<Option<glam::Vec3>>>,
     shadow_levels: Rc<Cell<ShadowLevels>>,
+    gizmo: GizmoRenderer,
 }
 
 impl RunnerViewport {
@@ -167,6 +169,7 @@ impl RunnerViewport {
         camera: Rc<RefCell<clothcraft::render::Camera>>,
         cube_hover: Rc<Cell<Option<glam::Vec3>>>,
         shadow_levels: Rc<Cell<ShadowLevels>>,
+        gizmo: GizmoRenderer,
     ) -> Self {
         Self {
             renderer,
@@ -175,12 +178,14 @@ impl RunnerViewport {
             camera,
             cube_hover,
             shadow_levels,
+            gizmo,
         }
     }
 }
 
 impl GpuViewportRenderer for RunnerViewport {
     fn resize(&mut self, gpu: &GpuContext, info: GpuViewportInfo) -> renderer::Result<()> {
+        self.gizmo.resize(info);
         self.renderer.resize(gpu, info)
     }
     fn event(&mut self, event: &EngineEvent) -> bool {
@@ -227,8 +232,16 @@ impl GpuViewportRenderer for RunnerViewport {
                 ..frame
             },
         )?;
-        self.cube
-            .draw(gpu, frame, &self.camera.borrow(), self.cube_hover.get());
+        let camera = self.camera.borrow();
+        self.gizmo.draw(
+            gpu,
+            GpuViewportFrame {
+                encoder: &mut *frame.encoder,
+                ..frame
+            },
+            &camera,
+        );
+        self.cube.draw(gpu, frame, &camera, self.cube_hover.get());
         Ok(())
     }
 }

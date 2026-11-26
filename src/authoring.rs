@@ -83,6 +83,12 @@ pub enum Command {
         fabric: String,
         replace: bool,
     },
+    SpawnRectangle {
+        size: DVec2,
+        origin: DVec2,
+        fabric: String,
+        placement: Placement,
+    },
     Mirror {
         panel: String,
         axis: MirrorAxis,
@@ -1905,6 +1911,26 @@ pub fn apply_with_piece_mirroring(
                 fabric,
                 replace,
             )?);
+        }
+        Command::SpawnRectangle {
+            size,
+            origin,
+            fabric,
+            placement,
+        } => {
+            let polygon = crate::garment::shapes::primitive(
+                Primitive::Rectangle,
+                size,
+                360.0,
+                MeshingSettings::default(),
+            )?;
+            let id = geometry::add_polygon(&mut template, polygon, origin, fabric, false)?;
+            template
+                .panels
+                .last_mut()
+                .expect("just added panel")
+                .placement = placement;
+            selected = Some(id);
         }
         Command::Mirror {
             panel,
