@@ -7,8 +7,9 @@ directional fill. A 2048² depth map and a contact-hardening filter keep shadow
 edges tighter near contact and widen them farther from the caster. Meshes and
 the infinity cove receive these shadows on devices with sampled-depth support.
 The depth map starts with a close fit around the shadow casters. In Settings →
-3D shadows, Coverage adds up to 3 m to the fitted width and height in light
-space. The cove receives shadows and stays out of the depth draw. Softness
+3D shadows, Coverage widens the fit a short distance toward the floor
+footprint. The cove walls' height has no effect on the fit. The cove receives
+shadows and stays out of the depth draw. Softness
 adjusts the light radius and the filter cap from hard to soft. Strength controls
 how much key light is blocked. Resolution offers 512, 1024, 2048 and 4096 px per
 side for the current session. Settings stays over the viewport so shadow

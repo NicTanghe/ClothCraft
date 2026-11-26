@@ -9,7 +9,9 @@ use cssimpler::ui;
 const LABEL_WIDTH: f32 = 82.0;
 const GROUP_WIDTH: f32 = 260.0;
 const READOUT_WIDTH: f32 = 68.0;
-const COVERAGE_MAX_M: f32 = 3.0;
+// Keep the editor's range near the subject. The renderer eases toward the
+// full floor footprint with a cubic curve.
+const MAX_STUDIO_SHADOW_COVERAGE: f32 = 0.32;
 const RESOLUTIONS: [u32; 4] = [512, 1024, 2048, 4096];
 
 #[derive(Default)]
@@ -80,8 +82,7 @@ impl ShadowLevels {
         // Even where the penumbra hits the texel cap, softness changes its size.
         settings.filter_radius = (64.0 * softness).round() as u32;
         settings.strength = f32::from(self.strength) / 100.0;
-        settings.coverage = 0.0;
-        settings.coverage_expansion = COVERAGE_MAX_M * f32::from(self.coverage) / 100.0;
+        settings.coverage = MAX_STUDIO_SHADOW_COVERAGE * (f32::from(self.coverage) / 100.0);
         settings.resolution = RESOLUTIONS[usize::from(self.resolution)];
         settings
     }
@@ -130,9 +131,6 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
         thumb_style.layout.calc.inset_left = Some(LengthPercentageCalc::new(0.0, filled - 4.0));
         let value_text = match (control, value) {
             (ShadowControl::Coverage, 0) => "Close fit".to_owned(),
-            (ShadowControl::Coverage, _) => {
-                format!("+{:.2} m", COVERAGE_MAX_M * f32::from(value) / 100.0)
-            }
             (ShadowControl::Resolution, _) => format!("{} px", RESOLUTIONS[usize::from(value)]),
             _ => format!("{value}%"),
         };

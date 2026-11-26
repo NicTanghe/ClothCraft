@@ -999,7 +999,7 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
         .viewport_shadow_levels
         .get()
         .apply(UsdShadowSettings::default());
-    assert_eq!(defaults.coverage_expansion, 0.0);
+    assert_eq!(defaults.coverage, 0.0);
     assert_eq!(defaults.resolution, 2048);
 
     for (width, height, mode, clean_view) in [
@@ -1077,10 +1077,9 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                 }
                 "shadow-coverage-slider" => {
                     assert!(
-                        (settings.coverage_expansion - 1.50).abs() <= 0.031,
+                        (settings.coverage - 0.16).abs() <= 0.0033,
                         "{track:?} {settings:?}"
                     );
-                    assert_eq!(settings.coverage, 0.0);
                     Some(track.x + track.width + 20.0)
                 }
                 "shadow-resolution-slider" => {
@@ -1107,7 +1106,7 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
         }
         let settings = app.state().viewport_shadow_levels.get().apply(defaults);
         assert_eq!(settings.strength, 0.0);
-        assert_eq!(settings.coverage_expansion, 3.0);
+        assert_eq!(settings.coverage, 0.32);
         assert_eq!(settings.resolution, 4096);
         assert!((settings.filter_radius as i32 - 32).abs() <= 1);
         assert!((settings.light_radius - 0.20).abs() < 0.005);
