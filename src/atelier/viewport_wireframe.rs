@@ -189,7 +189,10 @@ impl GpuViewportRenderer for RunnerViewport {
     fn render(&mut self, gpu: &GpuContext, frame: GpuViewportFrame<'_>) -> renderer::Result<()> {
         self.sync.sync(&mut self.renderer);
         if let Some(settings) = self.renderer.shadow_settings() {
-            let updated = self.shadow_levels.get().apply(settings);
+            let levels = self.shadow_levels.get();
+            self.renderer
+                .set_shadow_filter_radius_in_stage_units(Some(levels.filter_radius_m()))?;
+            let updated = levels.apply(settings);
             if settings != updated {
                 self.renderer.set_shadow_settings(updated)?;
             }

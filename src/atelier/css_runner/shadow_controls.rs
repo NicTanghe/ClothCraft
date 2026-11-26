@@ -12,6 +12,7 @@ const READOUT_WIDTH: f32 = 68.0;
 // Keep the editor's range near the subject. The renderer eases toward the
 // full floor footprint with a cubic curve.
 const MAX_STUDIO_SHADOW_COVERAGE: f32 = 0.32;
+const MAX_SHADOW_FILTER_RADIUS_M: f32 = 0.04;
 const RESOLUTIONS: [u32; 4] = [512, 1024, 2048, 4096];
 
 #[derive(Default)]
@@ -79,12 +80,14 @@ impl ShadowLevels {
     pub(in crate::atelier) fn apply(self, mut settings: UsdShadowSettings) -> UsdShadowSettings {
         let softness = f32::from(self.softness) / 100.0;
         settings.light_radius = 0.4 * softness;
-        // Even where the penumbra hits the texel cap, softness changes its size.
-        settings.filter_radius = (64.0 * softness).round() as u32;
         settings.strength = f32::from(self.strength) / 100.0;
         settings.coverage = MAX_STUDIO_SHADOW_COVERAGE * (f32::from(self.coverage) / 100.0);
         settings.resolution = RESOLUTIONS[usize::from(self.resolution)];
         settings
+    }
+
+    pub(in crate::atelier) fn filter_radius_m(self) -> f32 {
+        MAX_SHADOW_FILTER_RADIUS_M * (f32::from(self.softness) / 100.0)
     }
 }
 

@@ -1104,11 +1104,12 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
             }
             assert!(handle_runner_event(app.state_mut(), &pointer_btn_ev(false)));
         }
-        let settings = app.state().viewport_shadow_levels.get().apply(defaults);
+        let levels = app.state().viewport_shadow_levels.get();
+        let settings = levels.apply(defaults);
         assert_eq!(settings.strength, 0.0);
         assert_eq!(settings.coverage, 0.32);
         assert_eq!(settings.resolution, 4096);
-        assert!((settings.filter_radius as i32 - 32).abs() <= 1);
+        assert!((levels.filter_radius_m() - 0.02).abs() <= 0.0004);
         assert!((settings.light_radius - 0.20).abs() < 0.005);
         assert!(!app.state().dragging_3d && !app.state().pointer_down);
     }
