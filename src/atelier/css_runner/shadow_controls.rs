@@ -7,7 +7,15 @@ use cssimpler::renderer::{ButtonState, EngineEvent, KeyIdentity, PointerButton};
 use cssimpler::ui;
 
 const LABEL_WIDTH: f32 = 82.0;
-const MAX_WIDTH: f32 = 260.0;
+const GROUP_WIDTH: f32 = 260.0;
+const READOUT_WIDTH: f32 = 68.0;
+// Keep the editor's range near the subject. The renderer eases toward the
+// full floor footprint with a cubic curve.
+const MAX_STUDIO_SHADOW_COVERAGE: f32 = 0.32;
+const DEFAULT_SOFTNESS: u8 = 40;
+const DEFAULT_SHADOW_FILTER_RADIUS_M: f32 = 0.016;
+const MAX_SHADOW_FILTER_RADIUS_M: f32 = 1.0;
+const RESOLUTIONS: [u32; 4] = [512, 1024, 2048, 4096];
 
 #[derive(Default)]
 pub(super) struct ShadowInput {
@@ -26,8 +34,11 @@ struct ShadowDrag {
 
 impl ShadowDrag {
     fn apply(self, state: &CssRunnerState, x: f32) -> bool {
-        let percent = ((x - self.left) / self.width * 100.0).clamp(0.0, 100.0);
-        self.control.set(state, percent.round() as u8)
+        let fraction = ((x - self.left) / self.width).clamp(0.0, 1.0);
+        self.control.set(
+            state,
+            (fraction * f32::from(self.control.max())).round() as u8,
+        )
     }
 }
 
@@ -36,6 +47,7 @@ pub(super) enum ShadowControl {
     Softness,
     Strength,
     Coverage,
+    Resolution,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,14 +55,16 @@ pub(in crate::atelier) struct ShadowLevels {
     softness: u8,
     strength: u8,
     coverage: u8,
+    resolution: u8,
 }
 
 impl Default for ShadowLevels {
     fn default() -> Self {
         Self {
-            softness: 40,
+            softness: DEFAULT_SOFTNESS,
             strength: 78,
             coverage: 0,
+            resolution: 2,
         }
     }
 }
@@ -61,30 +75,46 @@ impl ShadowLevels {
             ShadowControl::Softness => self.softness,
             ShadowControl::Strength => self.strength,
             ShadowControl::Coverage => self.coverage,
+            ShadowControl::Resolution => self.resolution,
         }
     }
 
     pub(in crate::atelier) fn apply(self, mut settings: UsdShadowSettings) -> UsdShadowSettings {
         let softness = f32::from(self.softness) / 100.0;
-        settings.light_radius = 0.4 * softness;
-        settings.filter_radius = if self.softness == 0 {
-            0
-        } else {
-            (24.0 + 60.0 * softness).round().min(64.0) as u32
-        };
+        let upper = (2.0 * softness - 1.0).max(0.0);
+        settings.light_radius = 0.4 * softness + 0.1 * upper.powi(2);
         settings.strength = f32::from(self.strength) / 100.0;
-        settings.coverage = f32::from(self.coverage) / 100.0;
+        settings.coverage = MAX_STUDIO_SHADOW_COVERAGE * (f32::from(self.coverage) / 100.0);
+        settings.resolution = RESOLUTIONS[usize::from(self.resolution)];
         settings
+    }
+
+    pub(in crate::atelier) fn filter_radius_m(self) -> f32 {
+        let softness = f32::from(self.softness) / 100.0;
+        // Anchor the power curve at the default radius and give small radii
+        // more room on the slider.
+        let default_softness = f32::from(DEFAULT_SOFTNESS) / 100.0;
+        let exponent =
+            (DEFAULT_SHADOW_FILTER_RADIUS_M / MAX_SHADOW_FILTER_RADIUS_M).log(default_softness);
+        MAX_SHADOW_FILTER_RADIUS_M * softness.powf(exponent)
     }
 }
 
 impl ShadowControl {
+    fn max(self) -> u8 {
+        match self {
+            Self::Resolution => (RESOLUTIONS.len() - 1) as u8,
+            _ => 100,
+        }
+    }
+
     fn set(self, state: &CssRunnerState, value: u8) -> bool {
         let mut levels = state.viewport_shadow_levels.get();
         match self {
             Self::Softness => levels.softness = value,
             Self::Strength => levels.strength = value,
             Self::Coverage => levels.coverage = value,
+            Self::Resolution => levels.resolution = value,
         }
         let changed = state.viewport_shadow_levels.replace(levels) != levels;
         if changed {
@@ -97,13 +127,14 @@ impl ShadowControl {
 pub(super) fn build(state: &CssRunnerState) -> Node {
     let supported = state.viewport_shadow_supported.get();
     let panel_width = state.window_size.0;
-    let group_width = (panel_width * 0.90 - 34.0).clamp(LABEL_WIDTH + 8.0, MAX_WIDTH);
+    let group_width =
+        (panel_width * 0.90 - 34.0).clamp(LABEL_WIDTH + READOUT_WIDTH + 8.0, GROUP_WIDTH);
     let left = (panel_width - group_width) * 0.5 + LABEL_WIDTH;
-    let width = group_width - LABEL_WIDTH;
+    let width = group_width - LABEL_WIDTH - READOUT_WIDTH;
     let focus = state.shadow_input.lock().unwrap().focus;
     let row = |control: ShadowControl, id: &str, label: &str| {
         let value = state.viewport_shadow_levels.get().value(control);
-        let filled = width * f32::from(value) / 100.0;
+        let filled = width * f32::from(value) / f32::from(control.max());
         let mut track_style = Style::default();
         track_style.layout.calc.width = Some(LengthPercentageCalc::new(0.0, width));
         let mut fill_style = Style::default();
@@ -112,8 +143,7 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
         thumb_style.layout.calc.inset_left = Some(LengthPercentageCalc::new(0.0, filled - 4.0));
         let value_text = match (control, value) {
             (ShadowControl::Coverage, 0) => "Close fit".to_owned(),
-            (ShadowControl::Coverage, 100) => "Full cove".to_owned(),
-            (ShadowControl::Coverage, _) => format!("{value}% toward full cove"),
+            (ShadowControl::Resolution, _) => format!("{} px", RESOLUTIONS[usize::from(value)]),
             _ => format!("{value}%"),
         };
         let title = if supported {
@@ -136,9 +166,9 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
             .with_attribute("role", "slider")
             .with_attribute("aria-label", label)
             .with_attribute("aria-valuemin", "0")
-            .with_attribute("aria-valuemax", "100")
+            .with_attribute("aria-valuemax", control.max().to_string())
             .with_attribute("aria-valuenow", value.to_string())
-            .with_attribute("aria-valuetext", value_text)
+            .with_attribute("aria-valuetext", value_text.clone())
             .on_mousedown_shared(move || {
                 let mut input = pointer.lock().unwrap();
                 if supported && input.primary_pressed {
@@ -170,6 +200,7 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
             <div class="settings-shadow-row">
                 <span class="settings-shadow-label">{label}</span>
                 {track}
+                <span class="settings-shadow-readout">{value_text}</span>
             </div>
         }
     };
@@ -199,6 +230,11 @@ pub(super) fn build(state: &CssRunnerState) -> Node {
                 ShadowControl::Coverage,
                 "shadow-coverage-slider",
                 "Coverage",
+            ),
+            row(
+                ShadowControl::Resolution,
+                "shadow-resolution-slider",
+                "Resolution",
             ),
         ])
         .into()
@@ -263,9 +299,9 @@ pub(super) fn handle_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
                 let current = state.viewport_shadow_levels.get().value(control);
                 let value = match key.as_str() {
                     "ArrowLeft" | "ArrowDown" => current.saturating_sub(1),
-                    "ArrowRight" | "ArrowUp" => current.saturating_add(1).min(100),
+                    "ArrowRight" | "ArrowUp" => current.saturating_add(1).min(control.max()),
                     "Home" => 0,
-                    "End" => 100,
+                    "End" => control.max(),
                     _ => return false,
                 };
                 control.set(state, value);
