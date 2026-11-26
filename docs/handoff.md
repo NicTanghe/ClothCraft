@@ -3,9 +3,10 @@
 ## cssimpler studio viewport preview
 
 The native 3D viewport uses a slightly warm shadow-casting key and a cool
-directional fill. A 2048² depth map and a contact-hardening filter keep shadow
-edges tighter near contact and widen them farther from the caster. Meshes and
-the infinity cove receive these shadows on devices with sampled-depth support.
+directional fill. The default 512² depth map uses a contact-hardening filter
+that keeps shadow edges tighter near contact and widens them farther from the
+caster. Meshes and the infinity cove receive these shadows on devices with
+sampled-depth support.
 The depth map starts with a close fit around the shadow casters. In Settings →
 3D shadows, Coverage widens the fit a short distance toward the floor
 footprint. The cove walls' height has no effect on the fit. The cove receives

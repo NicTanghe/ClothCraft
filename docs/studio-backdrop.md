@@ -39,7 +39,7 @@ or reloading the scene.
 ## Rendering limits
 
 The cove receives the studio key's shadows on devices with sampled-depth
-support. The 2048×2048 map fits the casters in light space by default. Settings
+support. The 512×512 map fits the casters in light space by default. Settings
 → 3D shadows → Coverage widens that fit within a small range near the
 subject. Expansion follows the floor footprint, independent of the cove walls'
 height. Resolution controls the

@@ -997,7 +997,7 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
     let default_levels = app.state().viewport_shadow_levels.get();
     let defaults = default_levels.apply(UsdShadowSettings::default());
     assert_eq!(defaults.coverage, 0.0);
-    assert_eq!(defaults.resolution, 2048);
+    assert_eq!(defaults.resolution, 512);
     assert!((defaults.light_radius - 0.16).abs() < 1e-6);
     assert!((default_levels.filter_radius_m() - 0.016).abs() < 1e-6);
 

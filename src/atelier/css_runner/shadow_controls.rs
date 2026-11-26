@@ -64,7 +64,7 @@ impl Default for ShadowLevels {
             softness: DEFAULT_SOFTNESS,
             strength: 78,
             coverage: 0,
-            resolution: 2,
+            resolution: 0,
         }
     }
 }
