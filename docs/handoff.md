@@ -3,13 +3,20 @@
 ## cssimpler studio viewport preview
 
 The native 3D viewport uses a slightly warm shadow-casting key and a cool
-directional fill. A 2048² depth map and a contact-hardening filter keep shadow
-edges tighter near contact and widen them farther from the caster. Meshes and
-the infinity cove receive these shadows on devices with sampled-depth support.
+directional fill. The default 512² depth map uses a contact-hardening filter
+that keeps shadow edges tighter near contact and widens them farther from the
+caster. Meshes and the infinity cove receive these shadows on devices with
+sampled-depth support.
 The depth map starts with a close fit around the shadow casters. In Settings →
-3D shadows, Coverage expands that region up to the entire infinity cove. The
-cove receives shadows and stays out of the depth draw. Softness and Strength
-control the penumbra and blocked key light independently for the current session.
+3D shadows, Coverage widens the fit a short distance toward the floor
+footprint. The cove walls' height has no effect on the fit. The cove receives
+shadows and stays out of the depth draw. Softness
+adjusts the light radius and caps the filter at up to 1 m in scene units, so
+coverage and resolution changes preserve the intended blur size. The radius
+follows a power curve for finer control over small values. Strength controls
+how much key light is blocked. Resolution offers 512, 1024, 2048 and 4096 px per
+side for the current session. Settings stays over the viewport so shadow
+changes remain visible while adjusting the controls.
 Devices without sampled-depth support keep the original lighting and cove.
 
 Garment panel meshes preview a fine fabric weave using their USD display

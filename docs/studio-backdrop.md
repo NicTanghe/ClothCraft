@@ -39,10 +39,13 @@ or reloading the scene.
 ## Rendering limits
 
 The cove receives the studio key's shadows on devices with sampled-depth
-support. The 2048×2048 map fits the casters in light space by default. Settings
-→ 3D shadows → Coverage widens that fit up to the entire cove. Wider coverage
-spreads the same texels over more space and softens fine shadow detail. The
-cove stays out of the depth pass at all settings. The sidewall fade described
+support. The 512×512 map fits the casters in light space by default. Settings
+→ 3D shadows → Coverage widens that fit within a small range near the
+subject. Expansion follows the floor footprint, independent of the cove walls'
+height. Resolution controls the
+number of pixels per side. Wider coverage spreads the texels over more space
+and softens fine shadow detail. The cove stays out of the depth pass at all
+settings. The sidewall fade described
 in issue #68 would require per-mesh opacity and remains deferred.
 
 Tests in `tests/usd_scene.rs` cover the cove bounds, topology and normals, the

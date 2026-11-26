@@ -2130,6 +2130,14 @@ button {
   color: var(--text-muted);
 }
 
+.settings-shadow-readout {
+  width: 68px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 .settings-shadow-track {
   position: relative;
   height: 14px;

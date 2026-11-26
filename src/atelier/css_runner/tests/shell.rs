@@ -957,6 +957,7 @@ fn view_cube_clicks_use_native_viewport_coordinates() {
 fn shadow_sliders_live_in_settings_and_update_independently() {
     use super::super::input::handle_runner_event;
     use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
+    use clothcraft::css_ui::ViewLayoutMode;
     use cssimpler::core::RenderNode;
     use cssimpler::renderer::{
         EngineEvent, SceneProvider, ViewportEvent, ViewportSize, gpu::usd::UsdShadowSettings,
@@ -993,16 +994,19 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
         app.find_element_bounds_by_id("#shadow-softness-slider")
             .is_none()
     );
-    assert_eq!(
-        app.state()
-            .viewport_shadow_levels
-            .get()
-            .apply(UsdShadowSettings::default())
-            .coverage,
-        0.0
-    );
+    let default_levels = app.state().viewport_shadow_levels.get();
+    let defaults = default_levels.apply(UsdShadowSettings::default());
+    assert_eq!(defaults.coverage, 0.0);
+    assert_eq!(defaults.resolution, 512);
+    assert!((defaults.light_radius - 0.16).abs() < 1e-6);
+    assert!((default_levels.filter_radius_m() - 0.016).abs() < 1e-6);
 
-    for (width, height) in [(1600, 980), (1024, 768), (800, 600)] {
+    for (width, height, mode, clean_view) in [
+        (1600, 980, ViewLayoutMode::Split, false),
+        (1024, 768, ViewLayoutMode::ThreeDOnly, false),
+        (800, 600, ViewLayoutMode::Split, false),
+        (800, 600, ViewLayoutMode::ThreeDOnly, true),
+    ] {
         app.set_viewport(ViewportSize::new(width, height));
         handle_runner_event(
             app.state_mut(),
@@ -1012,27 +1016,46 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                 scale_factor: 1.0,
             }),
         );
+        let state = app.state_mut();
+        state.layout_mode = mode;
+        state.clean_view = clean_view;
+        state.settings_open = false;
+        app.invalidate(cssimpler::app::Invalidation::Structure);
+        app.frame(frame);
+        let viewport = app
+            .find_element_bounds_by_id("#runner-viewport-3d-scene")
+            .unwrap();
+        assert!(viewport.width > 0.0);
         app.state_mut().settings_open = true;
         app.invalidate(cssimpler::app::Invalidation::Structure);
         app.frame(frame);
         let panel = app.find_element_bounds_by_id("#settings-panel").unwrap();
-
-        let defaults = || UsdShadowSettings {
-            resolution: 2048,
-            ..Default::default()
-        };
+        assert_eq!(
+            app.find_element_bounds_by_id("#runner-viewport-3d-scene"),
+            Some(viewport)
+        );
+        let backdrop = app.find_element_bounds_by_id("#settings-backdrop").unwrap();
+        assert!(
+            backdrop.x <= viewport.x && backdrop.x + backdrop.width >= viewport.x + viewport.width
+        );
         for id in [
             "shadow-softness-slider",
             "shadow-strength-slider",
             "shadow-coverage-slider",
+            "shadow-resolution-slider",
         ] {
             let track = node(app.scene(), id).unwrap().layout;
             assert!(track.x >= panel.x && track.x + track.width <= panel.x + panel.width);
             assert!(track.y >= panel.y && track.y + track.height <= panel.y + panel.height);
             let y = track.y + track.height / 2.0;
+            let fraction = if id == "shadow-resolution-slider" {
+                2.0 / 3.0
+            } else {
+                0.5
+            };
             handle_runner_event(
                 app.state_mut(),
-                &pointer_move_ev(track.x + track.width * 0.5, y),
+                &pointer_move_ev(track.x + track.width * fraction, y),
             );
             handle_runner_event(app.state_mut(), &pointer_btn_ev(true));
             while updates.try_recv().is_ok() {}
@@ -1042,7 +1065,8 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                 "slider press should wake the paused editor"
             );
             app.frame(frame);
-            let settings = app.state().viewport_shadow_levels.get().apply(defaults());
+            let levels = app.state().viewport_shadow_levels.get();
+            let settings = levels.apply(defaults);
             let drag_x = match id {
                 "shadow-strength-slider" => {
                     assert!(
@@ -1053,9 +1077,13 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                 }
                 "shadow-coverage-slider" => {
                     assert!(
-                        (settings.coverage - 0.50).abs() <= 0.01,
+                        (settings.coverage - 0.16).abs() <= 0.0033,
                         "{track:?} {settings:?}"
                     );
+                    Some(track.x + track.width + 20.0)
+                }
+                "shadow-resolution-slider" => {
+                    assert_eq!(settings.resolution, 2048);
                     Some(track.x + track.width + 20.0)
                 }
                 _ => {
@@ -1063,7 +1091,8 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
                         (settings.light_radius - 0.20).abs() < 0.005,
                         "{track:?} {settings:?}"
                     );
-                    None
+                    assert!((levels.filter_radius_m() - 0.044).abs() <= 0.005);
+                    Some(track.x + track.width + 20.0)
                 }
             };
             if let Some(x) = drag_x {
@@ -1076,10 +1105,13 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
             }
             assert!(handle_runner_event(app.state_mut(), &pointer_btn_ev(false)));
         }
-        let settings = app.state().viewport_shadow_levels.get().apply(defaults());
+        let levels = app.state().viewport_shadow_levels.get();
+        let settings = levels.apply(defaults);
         assert_eq!(settings.strength, 0.0);
-        assert_eq!(settings.coverage, 1.0);
-        assert!((settings.light_radius - 0.20).abs() < 0.005);
+        assert_eq!(settings.coverage, 0.32);
+        assert_eq!(settings.resolution, 4096);
+        assert_eq!(levels.filter_radius_m(), 1.0);
+        assert_eq!(settings.light_radius, 0.5);
         assert!(!app.state().dragging_3d && !app.state().pointer_down);
     }
 }

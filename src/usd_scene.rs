@@ -899,8 +899,8 @@ fn infinity_cove_geometry() -> (crate::avatar::SurfaceMesh, Vec<glam::DVec3>) {
     )
 }
 
-/// Append the display-only studio cove. It receives shadows and contributes
-/// to the full-coverage fit. The depth pass draws only the casters.
+/// Append the display-only studio cove. It receives shadows while the depth
+/// pass draws only the casters.
 pub fn append_infinity_cove(mut usda: String, theme: StudioBackdropTheme) -> String {
     let (mesh, normals) = infinity_cove_geometry();
     let [r, g, b] = theme.cove_color();

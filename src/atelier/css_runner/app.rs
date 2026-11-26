@@ -95,10 +95,7 @@ pub fn create_runner_app<'a>(
                     fill_tint: [0.84, 0.94, 1.08],
                     ambient: 0.24,
                     floor: false,
-                    shadows: Some(shadow_levels.get().apply(UsdShadowSettings {
-                        resolution: 2048,
-                        ..UsdShadowSettings::default()
-                    })),
+                    shadows: Some(shadow_levels.get().apply(UsdShadowSettings::default())),
                     ..UsdStudioLighting::default()
                 }))?;
             }
