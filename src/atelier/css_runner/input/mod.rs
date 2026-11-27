@@ -87,6 +87,7 @@ fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     }
     if number::handle_number_event(state, event)
         || super::shadow_controls::handle_event(state, event)
+        || super::gizmo::handle_event(state, event)
     {
         return true;
     }

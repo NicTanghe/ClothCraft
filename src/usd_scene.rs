@@ -714,7 +714,7 @@ pub fn update_panel_viewport_mesh(
     state: &State,
     mode: ShadingMode,
 ) -> Result<(), String> {
-    use cssimpler::renderer::gpu::openusd::gf;
+    use cssimpler::renderer::gpu::openusd::{gf, sdf, usda::parser::Parser};
     if state.x.len() != garment.mesh.uv.len() {
         return Err("USD mesh sync requires matching state and UV vertex counts".into());
     }
@@ -731,6 +731,45 @@ pub fn update_panel_viewport_mesh(
         return Err("USD display positions and UVs must be finite f32 values".into());
     }
     let stage = scene.stage();
+    let scope = sdf::Path::new(VIEWPORT_GARMENT_PATH).map_err(|e| e.to_string())?;
+    let children = stage
+        .prim(&scope)
+        .map_err(|e| e.to_string())?
+        .children()
+        .map_err(|e| e.to_string())?;
+    let existing: BTreeSet<_> = children.iter().map(|prim| prim.path().clone()).collect();
+    let expected = garment
+        .panels
+        .iter()
+        .map(|panel| sdf::Path::new(&viewport_panel_path(&panel.id)))
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    if existing != expected {
+        // The anonymous display stage outlives the authoring model. Publish
+        // new panel specs and remove stale ones without touching the studio.
+        let snapshot = garment_stage_usda(garment, state)?;
+        let specs = Parser::new(&snapshot).parse().map_err(|e| e.to_string())?;
+        let additions: Vec<_> = expected.difference(&existing).collect();
+        let root = stage.root_layer().identifier().to_owned();
+        stage
+            .batch_edit(&[&root], |layers| {
+                for path in existing.difference(&expected) {
+                    layers[0].remove_spec(path)?;
+                }
+                let data = layers[0].data_mut();
+                for (path, spec) in specs {
+                    // The scope spec carries the new ordered child-name list.
+                    if path == scope || additions.iter().any(|added| path.has_prefix(added)) {
+                        data.create_spec(path.clone(), spec.ty);
+                        for (name, value) in spec.fields {
+                            data.set_field(&path, &name, value);
+                        }
+                    }
+                }
+                Ok(())
+            })
+            .map_err(|error| error.to_string())?;
+    }
     for panel in &garment.panels {
         let path = viewport_panel_path(&panel.id);
         let counts = vec![3_i32; panel.triangles.len()];
@@ -1064,6 +1103,14 @@ pub fn default_scene_camera(
 }
 
 #[cfg(feature = "desktop")]
+const VIEWPORT_CAMERA_FOCAL_LENGTH: f32 = 35.0;
+#[cfg(feature = "desktop")]
+const VIEWPORT_CAMERA_VERTICAL_APERTURE: f32 = 24.0;
+#[cfg(feature = "desktop")]
+pub const VIEWPORT_CAMERA_HALF_TAN: f32 =
+    VIEWPORT_CAMERA_VERTICAL_APERTURE / (2.0 * VIEWPORT_CAMERA_FOCAL_LENGTH);
+
+#[cfg(feature = "desktop")]
 pub fn init_viewport_camera(
     scene: &cssimpler::renderer::gpu::usd::UsdScene,
     camera: &crate::render::Camera,
@@ -1075,11 +1122,11 @@ pub fn init_viewport_camera(
     let cam = geom::Camera::define(stage, &path).map_err(|e| e.to_string())?;
     cam.create_focal_length_attr()
         .map_err(|e| e.to_string())?
-        .set(35.0_f32)
+        .set(VIEWPORT_CAMERA_FOCAL_LENGTH)
         .map_err(|e| e.to_string())?;
     cam.create_vertical_aperture_attr()
         .map_err(|e| e.to_string())?
-        .set(24.0_f32)
+        .set(VIEWPORT_CAMERA_VERTICAL_APERTURE)
         .map_err(|e| e.to_string())?;
     cam.create_horizontal_aperture_attr()
         .map_err(|e| e.to_string())?

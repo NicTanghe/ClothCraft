@@ -1,5 +1,24 @@
 # Unified pattern workspace
 
+## Native 3D placement
+
+Click **Add Piece** above the 3D view to create a 250 × 250 mm rectangle
+facing the camera. It is selected in both viewports and its handles appear.
+For an existing piece, turn on **Gizmo** in the 3D tool rail and click the
+cloth or select it on the 2D board.
+
+The button in the top-left of the 3D canvas switches between **Move** arrows
+and **Rotate** rings. Drag a coloured axis to place the piece. Hold Shift to
+snap to 10 mm or 15° increments. Release to commit one undoable edit, or press
+Escape to restore the original pose. Drag elsewhere in the canvas to orbit.
+
+Placement pauses playback and returns an edited piece to its flat arrangement
+around the displayed handle. The piece keeps its material dimensions in both
+views, and other pieces keep their drape. Release authored pins before
+arranging a held piece.
+
+## Earlier workspace controls
+
 **Group 3D placement:** use Place mode for shared-pivot transforms and visible
 or Alt-through box selection. Read [group placement](group-placement.md) for
 the flat-arrangement reset policy, cancellation and visibility limits.

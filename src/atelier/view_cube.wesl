@@ -1,3 +1,5 @@
+import package::overlay_antialias::subpixel_offset;
+
 struct FacePaint {
     origin_and_u: vec4<f32>,
     v_and_glyph_right: vec4<f32>,
@@ -15,7 +17,7 @@ struct CubePaint {
 @group(0) @binding(0) var<uniform> paint: CubePaint;
 
 @vertex
-fn vertex(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+fn cube_vertex(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
     let corners = array(
         vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(1.0, 1.0),
         vec2(0.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0),
@@ -73,14 +75,15 @@ fn sample_cube(position: vec2<f32>) -> vec4<f32> {
 }
 
 @fragment
-fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+fn cube_fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     // Sample the whole cube together so adjacent faces share edge coverage.
+    const samples_per_axis = 4u;
     var colour = vec4(0.0);
-    for (var y = 0u; y < 4u; y++) {
-        for (var x = 0u; x < 4u; x++) {
-            let offset = vec2(f32(x), f32(y)) * 0.25 - vec2(0.375);
+    for (var y = 0u; y < samples_per_axis; y++) {
+        for (var x = 0u; x < samples_per_axis; x++) {
+            let offset = subpixel_offset(vec2(x, y), samples_per_axis);
             colour += sample_cube(position.xy + offset);
         }
     }
-    return colour / 16.0;
+    return colour / f32(samples_per_axis * samples_per_axis);
 }

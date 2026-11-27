@@ -64,6 +64,7 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
                     <span class="viewport-sub">"USD native 3D viewport (VBD + OGC)"</span>
                 </div>
                 <div class="viewport-tools">
+                    <button id="add-viewport-piece" class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::AddViewportPiece)} title="Add a rectangular pattern piece in front of the camera">"Add Piece"</button>
                     <button id="wireframe-toggle" class={wire_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleWireframe)} title={wire_title}>{wire_icon}</button>
                     <button id="shading-toggle" class="viewport-tool-btn icon-only" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleShading)} title={shading_title}>{shading_icon}</button>
                 </div>

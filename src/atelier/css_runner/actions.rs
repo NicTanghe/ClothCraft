@@ -56,6 +56,7 @@ pub enum RunnerAction {
     CamReset,
     ToggleBodyOutline,
     PieceNext,
+    AddViewportPiece,
     ToolSelect,
     ToolSew,
     ToolMeasure,
@@ -244,6 +245,9 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
     let has_accordion_action = batch
         .iter()
         .any(|action| matches!(action, RunnerAction::Accordion(_)));
+    if had_actions {
+        super::gizmo::cancel(state);
+    }
     for action in batch.drain(..) {
         apply_runner_action(state, action, has_accordion_action);
     }
@@ -264,6 +268,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
 
     let shadow_changed = super::shadow_controls::tick(state);
     state.sync_view_cube_hover();
+    super::gizmo::sync(state);
     let preferences_status_changed = state.flush_preferences(false);
 
     if number_changed
@@ -342,9 +347,21 @@ pub(super) fn apply_runner_action(
             let count = state.project.template.panels.len().max(1);
             state.selected_piece_index = (state.selected_piece_index + 1) % count;
         }
-        RunnerAction::ToolGizmo | RunnerAction::ToolSelect => {
+        RunnerAction::AddViewportPiece => super::gizmo::spawn_rectangle(state),
+        RunnerAction::ToolGizmo => {
+            let was_enabled = state.gizmo.enabled && state.active_3d_tool == "Gizmo";
+            state.gizmo.enabled = !was_enabled;
             state.active_3d_tool = "Gizmo".to_string();
-            state.status_message = "3D Tool: Gizmo — drag 3D viewport to orbit".to_string();
+            state.status_message = if state.gizmo.enabled {
+                "Click cloth to select · drag an axis · toggle Move/Rotate in the viewport".into()
+            } else {
+                "Placement handles hidden".into()
+            };
+        }
+        RunnerAction::ToolSelect => {
+            state.gizmo.enabled = false;
+            state.active_3d_tool = "Gizmo".to_string();
+            state.status_message = "Drag the 3D viewport to orbit".into();
         }
         RunnerAction::ToolGrab => {
             state.active_3d_tool = "Grab".to_string();
