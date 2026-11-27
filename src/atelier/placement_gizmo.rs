@@ -189,36 +189,60 @@ pub fn pick(projection: Projection, mode: Mode, pivot: Vec3, pointer: Vec2) -> O
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
     position: [f32; 2],
+    local: [f32; 2],
+    dimensions: [f32; 4],
     colour: [f32; 4],
 }
 
 struct Paint {
     size: Vec2,
+    pixel_padding: f32,
     vertices: Vec<Vertex>,
 }
 
 impl Paint {
-    fn triangle(&mut self, points: [Vec2; 3], colour: [f32; 4]) {
-        self.vertices.extend(points.map(|point| Vertex {
-            position: ((point / self.size * 2.0 - Vec2::ONE) * Vec2::new(1.0, -1.0)).to_array(),
-            colour,
+    /// Send one padded quad per shape so the shader can blend coverage at its perimeter.
+    fn stroke(
+        &mut self,
+        start: Vec2,
+        end: Vec2,
+        width: f32,
+        arrow_head: f32,
+        outline: f32,
+        colour: [f32; 4],
+    ) {
+        let delta = end - start;
+        let length = delta.length();
+        if length <= 1e-4 {
+            return;
+        }
+        let tangent = delta / length;
+        let normal = tangent.perp();
+        let half_width = width * 0.5;
+        // Leave room for a shaft even when projection foreshortens the axis.
+        let head = arrow_head.min(length * 0.8);
+        let padding = self.pixel_padding + outline;
+        let span = half_width.max(head * 0.48) + padding;
+        // The outlined straight strokes are connected ring segments. Their
+        // ends meet at the joint and only their sides need a coverage ramp.
+        let end_padding = if head == 0.0 && outline > 0.0 {
+            0.0
+        } else {
+            padding
+        };
+        let a = Vec2::new(-end_padding, -span);
+        let b = Vec2::new(length + end_padding, -span);
+        let c = Vec2::new(length + end_padding, span);
+        let d = Vec2::new(-end_padding, span);
+        self.vertices.extend([a, b, c, a, c, d].map(|local| {
+            let point = start + tangent * local.x + normal * local.y;
+            Vertex {
+                position: ((point / self.size * 2.0 - Vec2::ONE) * Vec2::new(1.0, -1.0)).to_array(),
+                local: local.to_array(),
+                dimensions: [length, half_width, head, outline],
+                colour,
+            }
         }));
-    }
-
-    fn quad(&mut self, [a, b, c, d]: [Vec2; 4], colour: [f32; 4]) {
-        self.triangle([a, b, c], colour);
-        self.triangle([a, c, d], colour);
-    }
-
-    fn line(&mut self, a: Vec2, b: Vec2, width: f32, colour: [f32; 4]) {
-        let offset = (b - a).normalize_or_zero().perp() * (width * 0.5);
-        self.quad([a + offset, a - offset, b - offset, b + offset], colour);
-    }
-
-    fn arrow(&mut self, tip: Vec2, direction: Vec2, size: f32, colour: [f32; 4]) {
-        let base = tip - direction * size;
-        let wing = direction.perp() * size * 0.48;
-        self.triangle([tip, base + wing, base - wing], colour);
     }
 
     fn toggle(&mut self, mode: Mode, hovered: bool) {
@@ -227,8 +251,13 @@ impl Paint {
         }
         let min = TOGGLE_ORIGIN;
         let max = min + TOGGLE_SIZE;
-        self.quad(
-            [min, Vec2::new(max.x, min.y), max, Vec2::new(min.x, max.y)],
+        let centre = (min + max) * 0.5;
+        self.stroke(
+            Vec2::new(min.x, centre.y),
+            Vec2::new(max.x, centre.y),
+            TOGGLE_SIZE.y,
+            0.0,
+            0.0,
             INK,
         );
         let edge = if hovered {
@@ -239,16 +268,14 @@ impl Paint {
         let corner = Vec2::new(max.x, min.y);
         let other = Vec2::new(min.x, max.y);
         for (a, b) in [(min, corner), (corner, max), (max, other), (other, min)] {
-            self.line(a, b, 1.0, edge);
+            self.stroke(a, b, 1.0, 0.0, 0.0, edge);
         }
-        let centre = (min + max) * 0.5;
         let colour = [0.86, 0.92, 1.0, 1.0];
         match mode {
             Mode::Move => {
                 for direction in [Vec2::X, Vec2::NEG_X, Vec2::Y, Vec2::NEG_Y] {
                     let tip = centre + direction * 10.0;
-                    self.line(centre, tip - direction * 2.0, 1.7, colour);
-                    self.arrow(tip, direction, 5.0, colour);
+                    self.stroke(centre, tip, 1.7, 5.0, 0.0, colour);
                 }
             }
             Mode::Rotate => {
@@ -256,16 +283,17 @@ impl Paint {
                     let angle = i as f32 * 0.29;
                     centre + Vec2::new(angle.cos(), -angle.sin()) * 9.0
                 };
-                for i in 0..17 {
-                    self.line(point(i), point(i + 1), 1.8, colour);
+                for i in 0..15 {
+                    self.stroke(point(i), point(i + 1), 1.8, 0.0, 0.0, colour);
                 }
-                self.arrow(point(18), (point(18) - point(17)).normalize(), 6.0, colour);
+                self.stroke(point(15), point(18), 1.8, 6.0, 0.0, colour);
             }
         }
     }
 }
 
-const MAX_VERTICES: usize = 3 * RING_STEPS * 12 + 200;
+// Three rings, plus the toggle's background, four edges and 16 icon strokes.
+const MAX_VERTICES: usize = (3 * RING_STEPS + 21) * 6;
 const SHADER: &str = include_str!("placement_gizmo.wgsl");
 
 pub struct GizmoRenderer {
@@ -301,7 +329,9 @@ impl GizmoRenderer {
                     buffers: &[Some(wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4],
+                        attributes: &wgpu::vertex_attr_array![
+                            0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32x4
+                        ],
                     })],
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -332,6 +362,7 @@ impl GizmoRenderer {
             buffer,
             paint: Paint {
                 size: Vec2::ZERO,
+                pixel_padding: 0.0,
                 vertices: Vec::with_capacity(MAX_VERTICES),
             },
             overlay,
@@ -354,6 +385,7 @@ impl GizmoRenderer {
             return;
         }
         self.paint.size = size;
+        self.paint.pixel_padding = (size / Vec2::new(width as f32, height as f32)).max_element();
         self.paint.vertices.clear();
         if let Some(pivot) = overlay.pivot {
             let projection = Projection::new(camera, size, width as f32 / height as f32);
@@ -370,15 +402,9 @@ impl GizmoRenderer {
                     if back && !active {
                         colour[3] = 0.46;
                     }
+                    let head = if segment.arrow { 10.0 } else { 0.0 };
                     self.paint
-                        .line(segment.start, segment.end, width + 2.0, INK);
-                    self.paint.line(segment.start, segment.end, width, colour);
-                    if segment.arrow {
-                        let direction = (segment.end - segment.start).normalize_or_zero();
-                        self.paint
-                            .arrow(segment.end + direction, direction, 12.0, INK);
-                        self.paint.arrow(segment.end, direction, 10.0, colour);
-                    }
+                        .stroke(segment.start, segment.end, width, head, 1.0, colour);
                 });
             }
         }
