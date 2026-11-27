@@ -61,8 +61,6 @@ mod usd_smoke;
 
 #[path = "atelier/placement_gizmo.rs"]
 mod placement_gizmo;
-const VIEWPORT_OVERLAY_SHADER: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/viewport_overlay.wgsl"));
 #[path = "atelier/view_cube.rs"]
 mod view_cube;
 #[path = "atelier/viewport_wireframe.rs"]

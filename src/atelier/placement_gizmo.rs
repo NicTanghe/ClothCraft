@@ -295,6 +295,8 @@ impl Paint {
 // Three rings, plus the toggle's background, four edges and 16 icon strokes.
 const MAX_VERTICES: usize = (3 * RING_STEPS + 21) * 6;
 
+const SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/placement_gizmo.wgsl"));
+
 pub struct GizmoRenderer {
     pipeline: wgpu::RenderPipeline,
     buffer: wgpu::Buffer,
@@ -307,17 +309,22 @@ impl GizmoRenderer {
     pub fn new(
         gpu: &GpuContext,
         info: GpuViewportInfo,
-        shader: &wgpu::ShaderModule,
         overlay: Rc<Cell<Overlay>>,
         viewport: Rc<Cell<Option<GpuViewportInfo>>>,
     ) -> Self {
+        let shader = gpu
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Placement gizmo"),
+                source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+            });
         let pipeline = gpu
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("Placement gizmo"),
                 layout: None,
                 vertex: wgpu::VertexState {
-                    module: shader,
+                    module: &shader,
                     entry_point: Some("gizmo_vertex"),
                     compilation_options: Default::default(),
                     buffers: &[Some(wgpu::VertexBufferLayout {
@@ -329,7 +336,7 @@ impl GizmoRenderer {
                     })],
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: shader,
+                    module: &shader,
                     entry_point: Some("gizmo_fragment"),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {

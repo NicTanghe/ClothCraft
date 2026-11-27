@@ -80,18 +80,10 @@ pub fn create_runner_app<'a>(
         move |init| {
             let redraw = init.redraw.clone();
             *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
-            let shader = init
-                .gpu
-                .device
-                .create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: Some("Viewport overlays"),
-                    source: wgpu::ShaderSource::Wgsl(super::super::VIEWPORT_OVERLAY_SHADER.into()),
-                });
-            let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format, &shader);
+            let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
             let gizmo = super::super::placement_gizmo::GizmoRenderer::new(
                 init.gpu,
                 init.info,
-                &shader,
                 gizmo_overlay,
                 gizmo_viewport,
             );

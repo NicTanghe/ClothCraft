@@ -121,6 +121,8 @@ struct CubePaint {
     faces: [FacePaint; MAX_FACES],
 }
 
+const SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/view_cube.wgsl"));
+
 pub struct ViewCube {
     pipeline: wgpu::RenderPipeline,
     paint: wgpu::Buffer,
@@ -128,19 +130,25 @@ pub struct ViewCube {
 }
 
 impl ViewCube {
-    pub fn new(gpu: &GpuContext, format: wgpu::TextureFormat, shader: &wgpu::ShaderModule) -> Self {
+    pub fn new(gpu: &GpuContext, format: wgpu::TextureFormat) -> Self {
         let device = &gpu.device;
+        let shader = gpu
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("View cube"),
+                source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+            });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("View cube"),
             layout: None,
             vertex: wgpu::VertexState {
-                module: shader,
+                module: &shader,
                 entry_point: Some("cube_vertex"),
                 compilation_options: Default::default(),
                 buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
-                module: shader,
+                module: &shader,
                 entry_point: Some("cube_fragment"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
@@ -270,20 +278,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shared_shader_provides_both_overlay_pipelines() {
-        let module = naga::front::wgsl::parse_str(super::super::VIEWPORT_OVERLAY_SHADER).unwrap();
-        for (name, stage) in [
-            ("cube_vertex", naga::ShaderStage::Vertex),
-            ("cube_fragment", naga::ShaderStage::Fragment),
-            ("gizmo_vertex", naga::ShaderStage::Vertex),
-            ("gizmo_fragment", naga::ShaderStage::Fragment),
+    fn overlay_shaders_compile_to_separate_pipelines() {
+        for (source, vertex, fragment) in [
+            (SHADER, "cube_vertex", "cube_fragment"),
+            (
+                include_str!(concat!(env!("OUT_DIR"), "/placement_gizmo.wgsl")),
+                "gizmo_vertex",
+                "gizmo_fragment",
+            ),
         ] {
-            assert!(
-                module
-                    .entry_points
-                    .iter()
-                    .any(|entry| entry.name == name && entry.stage == stage)
-            );
+            let module = naga::front::wgsl::parse_str(source).unwrap();
+            assert_eq!(module.entry_points.len(), 2);
+            for (name, stage) in [
+                (vertex, naga::ShaderStage::Vertex),
+                (fragment, naga::ShaderStage::Fragment),
+            ] {
+                assert!(
+                    module
+                        .entry_points
+                        .iter()
+                        .any(|entry| entry.name == name && entry.stage == stage)
+                );
+            }
         }
     }
 
