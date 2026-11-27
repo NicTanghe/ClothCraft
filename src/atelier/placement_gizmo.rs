@@ -237,7 +237,7 @@ impl Paint {
         self.vertices.extend([a, b, c, a, c, d].map(|local| {
             let point = start + tangent * local.x + normal * local.y;
             Vertex {
-                position: ((point / self.size * 2.0 - Vec2::ONE) * Vec2::new(1.0, -1.0)).to_array(),
+                position: (point / self.size).to_array(),
                 local: local.to_array(),
                 dimensions: [length, half_width, head, outline],
                 colour,
@@ -294,7 +294,6 @@ impl Paint {
 
 // Three rings, plus the toggle's background, four edges and 16 icon strokes.
 const MAX_VERTICES: usize = (3 * RING_STEPS + 21) * 6;
-const SHADER: &str = include_str!("placement_gizmo.wgsl");
 
 pub struct GizmoRenderer {
     pipeline: wgpu::RenderPipeline,
@@ -308,23 +307,18 @@ impl GizmoRenderer {
     pub fn new(
         gpu: &GpuContext,
         info: GpuViewportInfo,
+        shader: &wgpu::ShaderModule,
         overlay: Rc<Cell<Overlay>>,
         viewport: Rc<Cell<Option<GpuViewportInfo>>>,
     ) -> Self {
-        let shader = gpu
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Placement gizmo shader"),
-                source: wgpu::ShaderSource::Wgsl(SHADER.into()),
-            });
         let pipeline = gpu
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("Placement gizmo"),
                 layout: None,
                 vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
+                    module: shader,
+                    entry_point: Some("gizmo_vertex"),
                     compilation_options: Default::default(),
                     buffers: &[Some(wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as u64,
@@ -335,12 +329,12 @@ impl GizmoRenderer {
                     })],
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
+                    module: shader,
+                    entry_point: Some("gizmo_fragment"),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: info.format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
@@ -477,16 +471,5 @@ mod tests {
         assert_eq!(ring.axis, Vec3::Z);
         assert!(toggle_contains(size, Vec2::splat(24.0)));
         assert!(!toggle_contains(size, centre));
-    }
-
-    #[test]
-    fn placement_shader_validates() {
-        let module = naga::front::wgsl::parse_str(SHADER).unwrap();
-        naga::valid::Validator::new(
-            naga::valid::ValidationFlags::all(),
-            naga::valid::Capabilities::all(),
-        )
-        .validate(&module)
-        .unwrap();
     }
 }

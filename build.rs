@@ -12,6 +12,13 @@ mod shaders {
     use wesl::{Compiler, Feature, ManglerKind};
 
     pub fn build() {
+        compile(
+            &Compiler::default(),
+            "src/atelier/viewport_overlay.wesl",
+            "viewport_overlay",
+            false,
+        );
+
         let mut avbd = Compiler::default();
         // Keep the entry points defined across the AVBD modules and preserve
         // the names used by its compute pipeline descriptors.

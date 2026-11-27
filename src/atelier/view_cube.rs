@@ -128,24 +128,20 @@ pub struct ViewCube {
 }
 
 impl ViewCube {
-    pub fn new(gpu: &GpuContext, format: wgpu::TextureFormat) -> Self {
+    pub fn new(gpu: &GpuContext, format: wgpu::TextureFormat, shader: &wgpu::ShaderModule) -> Self {
         let device = &gpu.device;
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("View cube"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("view_cube.wgsl").into()),
-        });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("View cube"),
             layout: None,
             vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vertex"),
+                module: shader,
+                entry_point: Some("cube_vertex"),
                 compilation_options: Default::default(),
                 buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fragment"),
+                module: shader,
+                entry_point: Some("cube_fragment"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
@@ -274,14 +270,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn view_cube_shader_validates() {
-        let module = naga::front::wgsl::parse_str(include_str!("view_cube.wgsl")).unwrap();
-        naga::valid::Validator::new(
-            naga::valid::ValidationFlags::all(),
-            naga::valid::Capabilities::empty(),
-        )
-        .validate(&module)
-        .unwrap();
+    fn shared_shader_provides_both_overlay_pipelines() {
+        let module = naga::front::wgsl::parse_str(super::super::VIEWPORT_OVERLAY_SHADER).unwrap();
+        for (name, stage) in [
+            ("cube_vertex", naga::ShaderStage::Vertex),
+            ("cube_fragment", naga::ShaderStage::Fragment),
+            ("gizmo_vertex", naga::ShaderStage::Vertex),
+            ("gizmo_fragment", naga::ShaderStage::Fragment),
+        ] {
+            assert!(
+                module
+                    .entry_points
+                    .iter()
+                    .any(|entry| entry.name == name && entry.stage == stage)
+            );
+        }
     }
 
     #[test]
