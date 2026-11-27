@@ -12,6 +12,13 @@ mod shaders {
     use wesl::{Compiler, Feature, ManglerKind};
 
     pub fn build() {
+        for (path, artifact) in [
+            ("src/atelier/view_cube.wesl", "view_cube"),
+            ("src/atelier/placement_gizmo.wesl", "placement_gizmo"),
+        ] {
+            compile(&Compiler::default(), path, artifact, false);
+        }
+
         let mut avbd = Compiler::default();
         // Keep the entry points defined across the AVBD modules and preserve
         // the names used by its compute pipeline descriptors.

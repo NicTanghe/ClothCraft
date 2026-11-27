@@ -1115,3 +1115,161 @@ fn shadow_sliders_live_in_settings_and_update_independently() {
         assert!(!app.state().dragging_3d && !app.state().pointer_down);
     }
 }
+
+#[test]
+fn viewport_placement_gizmo_spawns_previews_and_undoes_panel_edits() {
+    use super::super::input::handle_runner_event;
+    use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
+    use crate::atelier::placement_gizmo::{Mode, Projection};
+    use clothcraft::usd_scene::viewport_panel_path;
+    use cssimpler::renderer::{EngineEvent, ViewportEvent, ViewportSize, dispatch_click};
+    use glam::{DVec3, Vec2, Vec3};
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let stylesheet = load_studio_stylesheet().unwrap();
+    let mut state = selection_test_state(dir.path());
+    state.camera.look_from(Vec3::Z);
+    let original_count = state.project.template.panels.len();
+    let mut app = create_runner_app(state, &stylesheet);
+    app.set_viewport(ViewportSize::new(1600, 980));
+    handle_runner_event(
+        app.state_mut(),
+        &EngineEvent::ViewportChanged(ViewportEvent {
+            width: 1600,
+            height: 980,
+            scale_factor: 1.0,
+        }),
+    );
+    let frame = |frame_index| FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index,
+    };
+    app.frame(frame(0));
+    assert!(app.state().gizmo_overlay.get().pivot.is_none());
+
+    let button = app.find_element_bounds_by_id("#tool-gizmo").unwrap();
+    assert!(dispatch_click(
+        app.scene(),
+        button.x + 12.0,
+        button.y + 12.0
+    ));
+    app.frame(frame(1));
+    assert!(app.state().gizmo_overlay.get().pivot.is_some());
+    assert!(dispatch_click(
+        app.scene(),
+        button.x + 12.0,
+        button.y + 12.0
+    ));
+    app.frame(frame(2));
+    assert!(app.state().gizmo_overlay.get().pivot.is_none());
+
+    let button = app
+        .find_element_bounds_by_id("#add-viewport-piece")
+        .unwrap();
+    assert!(dispatch_click(
+        app.scene(),
+        button.x + 12.0,
+        button.y + 12.0
+    ));
+    app.frame(frame(3));
+    let host = app
+        .find_element_bounds_by_id("#runner-viewport-3d-scene")
+        .unwrap();
+    let state = app.state_mut();
+    assert_eq!(state.project.template.panels.len(), original_count + 1);
+    let index = state.selected_piece_index;
+    let panel = &state.project.template.panels[index];
+    let outline = panel.polygon.as_ref().unwrap().points.clone();
+    let initial_placement = panel.placement.clone();
+    let range = state
+        .scene
+        .garment
+        .panels
+        .iter()
+        .find(|range| range.id == panel.id)
+        .unwrap();
+    let uv = state.scene.garment.mesh.uv[range.vertices.clone()]
+        .iter()
+        .sum::<glam::DVec2>()
+        / range.vertices.len() as f64;
+    let local_pivot = DVec3::new(uv.x, -uv.y, 0.0);
+    let usd = state.usd_scene.clone().unwrap();
+    let path = viewport_panel_path(&panel.id);
+    assert!(usd.stage().prim(&path).unwrap().is_valid().unwrap());
+    let display_points = || {
+        usd.stage()
+            .attribute(format!("{path}.points"))
+            .unwrap()
+            .get::<Vec<cssimpler::renderer::gpu::openusd::gf::Vec3f>>()
+            .unwrap()
+            .unwrap()
+    };
+    let initial_points = display_points();
+    let pivot = state.gizmo_overlay.get().pivot.unwrap();
+    let size = Vec2::new(host.width, host.height);
+    let origin = Vec2::new(host.x, host.y);
+    let screen_pivot = origin
+        + Projection::new(&state.camera, size, size.x / size.y)
+            .point(pivot)
+            .unwrap();
+    let move_pointer = |state: &mut CssRunnerState, p: Vec2| {
+        handle_runner_event(state, &pointer_move_ev(p.x, p.y));
+    };
+    let drag_start = screen_pivot + Vec2::X * 40.0;
+    move_pointer(state, drag_start);
+    assert!(handle_runner_event(state, &pointer_btn_ev(true)));
+    move_pointer(state, drag_start + Vec2::X * 30.0);
+    update_runner(state, frame(4));
+    assert_ne!(display_points(), initial_points);
+    assert_eq!(
+        state.project.template.panels[index].placement.translation,
+        initial_placement.translation
+    );
+    handle_runner_event(state, &EngineEvent::FocusChanged(false));
+    assert_eq!(display_points(), initial_points);
+
+    move_pointer(state, drag_start);
+    assert!(handle_runner_event(state, &pointer_btn_ev(true)));
+    move_pointer(state, drag_start + Vec2::X * 30.0);
+    assert!(handle_runner_event(state, &pointer_btn_ev(false)));
+    let moved = state.project.template.panels[index].placement.translation;
+    assert!(moved.x > initial_placement.translation.x);
+    assert!(((moved - initial_placement.translation).cross(DVec3::X)).length() < 1e-10);
+    assert!(!state.dragging_3d);
+    assert!(super::super::editing::undo_redo_2d(state, false));
+    assert_eq!(
+        state.project.template.panels[index].placement.translation,
+        initial_placement.translation
+    );
+
+    move_pointer(state, origin + Vec2::splat(30.0));
+    assert!(handle_runner_event(state, &pointer_btn_ev(true)));
+    assert!(handle_runner_event(state, &pointer_btn_ev(false)));
+    update_runner(state, frame(5));
+    assert_eq!(state.gizmo_overlay.get().mode, Mode::Rotate);
+    let diagonal = Vec2::new(1.0, -1.0).normalize() * 55.0;
+    move_pointer(state, screen_pivot + diagonal);
+    assert!(handle_runner_event(state, &pointer_btn_ev(true)));
+    move_pointer(state, screen_pivot - diagonal.perp());
+    assert!(handle_runner_event(state, &pointer_btn_ev(false)));
+    let panel = &state.project.template.panels[index];
+    assert!((panel.placement.rotation_degrees.z - 90.0).abs() < 0.05);
+    assert_eq!(panel.polygon.as_ref().unwrap().points, outline);
+    assert!(
+        panel
+            .placement
+            .transform(local_pivot)
+            .abs_diff_eq(initial_placement.transform(local_pivot), 1e-6)
+    );
+
+    assert!(super::super::editing::undo_redo_2d(state, false));
+    assert!(super::super::editing::undo_redo_2d(state, false));
+    assert_eq!(state.project.template.panels.len(), original_count);
+    assert!(!usd.stage().prim(&path).unwrap().is_valid().unwrap());
+    assert!(usd.stage().prim("/Collider").unwrap().is_valid().unwrap());
+    assert!(super::super::editing::undo_redo_2d(state, true));
+    assert!(usd.stage().prim(&path).unwrap().is_valid().unwrap());
+}

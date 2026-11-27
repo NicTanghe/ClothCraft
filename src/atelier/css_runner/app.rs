@@ -47,6 +47,8 @@ pub fn create_runner_app<'a>(
     state.viewport_camera.replace(state.camera.clone());
     let camera = state.viewport_camera.clone();
     let cube_hover = state.viewport_cube_hover.clone();
+    let gizmo_overlay = state.gizmo_overlay.clone();
+    let gizmo_viewport = state.gizmo_viewport.clone();
 
     let smoke = state.smoke;
     let smoke_done = state.smoke_done.clone();
@@ -79,6 +81,12 @@ pub fn create_runner_app<'a>(
             let redraw = init.redraw.clone();
             *redraw_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(redraw.clone());
             let cube = super::super::view_cube::ViewCube::new(init.gpu, init.info.format);
+            let gizmo = super::super::placement_gizmo::GizmoRenderer::new(
+                init.gpu,
+                init.info,
+                gizmo_overlay,
+                gizmo_viewport,
+            );
             let mut renderer = UsdRenderer::new_with_authored_camera(
                 init,
                 usd_scene,
@@ -106,6 +114,7 @@ pub fn create_runner_app<'a>(
                 camera,
                 cube_hover,
                 shadow_levels,
+                gizmo,
             );
             if smoke {
                 Ok(Box::new(usd_smoke::SmokeViewport {

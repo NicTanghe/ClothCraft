@@ -38,7 +38,7 @@ pub(super) fn install_authoring_edit(
     state: &mut CssRunnerState,
     edit: authoring::Edit,
     record_old: Option<GarmentTemplate>,
-    msg: String,
+    mut msg: String,
 ) {
     if let Some(old) = record_old {
         state.history.record(old);
@@ -95,13 +95,15 @@ pub(super) fn install_authoring_edit(
             quasistatic: state.scene.quasistatic,
             next_dt: state.scene.next_dt,
         };
-        if let Some(ref usd) = state.usd_scene {
-            let _ = clothcraft::usd_scene::update_panel_viewport_mesh(
+        if let Some(ref usd) = state.usd_scene
+            && let Err(error) = clothcraft::usd_scene::update_panel_viewport_mesh(
                 usd,
                 &state.scene.garment,
                 &state.scene.state,
                 state.shading,
-            );
+            )
+        {
+            msg = format!("{msg} · Viewport update failed: {error}");
         }
         state.sync_usd_wireframe();
         state.send_control_state(false);

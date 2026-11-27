@@ -12,7 +12,8 @@ use cssimpler::core::Node;
 use cssimpler::ui;
 
 pub(in super::super) fn build_runner_3d_rail(state: &CssRunnerState) -> Node {
-    let gizmo_class = if state.active_3d_tool == "Gizmo" {
+    let gizmo_enabled = state.gizmo.enabled && state.active_3d_tool == "Gizmo";
+    let gizmo_class = if gizmo_enabled {
         "tool-btn active"
     } else {
         "tool-btn"
@@ -45,7 +46,7 @@ pub(in super::super) fn build_runner_3d_rail(state: &CssRunnerState) -> Node {
 
     ui! {
         <aside id="rail-3d" class="tool-rail tool-rail-3d">
-            <button class={gizmo_class} onclick_shared={queue_action(&state.actions, RunnerAction::ToolGizmo)} title="Select & Arrange [Gizmo] (1)">
+            <button id="tool-gizmo" class={gizmo_class} aria-pressed={if gizmo_enabled { "true" } else { "false" }} onclick_shared={queue_action(&state.actions, RunnerAction::ToolGizmo)} title="Show or hide Move and Rotate handles">
                 {icon_gizmo()}
                 <span class="tool-label">"Gizmo"</span>
             </button>

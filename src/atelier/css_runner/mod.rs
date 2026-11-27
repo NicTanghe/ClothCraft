@@ -11,6 +11,7 @@ mod board;
 mod body_outline;
 mod documents;
 mod editing;
+mod gizmo;
 pub mod imports;
 mod input;
 mod mesh_preparation;
