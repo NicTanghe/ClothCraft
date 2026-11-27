@@ -36,10 +36,11 @@ pub(in super::super) fn build_runner_top_bar(state: &CssRunnerState) -> Node {
         ("backend-badge cpu", "CPU (OGC)")
     };
 
-    let top_bar_class = if state.window_size.0 < 1400.0 {
-        "top-bar compact"
-    } else {
-        "top-bar"
+    let top_bar_class = match (state.window_size.0 < 1400.0, state.file_menu_open) {
+        (true, true) => "top-bar compact file-menu-open",
+        (false, true) => "top-bar file-menu-open",
+        (true, false) => "top-bar compact",
+        (false, false) => "top-bar",
     };
     let theme_label = match state.theme {
         Theme::Dark => "Theme: Dark",
@@ -51,8 +52,7 @@ pub(in super::super) fn build_runner_top_bar(state: &CssRunnerState) -> Node {
             <div class="top-bar-left">
                 <span class="app-title">"ClothCraft"</span>
                 <nav class="top-bar-menus">
-                    <button class="menu-item" onclick_shared={queue_action(&state.actions, RunnerAction::Save)} title="Save Project (Ctrl+S)">"Save"</button>
-                    <button id="runner-export-btn" class="menu-item" onclick_shared={queue_action(&state.actions, RunnerAction::ExportSvg)} title="Save True-Scale Pattern SVG">"Export"</button>
+                    {build_file_menu(state)}
                     <button id="settings-toggle" class="menu-item" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleSettings)} title="Settings">"Settings"</button>
                 </nav>
             </div>
@@ -108,5 +108,34 @@ pub(in super::super) fn build_runner_top_bar(state: &CssRunnerState) -> Node {
                 </button>
             </div>
         </header>
+    }
+}
+
+fn build_file_menu(state: &CssRunnerState) -> Node {
+    let dropdown = state.file_menu_open.then(|| {
+        ui! {
+            <div id="runner-file-menu" class="file-dropdown" aria-label="File commands">
+                <button id="runner-open-btn" class="menu-item"
+                    onclick_shared={queue_action(&state.actions, RunnerAction::Open)}
+                    title="Open USD Project (Ctrl+O)">"Open…"</button>
+                <button id="runner-save-btn" class="menu-item"
+                    onclick_shared={queue_action(&state.actions, RunnerAction::Save)}
+                    title="Save USD Project (Ctrl+S)">"Save"</button>
+                <button id="runner-save-as-btn" class="menu-item"
+                    onclick_shared={queue_action(&state.actions, RunnerAction::SaveAs)}
+                    title="Save USD Project As (Ctrl+Shift+S)">"Save As…"</button>
+                <button id="runner-export-btn" class="menu-item"
+                    onclick_shared={queue_action(&state.actions, RunnerAction::ExportSvg)}
+                    title="Save True-Scale Pattern SVG">"Export SVG…"</button>
+            </div>
+        }
+    });
+    ui! {
+        <div class="file-picker">
+            <button id="runner-file-toggle" class="menu-item"
+                aria-expanded={state.file_menu_open.to_string()}
+                onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleFileMenu)}>"File"</button>
+            {dropdown}
+        </div>
     }
 }

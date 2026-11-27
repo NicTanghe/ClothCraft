@@ -33,7 +33,9 @@ pub enum RunnerAction {
     PlayPause,
     Step,
     Reset,
+    Open,
     Save,
+    SaveAs,
     ImportDxf,
     ImportSvg,
     ImportAvatar,
@@ -111,6 +113,8 @@ pub enum RunnerUiOp {
     PrepareMesh(bool),
 
     CycleMeasurementBits,
+    ToggleFileMenu,
+    CloseFileMenu,
     ToggleSettings,
     CloseSettings,
     ToggleBodySettings,
@@ -177,6 +181,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         match done.result {
             Ok((new_state, metrics)) => {
                 state.scene.state = new_state;
+                state.files.modified = true;
                 state.step_count += 1;
                 state.step_ms = metrics.step_ms;
                 let residual = metrics.barrier_al.as_ref().map_or_else(
@@ -287,6 +292,9 @@ pub(super) fn apply_runner_action(
     action: RunnerAction,
     has_accordion_action: bool,
 ) {
+    if action != RunnerAction::Ui(RunnerUiOp::ToggleFileMenu) {
+        state.file_menu_open = false;
+    }
     match action {
         RunnerAction::PlayPause => {
             state.playing = !state.playing;
@@ -294,7 +302,9 @@ pub(super) fn apply_runner_action(
         }
         RunnerAction::Step => state.send_control_state(true),
         RunnerAction::Reset => state.reset_simulation(),
+        RunnerAction::Open => state.open_project(),
         RunnerAction::Save => state.save_project(),
+        RunnerAction::SaveAs => state.save_project_as(),
         RunnerAction::ImportDxf => state.open_import_dialog(ImportKind::Dxf),
         RunnerAction::ImportSvg => state.open_import_dialog(ImportKind::Svg),
         RunnerAction::ImportAvatar => state.open_import_dialog(ImportKind::Avatar),
@@ -567,6 +577,12 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                 format!("Measurement precision: {bits} bits"),
             );
         }
+        RunnerUiOp::ToggleFileMenu => {
+            state.file_menu_open = !state.file_menu_open;
+            state.command_palette_open = false;
+            state.solver_menu_open = false;
+        }
+        RunnerUiOp::CloseFileMenu => state.file_menu_open = false,
         RunnerUiOp::ToggleSettings => {
             state.settings_open = !state.settings_open;
             if state.settings_open {
@@ -740,6 +756,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                     let next_garment = Arc::new(compiled);
                     let next_state = next_garment.initial_state.clone();
                     state.project.template = next_template;
+                    state.files.modified = true;
                     state.mirrored_pieces.clear();
                     state.frame_all_2d();
                     state.project.state = None;

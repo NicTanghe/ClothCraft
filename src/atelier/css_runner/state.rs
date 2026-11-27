@@ -120,6 +120,7 @@ pub struct CssRunnerState {
     pub active_2d_tool: String,
     pub clean_view: bool,
     pub command_palette_open: bool,
+    pub(super) file_menu_open: bool,
     pub settings_open: bool,
     pub left_drawer_open: bool,
     pub selected_piece_index: usize,
@@ -253,6 +254,7 @@ impl CssRunnerState {
             active_2d_tool: "Edit".to_string(),
             clean_view: false,
             command_palette_open: false,
+            file_menu_open: false,
             settings_open: false,
             left_drawer_open: true,
             selected_piece_index: 0,
@@ -462,6 +464,7 @@ impl CssRunnerState {
             && !self.pointer_down
             && !self.settings_open
             && !self.command_palette_open
+            && !self.file_menu_open
             && !self.solver_menu_open
             && self.import_dialog.is_none()
             && rect.contains(x, y)
@@ -629,6 +632,9 @@ impl CssRunnerState {
     }
 
     pub fn reset_simulation(&mut self) {
+        self.files.modified |= self.scene.state.time != self.initial_scene.state.time
+            || self.scene.state.x != self.initial_scene.state.x
+            || self.scene.state.v != self.initial_scene.state.v;
         self.generation = self.generation.wrapping_add(1);
         self.scene = self.initial_scene.clone();
         self.step_count = 0;

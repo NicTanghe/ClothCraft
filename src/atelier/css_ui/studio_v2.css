@@ -154,6 +154,31 @@ button {
   background-color: var(--surface-raised);
 }
 
+.top-bar.file-menu-open { position: relative; }
+.file-picker { position: relative; }
+.file-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 152px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.file-dropdown .menu-item { padding: 6px 8px; text-align: left; }
+.file-menu-backdrop {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 19;
+}
+
 /* Simulation Transport Controls */
 .transport-controls, .sim-transport {
   display: flex;

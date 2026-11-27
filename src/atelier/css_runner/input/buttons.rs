@@ -34,7 +34,8 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             state: btn_state,
             ..
         } => {
-            if state.settings_open
+            if state.file_menu_open
+                || state.settings_open
                 || state.command_palette_open
                 || state.solver_menu_open
                 || state.import_dialog.is_some()
@@ -66,7 +67,8 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             state: btn_state,
             modifiers,
         } => {
-            if state.settings_open
+            if state.file_menu_open
+                || state.settings_open
                 || state.command_palette_open
                 || state.solver_menu_open
                 || state.import_dialog.is_some()

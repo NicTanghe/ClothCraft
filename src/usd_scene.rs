@@ -10,23 +10,35 @@ use std::{collections::BTreeSet, fmt::Write as _};
 pub fn viewport_scene_from_usda(
     usda: &str,
 ) -> Result<cssimpler::renderer::gpu::usd::UsdScene, String> {
-    use cssimpler::renderer::gpu::{
-        openusd::{usd::Stage, usda::parser::Parser},
-        openusd_schemas,
-        usd::UsdScene,
-    };
+    use cssimpler::renderer::gpu::{openusd::usd::Stage, openusd_schemas, usd::UsdScene};
 
-    let specs = Parser::new(usda)
-        .parse()
-        .map_err(|error| error.to_string())?;
     let stage = Stage::builder()
         .schema_registry(openusd_schemas::schema_registry())
         .in_memory("clothcraft-viewport.usda")
+        .map_err(|error| error.to_string())?;
+    replace_viewport_stage_usda(&stage, usda)?;
+    UsdScene::from_stage(stage).map_err(|error| error.to_string())
+}
+
+/// Replace the generated contents of a transient viewport stage in one edit.
+/// The renderer keeps its stage handle and observes the new geometry.
+#[cfg(feature = "desktop")]
+pub fn replace_viewport_stage_usda(
+    stage: &cssimpler::renderer::gpu::openusd::usd::Stage,
+    usda: &str,
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::usda::parser::Parser;
+
+    let specs = Parser::new(usda)
+        .parse()
         .map_err(|error| error.to_string())?;
     let root = stage.root_layer().identifier().to_owned();
     stage
         .batch_edit(&[&root], |layers| {
             let data = layers[0].data_mut();
+            for path in data.spec_paths() {
+                data.erase_spec(&path);
+            }
             for (path, spec) in specs {
                 data.create_spec(path.clone(), spec.ty);
                 for (name, value) in spec.fields {
@@ -35,8 +47,8 @@ pub fn viewport_scene_from_usda(
             }
             Ok(())
         })
-        .map_err(|error| error.to_string())?;
-    UsdScene::from_stage(stage).map_err(|error| error.to_string())
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 /// How the viewport derives shading normals from the displayed triangle mesh.
