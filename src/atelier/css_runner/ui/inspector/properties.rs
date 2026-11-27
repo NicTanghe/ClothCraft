@@ -335,6 +335,18 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             } else {
                 ("Sew with easing", true)
             };
+            let can_align = matches!(&reflected, Ok(None))
+                && clothcraft::fitting::seam_placement::eligible(
+                    &state.project.template,
+                    &state.scene,
+                    &a.0,
+                    &b.0,
+                );
+            let align_label = if equal {
+                "Align & Sew"
+            } else {
+                "Align & Sew with easing"
+            };
             ui! {
                 <div id="sew-confirm-card" class="card sew-confirm-card">
                     <div class="prop-row">
@@ -356,6 +368,9 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
                         } else {
                             ui! { <span class="hidden" /> }
                         }}
+                        {can_align.then(|| ui! {
+                            <button id="btn-sew-align" class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AlignAndSew { ease: confirm_ease })} title="Move the second piece near the first edge before simulating">{align_label}</button>
+                        })}
                         <button id="btn-sew-cancel" class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CancelSew)}>"Cancel"</button>
                     </div>
                 </div>

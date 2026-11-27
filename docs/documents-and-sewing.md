@@ -14,6 +14,24 @@ Writes synchronize a temporary file in the destination directory before replacin
 
 Save / Discard / Cancel appears before opening, creating or closing with unsaved changes, including new or modified construction trim drafts and pending trim placement, path or repeat gestures. Selecting an unchanged saved trim alone does not require confirmation. Save stores committed trims; both replacement confirmations and save status explain that unapplied trim drafts are excluded. Avatar import requires finishing or cancelling pending placement previews and document drafts before opening, since replacement resets the authoring state and history. Every 60 seconds, a dirty session writes a separate `recovery-<process id>.json` in its output folder. On startup the latest snapshot can be opened; File → Recover snapshot can choose another. Recovery opens as untitled until explicitly saved. The current session removes its recovery JSON after a successful save or confirmed close; asset directories may remain and are not automatically garbage-collected. Recovery is local to the output folder, not a global project browser.
 
+## Align before simulation
+
+In the native editor, select two edges with **Sew**. Choose **Align & Sew**
+to bring the second piece to the first edge before running the simulation.
+Choose **Sew** to let the simulation pull the edges together from their
+current placements. Unequal lengths still require an explicit easing choice.
+
+Alignment rotates and translates the second piece into a flat placement,
+using the stitch correspondences across the entire edge. It leaves a small
+gap for the solver to close. The second piece must be unpinned and unsewn,
+and the selection must create a single seam between two pieces. A paired
+mirror seam can still be created with **Sew**.
+
+The editor tries several poses and runs the collision startup check before
+accepting one. It keeps the sewing draft open if every candidate intersects
+or fails to reduce the gap. An accepted move pauses playback and commits
+the placement and seam as one undoable edit. Pattern dimensions stay the same.
+
 ## Partial sewing
 
 1. Select Sew, then select A and B in either view. Full edges are the default.

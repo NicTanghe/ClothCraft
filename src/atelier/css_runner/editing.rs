@@ -596,6 +596,14 @@ pub(super) fn sew_confirm_prompt(
 /// Commit the pending seam. Without `ease`, unequal lengths are refused and the
 /// draft is kept so the user can still choose easing or cancel.
 pub fn confirm_pending_sew(state: &mut CssRunnerState, ease: bool) -> bool {
+    finish_pending_sew(state, ease, false)
+}
+
+pub(super) fn align_and_sew(state: &mut CssRunnerState, ease: bool) -> bool {
+    finish_pending_sew(state, ease, true)
+}
+
+fn finish_pending_sew(state: &mut CssRunnerState, ease: bool, align: bool) -> bool {
     let Some(ToolDraft2d::SewConfirm {
         a,
         b,
@@ -645,16 +653,43 @@ pub fn confirm_pending_sew(state: &mut CssRunnerState, ease: bool) -> bool {
         )
     };
     let [a, b] = picked_sew_boundaries(&a, &b);
-    let committed = commit_authoring_command(
-        state,
-        Command::Sew {
-            a,
-            b,
-            reverse,
-            ease: ease && !equal,
-        },
-        message,
-    );
+    let command = Command::Sew {
+        a,
+        b,
+        reverse,
+        ease: ease && !equal,
+    };
+    let committed = if align {
+        let before = &state.project.template;
+        let result = authoring::apply_with_piece_mirroring(before, command, &state.mirrored_pieces)
+            .and_then(|edit| {
+                clothcraft::fitting::seam_placement::prepare(&state.scene, before, edit)
+            });
+        match result {
+            Ok((edit, [old_gap, new_gap])) => {
+                let old = before.clone();
+                state.preview_template = None;
+                state.playing = false;
+                install_authoring_edit(
+                    state,
+                    edit,
+                    Some(old),
+                    format!(
+                        "{message} · Aligned the second piece · Gap {:.1} → {:.1} mm",
+                        old_gap * 1e3,
+                        new_gap * 1e3
+                    ),
+                );
+                true
+            }
+            Err(error) => {
+                state.status_message = format!("Alignment unavailable · {error}");
+                false
+            }
+        }
+    } else {
+        commit_authoring_command(state, command, message)
+    };
     if committed {
         state.draft_2d = None;
     }

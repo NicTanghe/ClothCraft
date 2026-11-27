@@ -219,3 +219,154 @@ fn mirror_sewing_previews_both_pairs_and_checks_reflected_easing_before_commit()
     assert!(undo_redo_2d(&mut state, false));
     assert!(state.project.template.seams.is_empty());
 }
+
+/// Two equal straight edges with opposing boundary directions and a large
+/// placement gap. The second piece starts rotated, as in a rough arrangement.
+fn alignment_fixture(dir: &std::path::Path) -> (CssRunnerState, ToolDraft2d) {
+    use clothcraft::garment::template::Placement;
+    use glam::DVec3;
+
+    let mut state = selection_test_state(dir);
+    let fabric = state.project.template.panels[0].fabric.clone();
+    assert!(commit_authoring_command(
+        &mut state,
+        Command::Polygon {
+            points: vec![
+                DVec2::ZERO,
+                DVec2::new(0.3, 0.0),
+                DVec2::new(0.3, 0.2),
+                DVec2::new(0.0, 0.2),
+            ],
+            tangents: vec![],
+            meshing: Default::default(),
+            fabric,
+            replace: true,
+        },
+        "Created rectangle",
+    ));
+    let first = state.project.template.panels[0].id.clone();
+    assert!(commit_authoring_command(
+        &mut state,
+        Command::Duplicate { panel: first },
+        "Duplicated rectangle",
+    ));
+    let second = state.project.template.panels[1].id.clone();
+    assert!(commit_authoring_command(
+        &mut state,
+        Command::Place {
+            panel: second,
+            placement: Placement {
+                translation: DVec3::new(0.8, 1.5, 0.7),
+                rotation_degrees: DVec3::new(0.0, 0.0, 35.0),
+            },
+        },
+        "Roughly placed second rectangle",
+    ));
+    let side = |idx: usize, edge: usize| {
+        let panel = &state.project.template.panels[idx];
+        (
+            panel.id.clone(),
+            panel.polygon.as_ref().unwrap().edges[edge].clone(),
+        )
+    };
+    let draft = ToolDraft2d::SewConfirm {
+        a: side(0, 1),
+        b: side(1, 3),
+        reverse: true,
+        a_len_m: 0.2,
+        b_len_m: 0.2,
+    };
+    (state, draft)
+}
+
+#[test]
+fn align_and_sew_closes_the_whole_edge_before_the_first_solver_step() {
+    use clothcraft::vbd::VbdSolver;
+    use std::sync::Arc;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, draft) = alignment_fixture(dir.path());
+    let authored = state.project.template.clone();
+    let first_range = state.scene.garment.panels[0].vertices.clone();
+    let first_before = state.scene.state.x[first_range.clone()].to_vec();
+    state.draft_2d = Some(draft.clone());
+    assert!(confirm_pending_sew(&mut state, false));
+    let ordinary_gap = state.scene.garment.max_seam_gap(&state.scene.state.x);
+    assert!(ordinary_gap > 0.5);
+    assert!(undo_redo_2d(&mut state, false));
+
+    state.draft_2d = Some(draft);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AlignAndSew { ease: false });
+    assert!(state.draft_2d.is_none(), "{}", state.status_message);
+    assert_eq!(state.project.template.seams.len(), 1);
+    assert_eq!(state.scene.state.x[first_range], first_before);
+    assert_eq!(
+        state.project.template.panels[1]
+            .polygon
+            .as_ref()
+            .unwrap()
+            .points,
+        authored.panels[1].polygon.as_ref().unwrap().points
+    );
+    let aligned_gap = state.scene.garment.max_seam_gap(&state.scene.state.x);
+    assert!(
+        aligned_gap < 0.004,
+        "ordinary {ordinary_gap}, aligned {aligned_gap}"
+    );
+
+    let mut solver = VbdSolver::new(
+        Arc::clone(&state.scene.garment),
+        Some(&state.scene.collider.surface),
+        &state.scene.state,
+    )
+    .unwrap();
+    let mut simulated = state.scene.state.clone();
+    let metrics = solver.step(&mut simulated, &state.settings, None).unwrap();
+    assert!(metrics.max_seam_gap_m < 0.004);
+    assert!(simulated.time > state.scene.state.time);
+
+    assert!(undo_redo_2d(&mut state, false));
+    assert!(state.project.template.seams.is_empty());
+    assert_eq!(
+        state.project.template.panels[1].placement.translation,
+        authored.panels[1].placement.translation
+    );
+    assert!(undo_redo_2d(&mut state, true));
+    assert!(state.scene.garment.max_seam_gap(&state.scene.state.x) < 0.004);
+}
+
+#[test]
+fn align_and_sew_leaves_the_draft_when_startup_detects_an_intersection() {
+    use clothcraft::avatar::{MeshCollider, SurfaceMesh};
+    use std::sync::Arc;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, draft) = alignment_fixture(dir.path());
+    // A large fixed triangle slices through the stationary first panel.
+    let avatar = dir.path().join("crossing.obj");
+    std::fs::write(&avatar, "v -0.1 0 0\nv -0.1 3 0\nv -0.1 1.5 2\nf 1 2 3\n").unwrap();
+    let surface = Arc::new(SurfaceMesh::load_obj(&avatar).unwrap());
+    state.scene.collider =
+        Arc::new(MeshCollider::new(surface, state.project.contact_stiffness).unwrap());
+    let before = state.scene.state.x.clone();
+    state.draft_2d = Some(draft);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AlignAndSew { ease: false });
+    assert!(
+        state.status_message.contains("No separated placement"),
+        "{}",
+        state.status_message
+    );
+    assert!(matches!(
+        state.draft_2d,
+        Some(ToolDraft2d::SewConfirm { .. })
+    ));
+    assert!(state.project.template.seams.is_empty());
+    assert_eq!(state.scene.state.x, before);
+    assert!(confirm_pending_sew(&mut state, false));
+}

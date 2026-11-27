@@ -154,6 +154,9 @@ pub enum RunnerUiOp {
     ConfirmSew {
         ease: bool,
     },
+    AlignAndSew {
+        ease: bool,
+    },
     CancelSew,
 }
 
@@ -806,6 +809,9 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         }
         RunnerUiOp::ConfirmSew { ease } => {
             confirm_pending_sew(state, ease);
+        }
+        RunnerUiOp::AlignAndSew { ease } => {
+            super::editing::align_and_sew(state, ease);
         }
         RunnerUiOp::CancelSew => {
             if matches!(state.draft_2d, Some(ToolDraft2d::SewConfirm { .. })) {
