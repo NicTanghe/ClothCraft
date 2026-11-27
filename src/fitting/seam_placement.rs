@@ -33,6 +33,112 @@ pub(crate) fn eligible(
         })
 }
 
+pub(crate) struct ApproachError {
+    pub message: String,
+    pub blocked_pose: Option<State>,
+}
+
+impl From<String> for ApproachError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            blocked_pose: None,
+        }
+    }
+}
+
+impl From<&str> for ApproachError {
+    fn from(message: &str) -> Self {
+        message.to_owned().into()
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CollisionStage {
+    Start,
+    Approach(u32),
+    Joined,
+    Reset,
+}
+
+impl CollisionStage {
+    fn describe(self) -> String {
+        match self {
+            Self::Start => "The approach must start separated".into(),
+            Self::Approach(frame) => format!(
+                "Approach at {:.0}%",
+                100.0 * f64::from(frame) / f64::from(APPROACH_FRAMES)
+            ),
+            Self::Joined => "Joined pose".into(),
+            Self::Reset => "Reset pose after joining".into(),
+        }
+    }
+}
+
+fn blocked_pose(
+    stage: CollisionStage,
+    error: &str,
+    pose: &State,
+    template: &GarmentTemplate,
+    garment: &CompiledGarment,
+    preview: bool,
+) -> ApproachError {
+    let piece_name = |id: &str| {
+        template
+            .panels
+            .iter()
+            .find(|panel| panel.id == id)
+            .map_or_else(
+                || "a garment piece".into(),
+                |panel| format!("“{}”", panel.name),
+            )
+    };
+    let detail = if let Some((a, b)) = crate::avatar_import::error_face_pair(error) {
+        let name = |face| {
+            if face >= garment.mesh.triangles.len() {
+                "the avatar".to_owned()
+            } else {
+                crate::avatar_import::panel_of_face(face, garment)
+                    .map_or_else(|| "a garment piece".into(), piece_name)
+            }
+        };
+        let [a, b] = [name(a), name(b)];
+        if a == b {
+            format!("{a} intersects itself")
+        } else {
+            format!("{a} intersects {b}")
+        }
+    } else if error.starts_with("OGC initial touching/coplanar") {
+        // The exact overlay of two matching flat panels can look like one
+        // panel in the viewport. Report their names when the mesh agrees.
+        let coincident = garment.panels.iter().enumerate().find_map(|(i, a)| {
+            let first = &pose.x[a.vertices.clone()];
+            garment.panels[i + 1..]
+                .iter()
+                .find(|b| {
+                    let second = &pose.x[b.vertices.clone()];
+                    first.len() == second.len()
+                        && first
+                            .iter()
+                            .zip(second)
+                            .all(|(p, q)| p.distance(*q) <= MEET_TOLERANCE_M)
+                })
+                .map(|b| (a, b))
+        });
+        if let Some((a, b)) = coincident {
+            format!("{} and {} overlap", piece_name(&a.id), piece_name(&b.id))
+        } else {
+            "Surfaces touch or overlap outside the stitch contact exemptions".into()
+        }
+    } else {
+        error.into()
+    };
+    ApproachError {
+        message: format!("{} · {detail}", stage.describe()),
+        blocked_pose: (preview && !matches!(stage, CollisionStage::Start)).then(|| pose.clone()),
+    }
+}
+
 pub(crate) struct Approach {
     pub edit: Edit,
     pub panel_id: String,
@@ -120,14 +226,14 @@ pub(crate) fn prepare(
         return Err("Choose two pieces and select an unsewn, unpinned piece second".into());
     }
     let id = spec.id.clone();
-    prepare_seam(scene, edit, &id, false)
+    prepare_seam(scene, edit, &id, false).map_err(|error| error.message)
 }
 
 pub(crate) fn prepare_existing(
     scene: &FittingScene,
     template: &GarmentTemplate,
     id: &str,
-) -> Result<Approach, String> {
+) -> Result<Approach, ApproachError> {
     let edit = Edit {
         template: template.clone(),
         garment: (*scene.garment).clone(),
@@ -143,7 +249,7 @@ fn prepare_seam(
     mut edit: Edit,
     id: &str,
     existing: bool,
-) -> Result<Approach, String> {
+) -> Result<Approach, ApproachError> {
     let spec = edit
         .template
         .seams
@@ -257,7 +363,16 @@ fn prepare_seam(
     } else {
         Some(
             VbdSolver::new(unsewn, avatar, &start)
-                .map_err(|error| format!("The approach must start separated · {error}"))?
+                .map_err(|error| {
+                    blocked_pose(
+                        CollisionStage::Start,
+                        &error,
+                        &start,
+                        &edit.template,
+                        &edit.garment,
+                        existing,
+                    )
+                })?
                 .world,
         )
     };
@@ -273,7 +388,21 @@ fn prepare_seam(
         .collect();
     let mut trial = start.clone();
     let mut compatible = false;
-    let mut keeps_other_seams = false;
+    let mut blocked: Option<(CollisionStage, ApproachError)> = None;
+    let mut remember = |stage, error: &str, pose: &State| {
+        // Prefer a blocked route to an otherwise valid target over an
+        // intersecting target that could never be reached.
+        let keep = blocked.as_ref().is_none_or(|(saved, _)| {
+            matches!(stage, CollisionStage::Approach(_))
+                && !matches!(saved, CollisionStage::Approach(_))
+        });
+        if keep {
+            blocked = Some((
+                stage,
+                blocked_pose(stage, error, pose, &edit.template, &edit.garment, existing),
+            ));
+        }
+    };
     for quarter_turn in [0.0, 1.0, -1.0, 2.0] {
         let rotation = if initially_joined {
             DQuat::IDENTITY
@@ -304,30 +433,39 @@ fn prepare_seam(
         }) {
             continue;
         }
-        keeps_other_seams = true;
         // Exact seam contact is allowed only at handoff, using the same
         // local stitch exclusions that the actual solver uses.
-        let Ok(mut final_solver) = VbdSolver::new(Arc::clone(&sewn), avatar, &trial) else {
-            continue;
+        let mut final_solver = match VbdSolver::new(Arc::clone(&sewn), avatar, &trial) {
+            Ok(solver) => solver,
+            Err(error) => {
+                remember(CollisionStage::Joined, &error, &trial);
+                continue;
+            }
         };
-        let mut reset = edit.garment.initial_state.x.clone();
-        reset[b.vertices.clone()].copy_from_slice(&trial.x[b.vertices.clone()]);
-        if final_solver
+        let mut reset = edit.garment.initial_state.clone();
+        reset.x[b.vertices.clone()].copy_from_slice(&trial.x[b.vertices.clone()]);
+        if let Err(error) = final_solver
             .world
-            .validate_start(&final_solver.world.positions(&reset))
-            .is_err()
+            .validate_start(&final_solver.world.positions(&reset.x))
         {
+            remember(CollisionStage::Reset, &error, &reset);
             continue;
         }
-        if let Some(world) = &mut approach_world
-            && !(1..APPROACH_FRAMES).all(|frame| {
+        let mut path_failure = None;
+        if let Some(world) = &mut approach_world {
+            for frame in 1..APPROACH_FRAMES {
                 let transform = motion.transform(frame);
                 for i in b.vertices.clone() {
                     trial.x[i] = transform(start.x[i]);
                 }
-                world.validate_start(&world.positions(&trial.x)).is_ok()
-            })
-        {
+                if let Err(error) = world.validate_start(&world.positions(&trial.x)) {
+                    path_failure = Some((frame, error));
+                    break;
+                }
+            }
+        }
+        if let Some((frame, error)) = path_failure {
+            remember(CollisionStage::Approach(frame), &error, &trial);
             continue;
         }
         edit.template
@@ -367,9 +505,10 @@ fn prepare_seam(
             motion,
         });
     }
-    Err(if keeps_other_seams {
-        "The edge can meet, but the approach or joined pose has a collision. Reposition the pieces and try again"
-    } else if compatible {
+    if let Some((_, error)) = blocked {
+        return Err(error);
+    }
+    Err(if compatible {
         "Joining this edge would pull other seams farther apart"
     } else {
         "The edges cannot meet along their full length with a rigid move. Choose matching edges or use Sew"

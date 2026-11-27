@@ -511,9 +511,8 @@ fn join_on_play_rejects_a_collision_between_start_and_contact() {
     state.draft_2d = Some(draft);
     apply_runner_ui_op(&mut state, RunnerUiOp::AlignAndSew { ease: false });
     assert!(
-        state
-            .status_message
-            .contains("approach or joined pose has a collision"),
+        state.status_message.contains("Approach at ")
+            && state.status_message.contains("intersects the avatar"),
         "{}",
         state.status_message
     );
@@ -668,4 +667,82 @@ fn a_selected_existing_seam_keeps_its_mode_after_a_blocked_play() {
     assert!(state.playing);
     assert!(state.seam_assembly.is_some());
     assert!(state.seam_mode_error.is_none());
+}
+
+#[test]
+fn stock_dress_reports_future_overlap_and_previews_it_without_editing_the_scene() {
+    use super::super::actions::{RunnerAction, apply_runner_action};
+    use clothcraft::usd_scene::{
+        VIEWPORT_GARMENT_PATH, garment_stage_usda, viewport_panel_path, viewport_scene_from_usda,
+    };
+    use cssimpler::renderer::gpu::openusd::gf;
+    use std::sync::{Arc, Mutex, mpsc};
+
+    let dir = tempfile::tempdir().unwrap();
+    let project = FittingProject::basic(
+        GarmentKind::Dress,
+        1,
+        "assets/makehuman/mannequin.obj".into(),
+    );
+    let scene = project.compile().unwrap();
+    let original = scene.state.x.clone();
+    let (send, receive) = mpsc::channel();
+    let files = DocumentFiles {
+        output: dir.path().into(),
+        source: None,
+        modified: false,
+    };
+    let usd = viewport_scene_from_usda(&garment_stage_usda(&scene.garment, &scene.state).unwrap())
+        .unwrap()
+        .with_deforming_meshes(VIEWPORT_GARMENT_PATH)
+        .unwrap();
+    let mut state = CssRunnerState::new(project, scene, files, send, Arc::new(Mutex::new(None)));
+    state.usd_scene = Some(usd.clone());
+    let id = "side-left".to_string();
+    apply_runner_ui_op(&mut state, RunnerUiOp::SelectSeam(id.clone()));
+    apply_runner_ui_op(
+        &mut state,
+        RunnerUiOp::SetSeamMode {
+            id,
+            join_on_play: true,
+        },
+    );
+    apply_runner_action(&mut state, RunnerAction::PlayPause, false);
+    let error = state.seam_mode_error.as_deref().unwrap();
+    assert!(error.starts_with("Joined pose"), "{error}");
+    assert!(error.contains("overlap"), "{error}");
+    assert!(!state.playing);
+    assert!(receive.try_iter().all(|work| !work.playing && !work.once));
+
+    let points = |panel| {
+        let path = format!("{}.points", viewport_panel_path(panel));
+        usd.stage()
+            .attribute(path.as_str())
+            .unwrap()
+            .get::<Vec<gf::Vec3f>>()
+            .unwrap()
+            .unwrap()
+    };
+    let front = points("front");
+    let back = points("back");
+    assert_ne!(front, back);
+    apply_runner_ui_op(&mut state, RunnerUiOp::ToggleSeamCollisionPreview);
+    assert!(state.seam_collision.as_ref().unwrap().shown);
+    assert_eq!(points("front"), front);
+    let displayed_back = points("back");
+    assert_ne!(displayed_back, back);
+    let tip = displayed_back[0];
+    assert!(
+        front
+            .iter()
+            .any(|p| { (p.x - tip.x).abs() + (p.y - tip.y).abs() + (p.z - tip.z).abs() < 1e-6 }),
+        "the proposed back panel lies on the front panel"
+    );
+    assert_eq!(state.scene.state.x, original);
+    assert!(!state.files.modified);
+
+    assert!(handle_runner_event(&mut state, &named_key("Escape")));
+    assert_eq!(points("back"), back);
+    assert_eq!(state.seam_to_join.as_deref(), Some("side-left"));
+    assert!(!state.seam_collision.as_ref().unwrap().shown);
 }

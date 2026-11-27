@@ -100,6 +100,7 @@ pub struct CssRunnerState {
     pub(super) selected_seam: Option<String>,
     pub(super) seam_to_join: Option<String>,
     pub(super) seam_mode_error: Option<String>,
+    pub(super) seam_collision: Option<super::seam_assembly::CollisionPreview>,
     pub step_count: u64,
     pub step_ms: f64,
     pub last_metrics: Option<VbdMetrics>,
@@ -238,6 +239,7 @@ impl CssRunnerState {
             selected_seam: None,
             seam_to_join: None,
             seam_mode_error: None,
+            seam_collision: None,
             step_count: 0,
             step_ms: 0.0,
             last_metrics: None,
@@ -386,6 +388,9 @@ impl CssRunnerState {
     }
 
     pub fn send_control_state(&mut self, once: bool) {
+        if self.playing || once {
+            super::seam_assembly::clear_collision(self);
+        }
         let once = if (self.playing || once)
             && self.seam_assembly.is_none()
             && let Some(id) = self.seam_to_join.clone()
@@ -670,6 +675,7 @@ impl CssRunnerState {
 
     pub fn reset_simulation(&mut self) {
         super::seam_assembly::cancel_motion(self);
+        super::seam_assembly::clear_collision(self);
         self.seam_mode_error = None;
         self.files.modified |= self.scene.state.time != self.initial_scene.state.time
             || self.scene.state.x != self.initial_scene.state.x

@@ -51,6 +51,7 @@ pub(super) fn install_authoring_edit_with_pose(
     pose: Option<clothcraft::model::State>,
 ) {
     super::seam_assembly::cancel_motion(state);
+    super::seam_assembly::clear_collision(state);
     if let Some(old) = record_old {
         state.history.record(old);
     }
@@ -646,6 +647,7 @@ pub(super) fn select_seam(state: &mut CssRunnerState, id: &str) {
     {
         state.active_category = super::state::ObjectCategory::Sewing;
         state.selected_seam = Some(id.into());
+        super::seam_assembly::clear_collision(state);
         state.seam_mode_error = None;
         state.draft_2d = None;
         state.status_message = format!("Selected seam {id}");
@@ -657,6 +659,7 @@ pub(super) fn set_seam_mode(state: &mut CssRunnerState, id: &str, join_on_play: 
         return;
     }
     state.seam_mode_error = None;
+    super::seam_assembly::clear_collision(state);
     if !join_on_play {
         if state.seam_to_join.as_deref() == Some(id) {
             let was_playing = state.playing;

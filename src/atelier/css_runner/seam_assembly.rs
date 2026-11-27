@@ -21,6 +21,51 @@ impl SeamAssembly {
     }
 }
 
+pub(super) struct CollisionPreview {
+    pose: clothcraft::model::State,
+    pub shown: bool,
+}
+
+pub(super) fn hide_collision(state: &mut CssRunnerState) -> bool {
+    let Some(preview) = state
+        .seam_collision
+        .as_mut()
+        .filter(|preview| preview.shown)
+    else {
+        return false;
+    };
+    preview.shown = false;
+    state.sync_usd_simulation_pose();
+    state.request_viewport_redraw();
+    true
+}
+
+pub(super) fn clear_collision(state: &mut CssRunnerState) {
+    hide_collision(state);
+    state.seam_collision = None;
+}
+
+pub(super) fn toggle_collision(state: &mut CssRunnerState) {
+    if hide_collision(state) {
+        return;
+    }
+    if let (Some(preview), Some(usd)) = (&mut state.seam_collision, &state.usd_scene) {
+        match clothcraft::usd_scene::update_panel_viewport_pose(
+            usd,
+            &state.scene.garment,
+            &preview.pose,
+        ) {
+            Ok(()) => {
+                preview.shown = true;
+                state.request_viewport_redraw();
+            }
+            Err(error) => {
+                state.status_message = format!("Could not preview the blocked pose · {error}")
+            }
+        }
+    }
+}
+
 pub(super) fn begin(state: &mut CssRunnerState, approach: Approach) {
     state.generation = state.generation.wrapping_add(1);
     state.worker_pending = false;
@@ -57,8 +102,11 @@ pub(super) fn begin_existing(state: &mut CssRunnerState, id: &str) -> bool {
             state.playing = false;
             state.selected_seam = Some(id.into());
             state.active_category = super::state::ObjectCategory::Sewing;
-            state.status_message = format!("Join on Play unavailable · {error}");
-            state.seam_mode_error = Some(error);
+            state.status_message = format!("Join on Play unavailable · {}", error.message);
+            state.seam_mode_error = Some(error.message);
+            state.seam_collision = error
+                .blocked_pose
+                .map(|pose| CollisionPreview { pose, shown: false });
             false
         }
     }
@@ -68,6 +116,7 @@ pub(super) fn cancel(state: &mut CssRunnerState) -> bool {
     let queued = state.seam_to_join.take().is_some();
     let cancelled = cancel_motion(state) || queued;
     if cancelled {
+        clear_collision(state);
         state.seam_mode_error = None;
         state.status_message = "Seam joining cancelled".into();
     }

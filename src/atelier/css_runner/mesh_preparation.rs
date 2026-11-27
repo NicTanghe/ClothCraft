@@ -269,6 +269,7 @@ pub fn apply(state: &mut CssRunnerState, physics: bool) -> Result<(), String> {
     candidate.prearrange = false;
     // Compile before mutating the document, history, worker generation or scene.
     let scene = candidate.compile()?;
+    super::seam_assembly::clear_collision(state);
     state.history.record(state.project.template.clone());
     state.project = candidate;
     state.scene = scene;

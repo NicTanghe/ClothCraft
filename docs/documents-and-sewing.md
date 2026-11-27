@@ -23,6 +23,10 @@ queues that seam for the next playback. Choose **Solver Pull** to cancel
 that seam’s queued join. If playback cannot join the edge from its current
 pose, it pauses and shows the reason in the **Sew** tab. The mode stays
 selected so you can reposition the pieces and retry.
+The message distinguishes a collision in the approach, the joined pose,
+and the reset pose. When a later pose is blocked, **Show Blocked Pose**
+displays that pose in the 3D viewport. **Back to Current Pose** or Esc
+restores the current arrangement.
 
 For a new seam, select two edges with **Sew** and choose **Join on Play**
 in the confirmation card in the **Sew** tab. Playback moves the whole

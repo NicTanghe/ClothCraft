@@ -142,6 +142,7 @@ pub enum RunnerUiOp {
     Redo2d,
     SelectPiece(usize),
     SelectSeam(String),
+    ToggleSeamCollisionPreview,
     SetSeamMode {
         id: String,
         join_on_play: bool,
@@ -754,6 +755,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             let next_template = basic_garment(kind, subdivisions);
             match next_template.compile() {
                 Ok(compiled) => {
+                    state.seam_collision = None;
                     state.seam_assembly = None;
                     state.seam_to_join = None;
                     state.selected_seam = None;
@@ -821,6 +823,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             confirm_pending_sew(state, ease);
         }
         RunnerUiOp::SelectSeam(id) => super::editing::select_seam(state, &id),
+        RunnerUiOp::ToggleSeamCollisionPreview => super::seam_assembly::toggle_collision(state),
         RunnerUiOp::SetSeamMode { id, join_on_play } => {
             super::editing::set_seam_mode(state, &id, join_on_play);
         }

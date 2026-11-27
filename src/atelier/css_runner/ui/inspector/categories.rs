@@ -101,6 +101,11 @@ pub(in super::super::super) fn build_cat_sewing(state: &CssRunnerState) -> Node 
                     <button id="selected-seam-join" class={join_class} aria-pressed={joining.to_string()} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetSeamMode { id: seam.id.clone(), join_on_play: true })} title="Bring the matching edges into contact during playback">"Join on Play"</button>
                 </div>
                 {error.map(|message| ui! { <p id="selected-seam-mode-error">{message.to_string()}</p> })}
+                {state.seam_collision.as_ref().map(|preview| ui! {
+                    <button id="seam-collision-preview" class="btn-action" aria-pressed={preview.shown.to_string()} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ToggleSeamCollisionPreview)}>
+                        {if preview.shown { "Back to Current Pose" } else { "Show Blocked Pose" }}
+                    </button>
+                })}
             </div>
         }
     });
