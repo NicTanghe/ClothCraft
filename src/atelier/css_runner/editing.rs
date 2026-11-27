@@ -38,14 +38,26 @@ pub(super) fn install_authoring_edit(
     state: &mut CssRunnerState,
     edit: authoring::Edit,
     record_old: Option<GarmentTemplate>,
-    mut msg: String,
+    msg: String,
 ) {
-    super::seam_assembly::cancel(state);
+    install_authoring_edit_with_pose(state, edit, record_old, msg, None);
+}
+
+pub(super) fn install_authoring_edit_with_pose(
+    state: &mut CssRunnerState,
+    edit: authoring::Edit,
+    record_old: Option<GarmentTemplate>,
+    mut msg: String,
+    pose: Option<clothcraft::model::State>,
+) {
+    super::seam_assembly::cancel_motion(state);
     if let Some(old) = record_old {
         state.history.record(old);
     }
     let next_garment = Arc::new(edit.garment.clone());
-    let next_state = if edit.reset_simulation {
+    let next_state = if let Some(pose) = pose {
+        pose
+    } else if edit.reset_simulation {
         edit.state_after(&state.scene.garment, &state.scene.state)
     } else {
         state.scene.state.clone()
@@ -74,6 +86,27 @@ pub(super) fn install_authoring_edit(
         state.board_2d_fit = fit_2d_board(&edit.template);
     }
     state.project.template = edit.template;
+    state.seam_mode_error = None;
+    if state.selected_seam.as_ref().is_some_and(|id| {
+        !state
+            .project
+            .template
+            .seams
+            .iter()
+            .any(|seam| &seam.id == id)
+    }) {
+        state.selected_seam = None;
+    }
+    if state.seam_to_join.as_ref().is_some_and(|id| {
+        !state
+            .project
+            .template
+            .seams
+            .iter()
+            .any(|seam| &seam.id == id)
+    }) {
+        state.seam_to_join = None;
+    }
     state.files.modified = true;
     state
         .mirrored_pieces
@@ -603,12 +636,57 @@ pub fn confirm_pending_sew(state: &mut CssRunnerState, ease: bool) -> bool {
     finish_pending_sew(state, ease, false)
 }
 
+pub(super) fn select_seam(state: &mut CssRunnerState, id: &str) {
+    if state
+        .project
+        .template
+        .seams
+        .iter()
+        .any(|seam| seam.id == id)
+    {
+        state.active_category = super::state::ObjectCategory::Sewing;
+        state.selected_seam = Some(id.into());
+        state.seam_mode_error = None;
+        state.draft_2d = None;
+        state.status_message = format!("Selected seam {id}");
+    }
+}
+
+pub(super) fn set_seam_mode(state: &mut CssRunnerState, id: &str, join_on_play: bool) {
+    if state.selected_seam.as_deref() != Some(id) {
+        return;
+    }
+    state.seam_mode_error = None;
+    if !join_on_play {
+        if state.seam_to_join.as_deref() == Some(id) {
+            let was_playing = state.playing;
+            super::seam_assembly::cancel(state);
+            state.playing = was_playing;
+            state.send_control_state(false);
+            state.status_message = format!("{id} · Solver Pull");
+        }
+        return;
+    }
+    if state.seam_to_join.as_deref() == Some(id) {
+        return;
+    }
+    if state.seam_to_join.is_some() || state.seam_assembly.is_some() {
+        state.seam_mode_error = Some("Finish or cancel the pending join first".into());
+        return;
+    }
+    state.seam_to_join = Some(id.into());
+    state.status_message = format!("{id} · Join on Play");
+    if state.playing {
+        state.send_control_state(false);
+    }
+}
+
 pub(super) fn align_and_sew(state: &mut CssRunnerState, ease: bool) -> bool {
     finish_pending_sew(state, ease, true)
 }
 
 fn finish_pending_sew(state: &mut CssRunnerState, ease: bool, align: bool) -> bool {
-    if state.seam_assembly.is_some() {
+    if state.seam_assembly.is_some() || (align && state.seam_to_join.is_some()) {
         state.status_message = "Finish the pending seam or press Esc to cancel it".into();
         return false;
     }
@@ -676,7 +754,8 @@ fn finish_pending_sew(state: &mut CssRunnerState, ease: bool, align: bool) -> bo
         match result {
             Ok(approach) => {
                 state.preview_template = None;
-                super::seam_assembly::queue(state, approach);
+                super::seam_assembly::begin(state, approach);
+                state.send_control_state(false);
                 true
             }
             Err(error) => {

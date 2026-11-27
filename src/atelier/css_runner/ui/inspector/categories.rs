@@ -68,32 +68,52 @@ pub(in super::super::super) fn build_cat_pattern_2d(state: &CssRunnerState) -> N
 
 pub(in super::super::super) fn build_cat_sewing(state: &CssRunnerState) -> Node {
     let seams = &state.project.template.seams;
-    let seams_count = seams.len();
+    let selected = seams
+        .iter()
+        .find(|s| state.selected_seam.as_deref() == Some(s.id.as_str()));
+    let pending = state.seam_to_join.as_deref();
 
-    let mut seam_rows = Vec::new();
-    for (idx, s) in seams.iter().enumerate() {
-        let label = format!("{}: {} ↔ {}", s.id, s.a.panel, s.b.panel);
-        let rev_badge = if s.reverse_b { " (rev)" } else { "" };
-        seam_rows.push(ui! {
-            <div class="tree-item">
-                <span>{label}</span>
-                <span class="badge-accent">{format!("#{idx}{rev_badge}")}</span>
+    let seam_rows: Vec<_> = seams.iter().map(|seam| {
+        let active = state.selected_seam.as_deref() == Some(seam.id.as_str());
+        let class = if active { "tree-item active" } else { "tree-item" };
+        let mode = if pending == Some(seam.id.as_str()) { "Join on Play" } else { "Solver Pull" };
+        ui! {
+            <button id={format!("sew-select-{}", seam.id)} class={class} aria-pressed={active.to_string()} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SelectSeam(seam.id.clone()))}>
+                <span>{seam.id.clone()}</span>
+                <span class="text-muted-sm">{mode}</span>
+            </button>
+        }
+    }).collect();
+
+    let mode_controls = selected.map(|seam| {
+        let joining = pending == Some(seam.id.as_str());
+        let pull_class = if joining { "btn-action" } else { "btn-action btn-action-accent" };
+        let join_class = if joining { "btn-action btn-action-accent" } else { "btn-action" };
+        let error = state.seam_mode_error.as_deref();
+        ui! {
+            <div id="selected-seam-controls" class="card">
+                <div class="prop-row">
+                    <span class="prop-label">"Selected seam"</span>
+                    <span class="prop-value">{seam.id.clone()}</span>
+                </div>
+                <div class="quick-actions-row">
+                    <button id="selected-seam-solver" class={pull_class} aria-pressed={(!joining).to_string()} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetSeamMode { id: seam.id.clone(), join_on_play: false })} title="Let cloth forces pull this seam together">"Solver Pull"</button>
+                    <button id="selected-seam-join" class={join_class} aria-pressed={joining.to_string()} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetSeamMode { id: seam.id.clone(), join_on_play: true })} title="Bring the matching edges into contact during playback">"Join on Play"</button>
+                </div>
+                {error.map(|message| ui! { <p id="selected-seam-mode-error">{message.to_string()}</p> })}
             </div>
-        });
-    }
+        }
+    });
 
     ui! {
         <div class="tab-panel">
             <h3 class="panel-heading">"Sewing Seams"</h3>
-            <div class="prop-row">
-                <span class="prop-label">"Total Seams"</span>
-                <span class="prop-value">{format!("{seams_count}")}</span>
-            </div>
-            <div class="prop-row">
-                <span class="prop-label">"Active Tool"</span>
-                <span class="prop-value">{state.active_2d_tool.clone()}</span>
-            </div>
-            <div class="browser-tree browser-tree-spaced">
+            {mode_controls}
+            {super::properties::build_sew_confirmation(state)}
+            {selected.is_none().then(|| ui! {
+                <span class="text-muted-sm">{if seams.is_empty() { "Use the Sew tool to connect two edges." } else { "Select a seam to choose how it joins." }}</span>
+            })}
+            <div class="sewing-list">
                 {seam_rows}
             </div>
         </div>

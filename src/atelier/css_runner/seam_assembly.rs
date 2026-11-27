@@ -1,6 +1,6 @@
 //! Playback of a checked rigid seam approach before starting cloth forces.
 
-use super::{editing::install_authoring_edit, state::CssRunnerState};
+use super::{editing::install_authoring_edit_with_pose, state::CssRunnerState};
 use clothcraft::fitting::seam_placement::{APPROACH_FRAMES, Approach};
 use std::time::{Duration, Instant};
 
@@ -21,7 +21,7 @@ impl SeamAssembly {
     }
 }
 
-pub(super) fn queue(state: &mut CssRunnerState, approach: Approach) {
+pub(super) fn begin(state: &mut CssRunnerState, approach: Approach) {
     state.generation = state.generation.wrapping_add(1);
     state.worker_pending = false;
     state.seam_assembly = Some(SeamAssembly {
@@ -38,17 +38,49 @@ pub(super) fn queue(state: &mut CssRunnerState, approach: Approach) {
         "Press Play or Step to join the seam · Esc cancels"
     }
     .into();
-    state.send_control_state(false);
+}
+
+pub(super) fn begin_existing(state: &mut CssRunnerState, id: &str) -> bool {
+    match clothcraft::fitting::seam_placement::prepare_existing(
+        &state.scene,
+        &state.project.template,
+        id,
+    ) {
+        Ok(approach) => {
+            state.seam_mode_error = None;
+            begin(state, approach);
+            true
+        }
+        Err(error) => {
+            state.generation = state.generation.wrapping_add(1);
+            state.worker_pending = false;
+            state.playing = false;
+            state.selected_seam = Some(id.into());
+            state.active_category = super::state::ObjectCategory::Sewing;
+            state.status_message = format!("Join on Play unavailable · {error}");
+            state.seam_mode_error = Some(error);
+            false
+        }
+    }
 }
 
 pub(super) fn cancel(state: &mut CssRunnerState) -> bool {
+    let queued = state.seam_to_join.take().is_some();
+    let cancelled = cancel_motion(state) || queued;
+    if cancelled {
+        state.seam_mode_error = None;
+        state.status_message = "Seam joining cancelled".into();
+    }
+    cancelled
+}
+
+pub(super) fn cancel_motion(state: &mut CssRunnerState) -> bool {
     if state.seam_assembly.take().is_none() {
         return false;
     }
     state.playing = false;
     state.sync_usd_simulation_pose();
     state.request_viewport_redraw();
-    state.status_message = "Seam joining cancelled".into();
     true
 }
 
@@ -78,13 +110,17 @@ pub(super) fn tick(state: &mut CssRunnerState, delta: Duration) -> bool {
     }
     if assembly.frame == APPROACH_FRAMES {
         let assembly = state.seam_assembly.take().expect("assembly at handoff");
+        state.seam_to_join = None;
         let old = state.project.template.clone();
         state.draft_2d = None;
-        install_authoring_edit(
+        state.selected_seam = Some(assembly.approach.seam_id);
+        state.seam_mode_error = None;
+        install_authoring_edit_with_pose(
             state,
             assembly.approach.edit,
             Some(old),
             "Joined the full seam · Cloth simulation ready".into(),
+            Some(assembly.approach.joined_state),
         );
         return true;
     }

@@ -132,6 +132,8 @@ impl CssRunnerState {
 
         self.settings = project.simulation.clone().unwrap_or_default();
         self.seam_assembly = None;
+        self.seam_to_join = None;
+        self.selected_seam = None;
         self.project = project;
         self.initial_scene = scene.clone();
         self.scene = scene;

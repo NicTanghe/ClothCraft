@@ -16,8 +16,17 @@ Save / Discard / Cancel appears before opening, creating or closing with unsaved
 
 ## Join on Play
 
-Select two edges with **Sew**, then choose **Join on Play**. The next Play
-moves the whole second piece as one rigid body. Both ends and every
+For an existing seam, open the right-hand **Sew** tab and select the seam
+from the list. You can also click a sewn edge with the **Sew** tool. The
+selected seam shows **Solver Pull** and **Join on Play**. **Join on Play**
+queues that seam for the next playback. Choose **Solver Pull** to cancel
+that seam’s queued join. If playback cannot join the edge from its current
+pose, it pauses and shows the reason in the **Sew** tab. The mode stays
+selected so you can reposition the pieces and retry.
+
+For a new seam, select two edges with **Sew** and choose **Join on Play**
+in the confirmation card in the **Sew** tab. Playback moves the whole
+second piece as one rigid body. Both ends and every
 interior stitch correspondence travel together. Pause freezes the approach,
 Step advances it by one frame, and Esc cancels the pending join.
 
@@ -27,10 +36,12 @@ of numerical tolerance. The editor checks each approach pose and checks the
 joined pose with the solver’s usual seam contact rules. This samples the
 path at its display frames.
 
-The second piece must be flat, unsewn and unpinned, and the two edges must
-be able to coincide without stretching. **Sew** remains available for
-assembly by the solver, including eased and mirrored seams. A failed
-approach leaves the draft open so the pieces can be placed differently.
+The second piece must be flat and unpinned, and the edges must coincide
+without stretching. Joining a new seam requires an unsewn second piece.
+An existing seam can join if the move preserves or reduces the gap at
+its neighboring seams. The **Sew** tab explains a rejected existing
+join. **Sew** remains available for assembly by the solver, including
+eased and mirrored seams. A failed new join leaves the draft open.
 The editor commits the placement and seam together at contact as one
 undoable edit. Saving during the approach stores the last committed state.
 

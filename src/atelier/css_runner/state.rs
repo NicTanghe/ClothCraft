@@ -97,6 +97,9 @@ pub struct CssRunnerState {
     pub worker_pending: bool,
     pub playing: bool,
     pub(super) seam_assembly: Option<super::seam_assembly::SeamAssembly>,
+    pub(super) selected_seam: Option<String>,
+    pub(super) seam_to_join: Option<String>,
+    pub(super) seam_mode_error: Option<String>,
     pub step_count: u64,
     pub step_ms: f64,
     pub last_metrics: Option<VbdMetrics>,
@@ -232,6 +235,9 @@ impl CssRunnerState {
             worker_pending: false,
             playing: false,
             seam_assembly: None,
+            selected_seam: None,
+            seam_to_join: None,
+            seam_mode_error: None,
             step_count: 0,
             step_ms: 0.0,
             last_metrics: None,
@@ -380,6 +386,14 @@ impl CssRunnerState {
     }
 
     pub fn send_control_state(&mut self, once: bool) {
+        let once = if (self.playing || once)
+            && self.seam_assembly.is_none()
+            && let Some(id) = self.seam_to_join.clone()
+        {
+            super::seam_assembly::begin_existing(self, &id) && once
+        } else {
+            once
+        };
         let assembling = if let Some(assembly) = &mut self.seam_assembly {
             assembly.step_requested |= once;
             if self.playing || once {
@@ -641,7 +655,7 @@ impl CssRunnerState {
         if self.gpu_sim == gpu && self.contact_method == method {
             return;
         }
-        super::seam_assembly::cancel(self);
+        super::seam_assembly::cancel_motion(self);
         self.gpu_sim = gpu;
         self.contact_method = method;
         self.generation = self.generation.wrapping_add(1);
@@ -655,7 +669,8 @@ impl CssRunnerState {
     }
 
     pub fn reset_simulation(&mut self) {
-        super::seam_assembly::cancel(self);
+        super::seam_assembly::cancel_motion(self);
+        self.seam_mode_error = None;
         self.files.modified |= self.scene.state.time != self.initial_scene.state.time
             || self.scene.state.x != self.initial_scene.state.x
             || self.scene.state.v != self.initial_scene.state.v;

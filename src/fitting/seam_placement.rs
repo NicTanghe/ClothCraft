@@ -3,6 +3,7 @@
 use super::FittingScene;
 use crate::authoring::{Edit, transform_placement};
 use crate::garment::{CompiledGarment, GarmentTemplate, template::Placement};
+use crate::model::State;
 use crate::vbd::VbdSolver;
 use glam::{DMat3, DQuat, DVec3, EulerRot};
 use std::sync::Arc;
@@ -35,6 +36,8 @@ pub(crate) fn eligible(
 pub(crate) struct Approach {
     pub edit: Edit,
     pub panel_id: String,
+    pub seam_id: String,
+    pub joined_state: State,
     motion: RigidMotion,
 }
 
@@ -108,15 +111,47 @@ fn displayed_placement(scene: &FittingScene, id: &str) -> Result<Placement, Stri
 pub(crate) fn prepare(
     scene: &FittingScene,
     source: &GarmentTemplate,
-    mut edit: Edit,
+    edit: Edit,
 ) -> Result<Approach, String> {
     let spec = edit.template.seams.last().ok_or("Missing new seam")?;
     if edit.template.seams.len() != source.seams.len() + 1
-        || !spec.a_tail.is_empty()
-        || !spec.b_tail.is_empty()
         || !eligible(source, scene, &spec.a.panel, &spec.b.panel)
     {
         return Err("Choose two pieces and select an unsewn, unpinned piece second".into());
+    }
+    let id = spec.id.clone();
+    prepare_seam(scene, edit, &id, false)
+}
+
+pub(crate) fn prepare_existing(
+    scene: &FittingScene,
+    template: &GarmentTemplate,
+    id: &str,
+) -> Result<Approach, String> {
+    let edit = Edit {
+        template: template.clone(),
+        garment: (*scene.garment).clone(),
+        selected: None,
+        reset_simulation: true,
+        new_point: None,
+    };
+    prepare_seam(scene, edit, id, true)
+}
+
+fn prepare_seam(
+    scene: &FittingScene,
+    mut edit: Edit,
+    id: &str,
+    existing: bool,
+) -> Result<Approach, String> {
+    let spec = edit
+        .template
+        .seams
+        .iter()
+        .find(|seam| seam.id == id)
+        .ok_or("The selected seam no longer exists")?;
+    if spec.a.panel == spec.b.panel || !spec.a_tail.is_empty() || !spec.b_tail.is_empty() {
+        return Err("Join on Play needs one edge on each of two pieces".into());
     }
     let old_a = scene
         .garment
@@ -133,9 +168,20 @@ pub(crate) fn prepare(
             .find(|p| &p.id == id)
             .expect("compiled seam reference")
     });
+    if edit.garment.mesh.pins[b.vertices.clone()]
+        .iter()
+        .any(Option::is_some)
+    {
+        return Err("Release the pins on the second piece to move its edge".into());
+    }
     let panel_id = b.id.clone();
     let start_placement = displayed_placement(scene, &panel_id)?;
-    let seam = edit.garment.seams.last().expect("compiled new seam");
+    let seam = edit
+        .garment
+        .seams
+        .iter()
+        .find(|s| s.id == id)
+        .expect("compiled seam");
     let base = edit.state_after(&scene.garment, &scene.state);
     if scene.state.x[old_a.clone()] != base.x[a.vertices.clone()]
         && scene.state.x[old_a.clone()]
@@ -146,6 +192,9 @@ pub(crate) fn prepare(
         return Err(
             "The first edge would remesh and lose its current pose. Reset or use Sew".into(),
         );
+    }
+    if existing && seam.max_gap(&base.x) <= MEET_TOLERANCE_M {
+        return Err("The selected edges already meet".into());
     }
     let mut start = base.clone();
     for i in b.vertices.clone() {
@@ -200,7 +249,7 @@ pub(crate) fn prepare(
     let avatar = Some(scene.collider.surface.as_ref());
     let sewn = Arc::new(edit.garment.clone());
     let mut unsewn = edit.garment.clone();
-    unsewn.seams.pop();
+    unsewn.seams.retain(|s| s.id != id);
     let unsewn = Arc::new(unsewn);
     let initially_joined = seam.max_gap(&start.x) <= MEET_TOLERANCE_M;
     let mut approach_world = if initially_joined {
@@ -212,8 +261,19 @@ pub(crate) fn prepare(
                 .world,
         )
     };
+    // Assembly moves the second piece. Preserve the gap quality of any
+    // other sewn edges that share that piece.
+    let neighboring: Vec<_> = edit
+        .template
+        .seams
+        .iter()
+        .filter(|s| s.id != id && s.references().any(|edge| edge.panel == panel_id))
+        .filter_map(|s| edit.garment.seams.iter().find(|seam| seam.id == s.id))
+        .map(|s| (s, s.max_gap(&start.x), s.integrated_gap_squared(&start.x)))
+        .collect();
     let mut trial = start.clone();
     let mut compatible = false;
+    let mut keeps_other_seams = false;
     for quarter_turn in [0.0, 1.0, -1.0, 2.0] {
         let rotation = if initially_joined {
             DQuat::IDENTITY
@@ -238,6 +298,13 @@ pub(crate) fn prepare(
             continue;
         }
         compatible = true;
+        if neighboring.iter().any(|(other, gap, squared)| {
+            other.max_gap(&trial.x) > gap + 1e-6
+                || other.integrated_gap_squared(&trial.x) > squared + 1e-12
+        }) {
+            continue;
+        }
+        keeps_other_seams = true;
         // Exact seam contact is allowed only at handoff, using the same
         // local stitch exclusions that the actual solver uses.
         let Ok(mut final_solver) = VbdSolver::new(Arc::clone(&sewn), avatar, &trial) else {
@@ -271,14 +338,39 @@ pub(crate) fn prepare(
             .placement = placement;
         edit.selected = Some(panel_id.clone());
         edit.garment = edit.template.compile()?;
+        let mut joined_state = edit.state_after(&scene.garment, &scene.state);
+        let moved = edit
+            .garment
+            .panels
+            .iter()
+            .find(|p| p.id == panel_id)
+            .expect("joined piece")
+            .vertices
+            .clone();
+        joined_state.x[moved.clone()]
+            .copy_from_slice(&edit.garment.arrangement_positions[moved.clone()]);
+        joined_state.v[moved].fill(DVec3::ZERO);
+        let seam = edit
+            .garment
+            .seams
+            .iter()
+            .find(|s| s.id == id)
+            .expect("compiled seam");
+        if seam.max_gap(&joined_state.x) > MEET_TOLERANCE_M {
+            return Err("The full seam could not be preserved in the final mesh".into());
+        }
         return Ok(Approach {
             edit,
             panel_id,
+            seam_id: id.into(),
+            joined_state,
             motion,
         });
     }
-    Err(if compatible {
+    Err(if keeps_other_seams {
         "The edge can meet, but the approach or joined pose has a collision. Reposition the pieces and try again"
+    } else if compatible {
+        "Joining this edge would pull other seams farther apart"
     } else {
         "The edges cannot meet along their full length with a rigid move. Choose matching edges or use Sew"
     }.into())

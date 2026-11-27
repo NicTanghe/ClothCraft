@@ -633,6 +633,8 @@ impl CssRunnerState {
 
     fn install_avatar(&mut self, prepared: avatar_import::Prepared) {
         self.seam_assembly = None;
+        self.seam_to_join = None;
+        self.selected_seam = None;
         let display = prepared.display_surface();
         let (project, scene, asset) = prepared.into_parts();
         self.avatar_display = Some(display);

@@ -141,6 +141,11 @@ pub enum RunnerUiOp {
     Undo2d,
     Redo2d,
     SelectPiece(usize),
+    SelectSeam(String),
+    SetSeamMode {
+        id: String,
+        join_on_play: bool,
+    },
     LoadPreset(GarmentKind),
     StatusNote(String),
     ImportChoose,
@@ -750,6 +755,8 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             match next_template.compile() {
                 Ok(compiled) => {
                     state.seam_assembly = None;
+                    state.seam_to_join = None;
+                    state.selected_seam = None;
                     let old = state.project.template.clone();
                     state.history.record(old);
                     state.preview_template = None;
@@ -812,6 +819,10 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         }
         RunnerUiOp::ConfirmSew { ease } => {
             confirm_pending_sew(state, ease);
+        }
+        RunnerUiOp::SelectSeam(id) => super::editing::select_seam(state, &id),
+        RunnerUiOp::SetSeamMode { id, join_on_play } => {
+            super::editing::set_seam_mode(state, &id, join_on_play);
         }
         RunnerUiOp::AlignAndSew { ease } => {
             super::editing::align_and_sew(state, ease);
