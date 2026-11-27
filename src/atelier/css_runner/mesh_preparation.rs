@@ -245,6 +245,7 @@ impl MeshDraft {
 pub fn apply(state: &mut CssRunnerState, physics: bool) -> Result<(), String> {
     if state.playing
         || state.worker_pending
+        || state.seam_assembly.is_some()
         || state.draft_2d.is_some()
         || state.drag_2d.is_some()
         || state.preview_template.is_some()
@@ -268,6 +269,7 @@ pub fn apply(state: &mut CssRunnerState, physics: bool) -> Result<(), String> {
     candidate.prearrange = false;
     // Compile before mutating the document, history, worker generation or scene.
     let scene = candidate.compile()?;
+    super::seam_assembly::clear_collision(state);
     state.history.record(state.project.template.clone());
     state.project = candidate;
     state.scene = scene;

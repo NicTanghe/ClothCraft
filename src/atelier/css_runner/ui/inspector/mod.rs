@@ -70,7 +70,7 @@ pub(in super::super) fn build_runner_right_dock(state: &CssRunnerState) -> Node 
                 <div class="dock-section-title">"Object Browser"</div>
                 <div class="dock-tabs">
                     <button class={tp} onclick_shared={queue_action(&state.actions, RunnerAction::TabPattern)} title="2D Pattern">"2D"</button>
-                    <button class={ts} onclick_shared={queue_action(&state.actions, RunnerAction::TabSewing)} title="Sewing">"Sew"</button>
+                    <button id="sewing-tab" class={ts} onclick_shared={queue_action(&state.actions, RunnerAction::TabSewing)} title="Sewing modes and existing seams">"Sew"</button>
                     <button class={tf} onclick_shared={queue_action(&state.actions, RunnerAction::TabForm)} title="3D Form">"3D"</button>
                     <button class={tm} onclick_shared={queue_action(&state.actions, RunnerAction::TabMaterial)} title="Material">"Mat."</button>
                     <button class={te} onclick_shared={queue_action(&state.actions, RunnerAction::TabEnv)} title="Environment">"Env."</button>

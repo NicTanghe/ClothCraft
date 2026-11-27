@@ -9,6 +9,8 @@ use crate::{
     solver::{Metrics, ReferenceSolver, SolverSettings},
 };
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "desktop")]
+pub(crate) mod seam_placement;
 use std::{
     fs,
     path::{Path, PathBuf},

@@ -219,3 +219,530 @@ fn mirror_sewing_previews_both_pairs_and_checks_reflected_easing_before_commit()
     assert!(undo_redo_2d(&mut state, false));
     assert!(state.project.template.seams.is_empty());
 }
+
+/// Two equal straight edges with opposing boundary directions and a large
+/// placement gap. The second piece starts rotated, as in a rough arrangement.
+fn alignment_fixture(dir: &std::path::Path) -> (CssRunnerState, ToolDraft2d) {
+    use clothcraft::garment::template::Placement;
+    use glam::DVec3;
+
+    let mut state = selection_test_state(dir);
+    let fabric = state.project.template.panels[0].fabric.clone();
+    assert!(commit_authoring_command(
+        &mut state,
+        Command::Polygon {
+            points: vec![
+                DVec2::ZERO,
+                DVec2::new(0.3, 0.0),
+                DVec2::new(0.3, 0.2),
+                DVec2::new(0.0, 0.2),
+            ],
+            tangents: vec![],
+            meshing: Default::default(),
+            fabric,
+            replace: true,
+        },
+        "Created rectangle",
+    ));
+    let first = state.project.template.panels[0].id.clone();
+    assert!(commit_authoring_command(
+        &mut state,
+        Command::Duplicate { panel: first },
+        "Duplicated rectangle",
+    ));
+    let second = state.project.template.panels[1].id.clone();
+    assert!(commit_authoring_command(
+        &mut state,
+        Command::Place {
+            panel: second,
+            placement: Placement {
+                translation: DVec3::new(0.8, 1.5, 0.7),
+                rotation_degrees: DVec3::new(0.0, 0.0, 35.0),
+            },
+        },
+        "Roughly placed second rectangle",
+    ));
+    let side = |idx: usize, edge: usize| {
+        let panel = &state.project.template.panels[idx];
+        (
+            panel.id.clone(),
+            panel.polygon.as_ref().unwrap().edges[edge].clone(),
+        )
+    };
+    let draft = ToolDraft2d::SewConfirm {
+        a: side(0, 1),
+        b: side(1, 3),
+        reverse: true,
+        a_len_m: 0.2,
+        b_len_m: 0.2,
+    };
+    (state, draft)
+}
+
+#[test]
+fn align_and_sew_moves_the_whole_edge_before_the_first_solver_step() {
+    use super::super::actions::{RunnerAction, apply_runner_action, update_runner};
+    use clothcraft::fitting::seam_placement::APPROACH_FRAMES;
+    use clothcraft::usd_scene::{
+        VIEWPORT_GARMENT_PATH, garment_stage_usda, viewport_panel_path, viewport_scene_from_usda,
+    };
+    use clothcraft::vbd::VbdSolver;
+    use cssimpler::renderer::{FrameInfo, gpu::openusd::gf};
+    use std::{
+        sync::{Arc, mpsc},
+        time::Duration,
+    };
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, draft) = alignment_fixture(dir.path());
+    let authored = state.project.template.clone();
+    let first_range = state.scene.garment.panels[0].vertices.clone();
+    let first_before = state.scene.state.x[first_range.clone()].to_vec();
+    state.draft_2d = Some(draft.clone());
+    assert!(confirm_pending_sew(&mut state, false));
+    let ordinary_gap = state.scene.garment.max_seam_gap(&state.scene.state.x);
+    assert!(ordinary_gap > 0.5);
+    assert!(undo_redo_2d(&mut state, false));
+
+    let usd = viewport_scene_from_usda(
+        &garment_stage_usda(&state.scene.garment, &state.scene.state).unwrap(),
+    )
+    .unwrap()
+    .with_deforming_meshes(VIEWPORT_GARMENT_PATH)
+    .unwrap();
+    let panel_id = &authored.panels[1].id;
+    let path = format!("{}.points", viewport_panel_path(panel_id));
+    let read_points = || {
+        usd.stage()
+            .attribute(path.as_str())
+            .unwrap()
+            .get::<Vec<gf::Vec3f>>()
+            .unwrap()
+            .unwrap()
+    };
+    let initial_points = read_points();
+    state.usd_scene = Some(usd.clone());
+
+    // Observe the real transport controls without racing a background solve.
+    let (send, receive) = mpsc::channel();
+    state.worker_tx = send;
+    state.draft_2d = Some(draft);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AlignAndSew { ease: false });
+    assert!(state.seam_assembly.is_some(), "{}", state.status_message);
+    assert_eq!(read_points(), initial_points);
+    assert!(state.project.template.seams.is_empty());
+    assert!(receive.try_iter().all(|work| !work.playing && !work.once));
+
+    let frame = |index| FrameInfo {
+        frame_index: index,
+        delta: Duration::from_nanos(16_666_667),
+    };
+    apply_runner_action(&mut state, RunnerAction::PlayPause, false);
+    for index in 1..=4 {
+        update_runner(&mut state, frame(index));
+    }
+    let moved = read_points();
+    assert_ne!(moved, initial_points);
+    assert_eq!(state.scene.state.x[first_range.clone()], first_before);
+    assert!(state.project.template.seams.is_empty());
+    assert!(receive.try_iter().all(|work| !work.playing && !work.once));
+
+    apply_runner_action(&mut state, RunnerAction::PlayPause, false);
+    update_runner(&mut state, frame(5));
+    assert_eq!(read_points(), moved);
+    apply_runner_action(&mut state, RunnerAction::Step, false);
+    update_runner(&mut state, frame(6));
+    assert_ne!(read_points(), moved);
+    assert!(receive.try_iter().all(|work| !work.playing && !work.once));
+
+    apply_runner_action(&mut state, RunnerAction::PlayPause, false);
+    for index in 7..=u64::from(APPROACH_FRAMES) + 1 {
+        update_runner(&mut state, frame(index));
+        assert!(state.project.template.seams.is_empty());
+    }
+    let meeting = read_points();
+    update_runner(&mut state, frame(u64::from(APPROACH_FRAMES) + 2));
+    let first_work = receive
+        .try_iter()
+        .find(|work| work.playing)
+        .expect("worker starts at handoff");
+    assert!(
+        first_work
+            .scene
+            .garment
+            .max_seam_gap(&first_work.scene.state.x)
+            < 1e-8
+    );
+    assert!(state.seam_assembly.is_none());
+    assert!(state.draft_2d.is_none());
+    assert_eq!(state.project.template.seams.len(), 1);
+    assert_eq!(state.scene.state.x[first_range], first_before);
+    assert_eq!(
+        state.project.template.panels[1]
+            .polygon
+            .as_ref()
+            .unwrap()
+            .points,
+        authored.panels[1].polygon.as_ref().unwrap().points
+    );
+    let final_points = read_points();
+    assert_eq!(meeting.len(), final_points.len());
+    assert!(
+        meeting
+            .iter()
+            .zip(&final_points)
+            .all(|(a, b)| { ((a.x - b.x).abs() + (a.y - b.y).abs() + (a.z - b.z).abs()) < 1e-6 })
+    );
+
+    let mut solver = VbdSolver::new(
+        Arc::clone(&state.scene.garment),
+        Some(&state.scene.collider.surface),
+        &state.scene.state,
+    )
+    .unwrap();
+    let mut simulated = state.scene.state.clone();
+    let metrics = solver.step(&mut simulated, &state.settings, None).unwrap();
+    assert!(metrics.max_seam_gap_m < 0.004);
+    assert!(simulated.time > state.scene.state.time);
+
+    assert!(undo_redo_2d(&mut state, false));
+    assert!(state.project.template.seams.is_empty());
+    assert_eq!(
+        state.project.template.panels[1].placement.translation,
+        authored.panels[1].placement.translation
+    );
+    assert!(undo_redo_2d(&mut state, true));
+    assert!(state.scene.garment.max_seam_gap(&state.scene.state.x) < 1e-8);
+}
+
+#[test]
+fn align_and_sew_leaves_the_draft_when_startup_detects_an_intersection() {
+    use clothcraft::avatar::{MeshCollider, SurfaceMesh};
+    use std::sync::Arc;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, draft) = alignment_fixture(dir.path());
+    // A large fixed triangle slices through the stationary first panel.
+    let avatar = dir.path().join("crossing.obj");
+    std::fs::write(&avatar, "v -0.1 0 0\nv -0.1 3 0\nv -0.1 1.5 2\nf 1 2 3\n").unwrap();
+    let surface = Arc::new(SurfaceMesh::load_obj(&avatar).unwrap());
+    state.scene.collider =
+        Arc::new(MeshCollider::new(surface, state.project.contact_stiffness).unwrap());
+    let before = state.scene.state.x.clone();
+    state.draft_2d = Some(draft);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AlignAndSew { ease: false });
+    assert!(
+        state
+            .status_message
+            .contains("The approach must start separated"),
+        "{}",
+        state.status_message
+    );
+    assert!(matches!(
+        state.draft_2d,
+        Some(ToolDraft2d::SewConfirm { .. })
+    ));
+    assert!(state.project.template.seams.is_empty());
+    assert_eq!(state.scene.state.x, before);
+    assert!(confirm_pending_sew(&mut state, false));
+}
+
+#[test]
+fn join_on_play_rejects_a_close_fit_that_cannot_meet() {
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, mut draft) = alignment_fixture(dir.path());
+    let ToolDraft2d::SewConfirm { b, b_len_m, .. } = &mut draft else {
+        unreachable!();
+    };
+    assert!(commit_authoring_command(
+        &mut state,
+        Command::Anchor {
+            panel: b.0.clone(),
+            anchor: 3,
+            position: DVec2::new(0.0, 0.199),
+        },
+        "Shortened second edge by 1 mm",
+    ));
+    *b_len_m = 0.199;
+    state.draft_2d = Some(draft);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AlignAndSew { ease: true });
+    assert!(
+        state
+            .status_message
+            .contains("cannot meet along their full length"),
+        "{}",
+        state.status_message
+    );
+    assert!(state.seam_assembly.is_none());
+    assert!(state.draft_2d.is_some());
+    assert!(state.project.template.seams.is_empty());
+}
+
+#[test]
+fn join_on_play_rejects_a_collision_between_start_and_contact() {
+    use clothcraft::avatar::{MeshCollider, SurfaceMesh};
+    use std::sync::Arc;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, draft) = alignment_fixture(dir.path());
+    // The wall lies between the pieces. Their start and joined poses clear
+    // it, but the displayed rigid approach would pass through it.
+    let avatar = dir.path().join("wall.obj");
+    std::fs::write(
+        &avatar,
+        "v 0.5 -5 -5\nv 0.5 5 -5\nv 0.5 5 5\nv 0.5 -5 5\nf 1 2 3\nf 1 3 4\n",
+    )
+    .unwrap();
+    let surface = Arc::new(SurfaceMesh::load_obj(&avatar).unwrap());
+    state.scene.collider =
+        Arc::new(MeshCollider::new(surface, state.project.contact_stiffness).unwrap());
+    state.draft_2d = Some(draft);
+    apply_runner_ui_op(&mut state, RunnerUiOp::AlignAndSew { ease: false });
+    assert!(
+        state.status_message.contains("Approach at ")
+            && state.status_message.contains("intersects the avatar"),
+        "{}",
+        state.status_message
+    );
+    assert!(state.seam_assembly.is_none());
+    assert!(state.draft_2d.is_some());
+    assert!(state.project.template.seams.is_empty());
+}
+
+#[test]
+fn sew_tab_changes_the_selected_existing_seam_before_playback() {
+    use super::super::actions::{RunnerAction, apply_runner_action};
+    use super::super::app::create_runner_app;
+    use clothcraft::fitting::seam_placement::APPROACH_FRAMES;
+    use cssimpler::renderer::{FrameInfo, ViewportSize, dispatch_click};
+    use std::{sync::mpsc, time::Duration};
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, draft) = alignment_fixture(dir.path());
+    state.draft_2d = Some(draft);
+    assert!(confirm_pending_sew(&mut state, false));
+    let selected_id = state.project.template.seams[0].id.clone();
+    let row_id = format!("#sew-select-{selected_id}");
+
+    // Another seam already belongs to the same two pieces. The selected join
+    // must keep that seam and must not increase its gap.
+    let side = |index: usize| {
+        let p = &state.project.template.panels[index];
+        (p.id.clone(), p.polygon.as_ref().unwrap().edges[0].clone())
+    };
+    state.draft_2d = Some(ToolDraft2d::SewConfirm {
+        a: side(0),
+        b: side(1),
+        reverse: false,
+        a_len_m: 0.3,
+        b_len_m: 0.3,
+    });
+    assert!(confirm_pending_sew(&mut state, false));
+    let before = state.scene.garment.seams[1].max_gap(&state.scene.state.x);
+    let (send, receive) = mpsc::channel();
+    state.worker_tx = send;
+
+    let stylesheet = clothcraft::css_ui::load_studio_stylesheet().unwrap();
+    let mut app = create_runner_app(state, &stylesheet);
+    app.set_viewport(ViewportSize::new(1440, 960));
+    let frame = |index| FrameInfo {
+        frame_index: index,
+        delta: Duration::from_nanos(16_666_667),
+    };
+    app.frame(frame(0));
+    for (index, selector) in [
+        "#sewing-tab",
+        row_id.as_str(),
+        "#selected-seam-join",
+        "#selected-seam-solver",
+        "#selected-seam-join",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let bounds = app.find_element_bounds_by_id(selector).expect(selector);
+        assert!(
+            dispatch_click(
+                app.scene(),
+                bounds.x + bounds.width * 0.5,
+                bounds.y + bounds.height * 0.5
+            ),
+            "{selector} at {bounds:?}"
+        );
+        app.frame(frame(index as u64 + 1));
+        if index >= 2 {
+            let pending = app.state().seam_to_join.as_deref();
+            assert!(app.state().seam_assembly.is_none());
+            assert_eq!(
+                pending,
+                (index != 3).then_some(selected_id.as_str()),
+                "{}",
+                app.state().status_message
+            );
+        }
+    }
+    assert_eq!(app.state().project.template.seams.len(), 2);
+    assert!(receive.try_iter().all(|work| !work.playing && !work.once));
+    apply_runner_action(app.state_mut(), RunnerAction::PlayPause, false);
+    for index in 6..=u64::from(APPROACH_FRAMES) + 6 {
+        app.frame(frame(index));
+    }
+    let work = receive
+        .try_iter()
+        .find(|work| work.playing)
+        .expect("joined solver handoff");
+    let [selected, neighboring] = work.scene.garment.seams.as_slice() else {
+        panic!("existing seams should be preserved");
+    };
+    assert_eq!(selected.id, selected_id);
+    assert!(selected.max_gap(&work.scene.state.x) < 1e-8);
+    assert!(neighboring.max_gap(&work.scene.state.x) < before);
+    assert!(undo_redo_2d(app.state_mut(), false));
+    assert_eq!(app.state().project.template.seams.len(), 2);
+}
+
+#[test]
+fn a_selected_existing_seam_keeps_its_mode_after_a_blocked_play() {
+    use super::super::actions::{RunnerAction, apply_runner_action};
+    use clothcraft::avatar::{MeshCollider, SurfaceMesh};
+    use std::sync::{Arc, mpsc};
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, draft) = alignment_fixture(dir.path());
+    state.draft_2d = Some(draft);
+    assert!(confirm_pending_sew(&mut state, false));
+    let id = state.project.template.seams[0].id.clone();
+    let clear = Arc::clone(&state.scene.collider);
+    let avatar = dir.path().join("blocked-existing.obj");
+    std::fs::write(&avatar, "v -0.1 0 0\nv -0.1 3 0\nv -0.1 1.5 2\nf 1 2 3\n").unwrap();
+    let surface = Arc::new(SurfaceMesh::load_obj(&avatar).unwrap());
+    state.scene.collider =
+        Arc::new(MeshCollider::new(surface, state.project.contact_stiffness).unwrap());
+    let (send, receive) = mpsc::channel();
+    state.worker_tx = send;
+
+    apply_runner_ui_op(&mut state, RunnerUiOp::SelectSeam(id.clone()));
+    apply_runner_ui_op(
+        &mut state,
+        RunnerUiOp::SetSeamMode {
+            id: id.clone(),
+            join_on_play: true,
+        },
+    );
+    assert_eq!(state.seam_to_join.as_deref(), Some(id.as_str()));
+    assert!(state.seam_mode_error.is_none());
+    apply_runner_action(&mut state, RunnerAction::PlayPause, false);
+    assert!(!state.playing);
+    assert!(state.seam_assembly.is_none());
+    assert_eq!(state.seam_to_join.as_deref(), Some(id.as_str()));
+    assert!(
+        state
+            .seam_mode_error
+            .as_deref()
+            .unwrap()
+            .contains("must start separated")
+    );
+    assert!(receive.try_iter().all(|work| !work.playing && !work.once));
+
+    state.scene.collider = clear;
+    apply_runner_action(&mut state, RunnerAction::PlayPause, false);
+    assert!(state.playing);
+    assert!(state.seam_assembly.is_some());
+    assert!(state.seam_mode_error.is_none());
+}
+
+#[test]
+fn stock_dress_reports_future_overlap_and_previews_it_without_editing_the_scene() {
+    use super::super::actions::{RunnerAction, apply_runner_action};
+    use clothcraft::usd_scene::{
+        VIEWPORT_GARMENT_PATH, garment_stage_usda, viewport_panel_path, viewport_scene_from_usda,
+    };
+    use cssimpler::renderer::gpu::openusd::gf;
+    use std::sync::{Arc, Mutex, mpsc};
+
+    let dir = tempfile::tempdir().unwrap();
+    let project = FittingProject::basic(
+        GarmentKind::Dress,
+        1,
+        "assets/makehuman/mannequin.obj".into(),
+    );
+    let scene = project.compile().unwrap();
+    let original = scene.state.x.clone();
+    let (send, receive) = mpsc::channel();
+    let files = DocumentFiles {
+        output: dir.path().into(),
+        source: None,
+        modified: false,
+    };
+    let usd = viewport_scene_from_usda(&garment_stage_usda(&scene.garment, &scene.state).unwrap())
+        .unwrap()
+        .with_deforming_meshes(VIEWPORT_GARMENT_PATH)
+        .unwrap();
+    let mut state = CssRunnerState::new(project, scene, files, send, Arc::new(Mutex::new(None)));
+    state.usd_scene = Some(usd.clone());
+    let id = "side-left".to_string();
+    apply_runner_ui_op(&mut state, RunnerUiOp::SelectSeam(id.clone()));
+    apply_runner_ui_op(
+        &mut state,
+        RunnerUiOp::SetSeamMode {
+            id,
+            join_on_play: true,
+        },
+    );
+    apply_runner_action(&mut state, RunnerAction::PlayPause, false);
+    let error = state.seam_mode_error.as_deref().unwrap();
+    assert!(error.starts_with("Joined pose"), "{error}");
+    assert!(error.contains("overlap"), "{error}");
+    assert!(!state.playing);
+    assert!(receive.try_iter().all(|work| !work.playing && !work.once));
+
+    let points = |panel| {
+        let path = format!("{}.points", viewport_panel_path(panel));
+        usd.stage()
+            .attribute(path.as_str())
+            .unwrap()
+            .get::<Vec<gf::Vec3f>>()
+            .unwrap()
+            .unwrap()
+    };
+    let front = points("front");
+    let back = points("back");
+    assert_ne!(front, back);
+    apply_runner_ui_op(&mut state, RunnerUiOp::ToggleSeamCollisionPreview);
+    assert!(state.seam_collision.as_ref().unwrap().shown);
+    assert_eq!(points("front"), front);
+    let displayed_back = points("back");
+    assert_ne!(displayed_back, back);
+    let tip = displayed_back[0];
+    assert!(
+        front
+            .iter()
+            .any(|p| { (p.x - tip.x).abs() + (p.y - tip.y).abs() + (p.z - tip.z).abs() < 1e-6 }),
+        "the proposed back panel lies on the front panel"
+    );
+    assert_eq!(state.scene.state.x, original);
+    assert!(!state.files.modified);
+
+    assert!(handle_runner_event(&mut state, &named_key("Escape")));
+    assert_eq!(points("back"), back);
+    assert_eq!(state.seam_to_join.as_deref(), Some("side-left"));
+    assert!(!state.seam_collision.as_ref().unwrap().shown);
+}

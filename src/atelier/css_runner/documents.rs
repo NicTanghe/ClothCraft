@@ -95,6 +95,7 @@ impl CssRunnerState {
         };
         if (self.files.modified
             || self.draft_2d.is_some()
+            || self.seam_assembly.is_some()
             || self.preview_template.is_some()
             || self.placement_draft.is_some())
             && rfd::MessageDialog::new()
@@ -130,6 +131,10 @@ impl CssRunnerState {
         }
 
         self.settings = project.simulation.clone().unwrap_or_default();
+        self.seam_assembly = None;
+        self.seam_collision = None;
+        self.seam_to_join = None;
+        self.selected_seam = None;
         self.project = project;
         self.initial_scene = scene.clone();
         self.scene = scene;

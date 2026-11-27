@@ -33,6 +33,15 @@ pub(in super::super) fn build_runner_stage(state: &CssRunnerState) -> Node {
 }
 
 pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node {
+    let subtitle = if state
+        .seam_collision
+        .as_ref()
+        .is_some_and(|preview| preview.shown)
+    {
+        "Blocked seam pose preview"
+    } else {
+        "USD native 3D viewport (VBD + OGC)"
+    };
     let (shading_icon, shading_title) = match state.shading {
         ShadingMode::Smooth => (
             icon_shading_smooth(),
@@ -61,7 +70,7 @@ pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node
             <div class="viewport-header">
                 <div class="viewport-header-left">
                     <span class="viewport-title">"3D Garment & Avatar"</span>
-                    <span class="viewport-sub">"USD native 3D viewport (VBD + OGC)"</span>
+                    <span class="viewport-sub">{subtitle}</span>
                 </div>
                 <div class="viewport-tools">
                     <button id="add-viewport-piece" class="viewport-tool-btn" onclick_shared={queue_action(&state.actions, RunnerAction::AddViewportPiece)} title="Add a rectangular pattern piece in front of the camera">"Add Piece"</button>

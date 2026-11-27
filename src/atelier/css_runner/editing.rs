@@ -38,13 +38,27 @@ pub(super) fn install_authoring_edit(
     state: &mut CssRunnerState,
     edit: authoring::Edit,
     record_old: Option<GarmentTemplate>,
-    mut msg: String,
+    msg: String,
 ) {
+    install_authoring_edit_with_pose(state, edit, record_old, msg, None);
+}
+
+pub(super) fn install_authoring_edit_with_pose(
+    state: &mut CssRunnerState,
+    edit: authoring::Edit,
+    record_old: Option<GarmentTemplate>,
+    mut msg: String,
+    pose: Option<clothcraft::model::State>,
+) {
+    super::seam_assembly::cancel_motion(state);
+    super::seam_assembly::clear_collision(state);
     if let Some(old) = record_old {
         state.history.record(old);
     }
     let next_garment = Arc::new(edit.garment.clone());
-    let next_state = if edit.reset_simulation {
+    let next_state = if let Some(pose) = pose {
+        pose
+    } else if edit.reset_simulation {
         edit.state_after(&state.scene.garment, &state.scene.state)
     } else {
         state.scene.state.clone()
@@ -73,6 +87,27 @@ pub(super) fn install_authoring_edit(
         state.board_2d_fit = fit_2d_board(&edit.template);
     }
     state.project.template = edit.template;
+    state.seam_mode_error = None;
+    if state.selected_seam.as_ref().is_some_and(|id| {
+        !state
+            .project
+            .template
+            .seams
+            .iter()
+            .any(|seam| &seam.id == id)
+    }) {
+        state.selected_seam = None;
+    }
+    if state.seam_to_join.as_ref().is_some_and(|id| {
+        !state
+            .project
+            .template
+            .seams
+            .iter()
+            .any(|seam| &seam.id == id)
+    }) {
+        state.seam_to_join = None;
+    }
     state.files.modified = true;
     state
         .mirrored_pieces
@@ -141,6 +176,9 @@ pub fn commit_authoring_command(
 }
 
 pub fn undo_redo_2d(state: &mut CssRunnerState, redo: bool) -> bool {
+    if !redo && super::seam_assembly::cancel(state) {
+        return true;
+    }
     state.preview_template = None;
     match state.history.restore(&state.project.template, redo) {
         Ok(edit) => {
@@ -596,6 +634,65 @@ pub(super) fn sew_confirm_prompt(
 /// Commit the pending seam. Without `ease`, unequal lengths are refused and the
 /// draft is kept so the user can still choose easing or cancel.
 pub fn confirm_pending_sew(state: &mut CssRunnerState, ease: bool) -> bool {
+    finish_pending_sew(state, ease, false)
+}
+
+pub(super) fn select_seam(state: &mut CssRunnerState, id: &str) {
+    if state
+        .project
+        .template
+        .seams
+        .iter()
+        .any(|seam| seam.id == id)
+    {
+        state.active_category = super::state::ObjectCategory::Sewing;
+        state.selected_seam = Some(id.into());
+        super::seam_assembly::clear_collision(state);
+        state.seam_mode_error = None;
+        state.draft_2d = None;
+        state.status_message = format!("Selected seam {id}");
+    }
+}
+
+pub(super) fn set_seam_mode(state: &mut CssRunnerState, id: &str, join_on_play: bool) {
+    if state.selected_seam.as_deref() != Some(id) {
+        return;
+    }
+    state.seam_mode_error = None;
+    super::seam_assembly::clear_collision(state);
+    if !join_on_play {
+        if state.seam_to_join.as_deref() == Some(id) {
+            let was_playing = state.playing;
+            super::seam_assembly::cancel(state);
+            state.playing = was_playing;
+            state.send_control_state(false);
+            state.status_message = format!("{id} · Solver Pull");
+        }
+        return;
+    }
+    if state.seam_to_join.as_deref() == Some(id) {
+        return;
+    }
+    if state.seam_to_join.is_some() || state.seam_assembly.is_some() {
+        state.seam_mode_error = Some("Finish or cancel the pending join first".into());
+        return;
+    }
+    state.seam_to_join = Some(id.into());
+    state.status_message = format!("{id} · Join on Play");
+    if state.playing {
+        state.send_control_state(false);
+    }
+}
+
+pub(super) fn align_and_sew(state: &mut CssRunnerState, ease: bool) -> bool {
+    finish_pending_sew(state, ease, true)
+}
+
+fn finish_pending_sew(state: &mut CssRunnerState, ease: bool, align: bool) -> bool {
+    if state.seam_assembly.is_some() || (align && state.seam_to_join.is_some()) {
+        state.status_message = "Finish the pending seam or press Esc to cancel it".into();
+        return false;
+    }
     let Some(ToolDraft2d::SewConfirm {
         a,
         b,
@@ -645,16 +742,33 @@ pub fn confirm_pending_sew(state: &mut CssRunnerState, ease: bool) -> bool {
         )
     };
     let [a, b] = picked_sew_boundaries(&a, &b);
-    let committed = commit_authoring_command(
-        state,
-        Command::Sew {
-            a,
-            b,
-            reverse,
-            ease: ease && !equal,
-        },
-        message,
-    );
+    let command = Command::Sew {
+        a,
+        b,
+        reverse,
+        ease: ease && !equal,
+    };
+    let committed = if align {
+        let before = &state.project.template;
+        let result = authoring::apply_with_piece_mirroring(before, command, &state.mirrored_pieces)
+            .and_then(|edit| {
+                clothcraft::fitting::seam_placement::prepare(&state.scene, before, edit)
+            });
+        match result {
+            Ok(approach) => {
+                state.preview_template = None;
+                super::seam_assembly::begin(state, approach);
+                state.send_control_state(false);
+                true
+            }
+            Err(error) => {
+                state.status_message = format!("Alignment unavailable · {error}");
+                false
+            }
+        }
+    } else {
+        commit_authoring_command(state, command, message)
+    };
     if committed {
         state.draft_2d = None;
     }

@@ -570,14 +570,14 @@ fn separate_initial_arrangement(
 }
 
 /// Faces named by the OGC initial-intersection error.
-fn error_face_pair(error: &str) -> Option<(usize, usize)> {
+pub(crate) fn error_face_pair(error: &str) -> Option<(usize, usize)> {
     let rest = error.split("between faces ").nth(1)?;
     let mut parts = rest.split(" and ");
     let parse = |text: &str| text.split(';').next()?.trim().parse::<usize>().ok();
     Some((parse(parts.next()?)?, parse(parts.next()?)?))
 }
 
-fn panel_of_face(face: usize, garment: &CompiledGarment) -> Option<&str> {
+pub(crate) fn panel_of_face(face: usize, garment: &CompiledGarment) -> Option<&str> {
     if face >= garment.mesh.triangles.len() {
         return None;
     }

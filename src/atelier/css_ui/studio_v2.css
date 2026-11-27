@@ -1482,6 +1482,12 @@ button {
   margin-top: 6px;
 }
 
+.sewing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .badge-accent {
   color: var(--accent);
   font-size: 10px;

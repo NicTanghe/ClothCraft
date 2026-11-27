@@ -893,11 +893,16 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
             let pt_b = edge_anchor_mm(&b.id, seam.b.edge.as_deref(), b.center);
             let d = dashed_commands(&[pt_a, pt_b], 5.5 * px, 4.5 * px);
             if !d.is_empty() {
+                let selected = state.selected_seam.as_deref() == Some(seam.id.as_str());
                 nodes.push(BoardPath::new(
                     d,
                     None,
-                    Some(Color::rgba(16, 185, 129, 140)),
-                    1.1 * px,
+                    if selected {
+                        hover_cyan
+                    } else {
+                        Some(Color::rgba(16, 185, 129, 140))
+                    },
+                    if selected { 2.5 * px } else { 1.1 * px },
                     "",
                 ));
             }

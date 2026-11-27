@@ -96,6 +96,11 @@ pub struct CssRunnerState {
     pub generation: u64,
     pub worker_pending: bool,
     pub playing: bool,
+    pub(super) seam_assembly: Option<super::seam_assembly::SeamAssembly>,
+    pub(super) selected_seam: Option<String>,
+    pub(super) seam_to_join: Option<String>,
+    pub(super) seam_mode_error: Option<String>,
+    pub(super) seam_collision: Option<super::seam_assembly::CollisionPreview>,
     pub step_count: u64,
     pub step_ms: f64,
     pub last_metrics: Option<VbdMetrics>,
@@ -230,6 +235,11 @@ impl CssRunnerState {
             generation: 1,
             worker_pending: false,
             playing: false,
+            seam_assembly: None,
+            selected_seam: None,
+            seam_to_join: None,
+            seam_mode_error: None,
+            seam_collision: None,
             step_count: 0,
             step_ms: 0.0,
             last_metrics: None,
@@ -378,6 +388,28 @@ impl CssRunnerState {
     }
 
     pub fn send_control_state(&mut self, once: bool) {
+        if self.playing || once {
+            super::seam_assembly::clear_collision(self);
+        }
+        let once = if (self.playing || once)
+            && self.seam_assembly.is_none()
+            && let Some(id) = self.seam_to_join.clone()
+        {
+            super::seam_assembly::begin_existing(self, &id) && once
+        } else {
+            once
+        };
+        let assembling = if let Some(assembly) = &mut self.seam_assembly {
+            assembly.step_requested |= once;
+            if self.playing || once {
+                self.update_handle.request_update();
+            }
+            true
+        } else {
+            false
+        };
+        let playing = self.playing && !assembling;
+        let once = once && !assembling;
         let update = self.update_handle.clone();
         let work = Work {
             generation: self.generation,
@@ -387,10 +419,10 @@ impl CssRunnerState {
             gpu: self.gpu_sim,
             contact_method: self.contact_method,
             signal: worker::RepaintSignal::new(move || update.request_update()),
-            playing: self.playing,
+            playing,
             once,
         };
-        if self.worker_tx.send(work).is_ok() && (self.playing || once) {
+        if self.worker_tx.send(work).is_ok() && (playing || once) {
             self.worker_pending = true;
         }
     }
@@ -550,7 +582,16 @@ impl CssRunnerState {
             .preference_dirty_since
             .map(|since| since + PREFERENCE_SAVE_DEBOUNCE);
         let sample_at = self.number_drag.lock().unwrap().next_sample_at();
-        save_at.into_iter().chain(sample_at).min()
+        let assembly_at = self
+            .seam_assembly
+            .as_ref()
+            .filter(|_| self.playing)
+            .map(super::seam_assembly::SeamAssembly::deadline);
+        save_at
+            .into_iter()
+            .chain(sample_at)
+            .chain(assembly_at)
+            .min()
     }
 
     /// Write changed preferences after a short debounce, or immediately when
@@ -619,6 +660,7 @@ impl CssRunnerState {
         if self.gpu_sim == gpu && self.contact_method == method {
             return;
         }
+        super::seam_assembly::cancel_motion(self);
         self.gpu_sim = gpu;
         self.contact_method = method;
         self.generation = self.generation.wrapping_add(1);
@@ -632,6 +674,9 @@ impl CssRunnerState {
     }
 
     pub fn reset_simulation(&mut self) {
+        super::seam_assembly::cancel_motion(self);
+        super::seam_assembly::clear_collision(self);
+        self.seam_mode_error = None;
         self.files.modified |= self.scene.state.time != self.initial_scene.state.time
             || self.scene.state.x != self.initial_scene.state.x
             || self.scene.state.v != self.initial_scene.state.v;

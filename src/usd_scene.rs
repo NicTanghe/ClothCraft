@@ -642,7 +642,6 @@ pub fn update_panel_viewport_pose(
     garment: &CompiledGarment,
     state: &State,
 ) -> Result<(), String> {
-    use cssimpler::renderer::gpu::openusd::gf;
     if state.x.len() != garment.mesh.uv.len() {
         return Err("USD mesh sync requires matching state and UV vertex counts".into());
     }
@@ -654,15 +653,30 @@ pub fn update_panel_viewport_pose(
         return Err("USD display positions must be finite f32 values".into());
     }
     for panel in &garment.panels {
-        let points = state.x[panel.vertices.clone()]
-            .iter()
-            .map(|point| gf::vec3f(point.x as f32, point.y as f32, point.z as f32))
-            .collect();
-        scene
-            .set_deformed_mesh_points(&viewport_panel_path(&panel.id), points)
-            .map_err(|error| error.to_string())?;
+        update_viewport_panel_pose(
+            scene,
+            &panel.id,
+            state.x[panel.vertices.clone()].iter().copied(),
+        )?;
     }
     Ok(())
+}
+
+/// Update one deforming panel on the transient viewport stage.
+#[cfg(feature = "desktop")]
+pub(crate) fn update_viewport_panel_pose(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    panel: &str,
+    positions: impl IntoIterator<Item = glam::DVec3>,
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::gf;
+    let points = positions
+        .into_iter()
+        .map(|p| gf::vec3f(p.x as f32, p.y as f32, p.z as f32))
+        .collect();
+    scene
+        .set_deformed_mesh_points(&viewport_panel_path(panel), points)
+        .map_err(|error| error.to_string())
 }
 
 /// Apply a shading mode to every displayed mesh without moving any geometry.

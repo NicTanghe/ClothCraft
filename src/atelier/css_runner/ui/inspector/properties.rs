@@ -303,67 +303,6 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
         "cad-prop-btn"
     };
 
-    let sew_confirm_card = match &state.draft_2d {
-        Some(ToolDraft2d::SewConfirm {
-            a,
-            b,
-            a_len_m,
-            b_len_m,
-            reverse,
-        }) => {
-            let reflected = reflected_sew_preview(state, a, b, *reverse);
-            let original_equal = sew_lengths_equal(*a_len_m, *b_len_m);
-            let equal = original_equal
-                && reflected.as_ref().is_ok_and(|preview| {
-                    preview
-                        .as_ref()
-                        .is_none_or(|m| m.length_difference_m().is_none())
-                });
-            let difference = format!("{:.1} mm", (a_len_m - b_len_m).abs() * 1e3);
-            let reflected_row = match &reflected {
-                Ok(Some(m)) => ui! {
-                    <div class="prop-row">
-                        <span class="prop-label">"Reflected seam"</span>
-                        <span class="prop-value">{format!("{:.1} ↔ {:.1} mm", m.lengths[0] * 1e3, m.lengths[1] * 1e3)}</span>
-                    </div>
-                },
-                Err(error) => ui! { <p>{error.clone()}</p> },
-                Ok(None) => ui! { <span class="hidden" /> },
-            };
-            let (confirm_label, confirm_ease) = if equal {
-                ("Sew", false)
-            } else {
-                ("Sew with easing", true)
-            };
-            ui! {
-                <div id="sew-confirm-card" class="card sew-confirm-card">
-                    <div class="prop-row">
-                        <span class="prop-label">{format!("{}.{}", a.0, a.1)}</span>
-                        <span class="prop-value">{format!("{:.1} mm", a_len_m * 1e3)}</span>
-                    </div>
-                    <div class="prop-row">
-                        <span class="prop-label">{format!("{}.{}", b.0, b.1)}</span>
-                        <span class="prop-value">{format!("{:.1} mm", b_len_m * 1e3)}</span>
-                    </div>
-                    <div class="prop-row">
-                        <span class="prop-label">"Length difference"</span>
-                        <span class="prop-value">{if original_equal { "None".to_string() } else { difference }}</span>
-                    </div>
-                    {reflected_row}
-                    <div class="quick-actions-row">
-                        {if reflected.is_ok() {
-                            ui! { <button id="btn-sew-confirm" class="btn-action btn-action-accent" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ConfirmSew { ease: confirm_ease })}>{confirm_label}</button> }
-                        } else {
-                            ui! { <span class="hidden" /> }
-                        }}
-                        <button id="btn-sew-cancel" class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CancelSew)}>"Cancel"</button>
-                    </div>
-                </div>
-            }
-        }
-        _ => ui! { <span class="hidden" /> },
-    };
-
     let acc_line = ui! {
         <div class={if open_1 { "accordion open" } else { "accordion collapsed" }}>
             <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(1))}>
@@ -373,7 +312,6 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             {if open_1 {
                 ui! {
                     <div class="accordion-content">
-                        {sew_confirm_card}
                         <div class="prop-row">
                             <span class="prop-label">"2D Selection"</span>
                             <span class="prop-value">{sel_info.0}</span>
@@ -578,5 +516,81 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             {super::super::super::mesh_preparation::render(state)}
             {acc_sim}
         </div>
+    }
+}
+
+pub(in super::super::super) fn build_sew_confirmation(state: &CssRunnerState) -> Node {
+    match &state.draft_2d {
+        Some(ToolDraft2d::SewConfirm {
+            a,
+            b,
+            a_len_m,
+            b_len_m,
+            reverse,
+        }) => {
+            let reflected = reflected_sew_preview(state, a, b, *reverse);
+            let original_equal = sew_lengths_equal(*a_len_m, *b_len_m);
+            let equal = original_equal
+                && reflected.as_ref().is_ok_and(|preview| {
+                    preview
+                        .as_ref()
+                        .is_none_or(|m| m.length_difference_m().is_none())
+                });
+            let difference = format!("{:.1} mm", (a_len_m - b_len_m).abs() * 1e3);
+            let reflected_row = match &reflected {
+                Ok(Some(m)) => ui! {
+                    <div class="prop-row">
+                        <span class="prop-label">"Reflected seam"</span>
+                        <span class="prop-value">{format!("{:.1} ↔ {:.1} mm", m.lengths[0] * 1e3, m.lengths[1] * 1e3)}</span>
+                    </div>
+                },
+                Err(error) => ui! { <p>{error.clone()}</p> },
+                Ok(None) => ui! { <span class="hidden" /> },
+            };
+            let (confirm_label, confirm_ease) = if equal {
+                ("Sew", false)
+            } else {
+                ("Sew with easing", true)
+            };
+            let can_align = equal
+                && state.seam_assembly.is_none()
+                && state.seam_to_join.is_none()
+                && matches!(&reflected, Ok(None))
+                && clothcraft::fitting::seam_placement::eligible(
+                    &state.project.template,
+                    &state.scene,
+                    &a.0,
+                    &b.0,
+                );
+            ui! {
+                <div id="sew-confirm-card" class="card sew-confirm-card">
+                    <div class="prop-row">
+                        <span class="prop-label">{format!("{}.{}", a.0, a.1)}</span>
+                        <span class="prop-value">{format!("{:.1} mm", a_len_m * 1e3)}</span>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">{format!("{}.{}", b.0, b.1)}</span>
+                        <span class="prop-value">{format!("{:.1} mm", b_len_m * 1e3)}</span>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">"Length difference"</span>
+                        <span class="prop-value">{if original_equal { "None".to_string() } else { difference }}</span>
+                    </div>
+                    {reflected_row}
+                    <div class="quick-actions-row">
+                        {if reflected.is_ok() {
+                            ui! { <button id="btn-sew-confirm" class="btn-action btn-action-accent" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ConfirmSew { ease: confirm_ease })}>{confirm_label}</button> }
+                        } else {
+                            ui! { <span class="hidden" /> }
+                        }}
+                        {can_align.then(|| ui! {
+                            <button id="btn-sew-align" class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::AlignAndSew { ease: false })} title="During playback, move the whole second edge until it meets the first">"Join on Play"</button>
+                        })}
+                        <button id="btn-sew-cancel" class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CancelSew)}>"Cancel"</button>
+                    </div>
+                </div>
+            }
+        }
+        _ => ui! { <span class="hidden" /> },
     }
 }

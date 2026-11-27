@@ -141,6 +141,12 @@ pub enum RunnerUiOp {
     Undo2d,
     Redo2d,
     SelectPiece(usize),
+    SelectSeam(String),
+    ToggleSeamCollisionPreview,
+    SetSeamMode {
+        id: String,
+        join_on_play: bool,
+    },
     LoadPreset(GarmentKind),
     StatusNote(String),
     ImportChoose,
@@ -152,6 +158,9 @@ pub enum RunnerUiOp {
     ImportApply,
     ImportCancel,
     ConfirmSew {
+        ease: bool,
+    },
+    AlignAndSew {
         ease: bool,
     },
     CancelSew,
@@ -256,6 +265,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         state.clear_2d_subselection();
     }
     let placement_committed = super::placement::commit_finished_placement_draft(state);
+    let seam_changed = super::seam_assembly::tick(state, frame.delta);
 
     let selected_mesh_panel = state
         .project
@@ -273,6 +283,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
 
     if number_changed
         || placement_committed
+        || seam_changed
         || shadow_changed
         || input_changed
         || had_actions
@@ -744,6 +755,10 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             let next_template = basic_garment(kind, subdivisions);
             match next_template.compile() {
                 Ok(compiled) => {
+                    state.seam_collision = None;
+                    state.seam_assembly = None;
+                    state.seam_to_join = None;
+                    state.selected_seam = None;
                     let old = state.project.template.clone();
                     state.history.record(old);
                     state.preview_template = None;
@@ -806,6 +821,14 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         }
         RunnerUiOp::ConfirmSew { ease } => {
             confirm_pending_sew(state, ease);
+        }
+        RunnerUiOp::SelectSeam(id) => super::editing::select_seam(state, &id),
+        RunnerUiOp::ToggleSeamCollisionPreview => super::seam_assembly::toggle_collision(state),
+        RunnerUiOp::SetSeamMode { id, join_on_play } => {
+            super::editing::set_seam_mode(state, &id, join_on_play);
+        }
+        RunnerUiOp::AlignAndSew { ease } => {
+            super::editing::align_and_sew(state, ease);
         }
         RunnerUiOp::CancelSew => {
             if matches!(state.draft_2d, Some(ToolDraft2d::SewConfirm { .. })) {

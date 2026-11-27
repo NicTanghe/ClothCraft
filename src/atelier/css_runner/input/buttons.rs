@@ -232,6 +232,24 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                 {
                                     let pid = p.id.clone();
                                     let edge_name = ename.clone();
+                                    let mut owners =
+                                        state.project.template.seams.iter().filter(|seam| {
+                                            seam.references().any(|side| {
+                                                side.panel == pid
+                                                    && side.edge.as_deref()
+                                                        == Some(edge_name.as_str())
+                                            })
+                                        });
+                                    if let Some(owner) = owners.next() {
+                                        if owners.next().is_some() {
+                                            state.status_message = "Choose the seam in the Sew tab; this edge has multiple sewn ranges".into();
+                                        } else {
+                                            let id = owner.id.clone();
+                                            super::super::editing::select_seam(state, &id);
+                                        }
+                                        return true;
+                                    }
+                                    state.selected_seam = None;
                                     let first = match &state.draft_2d {
                                         Some(ToolDraft2d::Sew {
                                             first_edge: Some((panel, edge)),
