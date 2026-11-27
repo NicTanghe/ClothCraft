@@ -40,6 +40,7 @@ pub(super) fn install_authoring_edit(
     record_old: Option<GarmentTemplate>,
     mut msg: String,
 ) {
+    super::seam_assembly::cancel(state);
     if let Some(old) = record_old {
         state.history.record(old);
     }
@@ -141,6 +142,9 @@ pub fn commit_authoring_command(
 }
 
 pub fn undo_redo_2d(state: &mut CssRunnerState, redo: bool) -> bool {
+    if !redo && super::seam_assembly::cancel(state) {
+        return true;
+    }
     state.preview_template = None;
     match state.history.restore(&state.project.template, redo) {
         Ok(edit) => {
@@ -604,6 +608,10 @@ pub(super) fn align_and_sew(state: &mut CssRunnerState, ease: bool) -> bool {
 }
 
 fn finish_pending_sew(state: &mut CssRunnerState, ease: bool, align: bool) -> bool {
+    if state.seam_assembly.is_some() {
+        state.status_message = "Finish the pending seam or press Esc to cancel it".into();
+        return false;
+    }
     let Some(ToolDraft2d::SewConfirm {
         a,
         b,
@@ -666,20 +674,9 @@ fn finish_pending_sew(state: &mut CssRunnerState, ease: bool, align: bool) -> bo
                 clothcraft::fitting::seam_placement::prepare(&state.scene, before, edit)
             });
         match result {
-            Ok((edit, [old_gap, new_gap])) => {
-                let old = before.clone();
+            Ok(approach) => {
                 state.preview_template = None;
-                state.playing = false;
-                install_authoring_edit(
-                    state,
-                    edit,
-                    Some(old),
-                    format!(
-                        "{message} · Aligned the second piece · Gap {:.1} → {:.1} mm",
-                        old_gap * 1e3,
-                        new_gap * 1e3
-                    ),
-                );
+                super::seam_assembly::queue(state, approach);
                 true
             }
             Err(error) => {

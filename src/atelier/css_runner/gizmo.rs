@@ -116,7 +116,7 @@ fn blocked(state: &CssRunnerState) -> bool {
 }
 
 fn placement_active(state: &CssRunnerState) -> bool {
-    state.gizmo.enabled && state.active_3d_tool == "Gizmo"
+    state.seam_assembly.is_none() && state.gizmo.enabled && state.active_3d_tool == "Gizmo"
 }
 
 fn selected_range(state: &CssRunnerState) -> Option<&PanelRange> {

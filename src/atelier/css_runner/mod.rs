@@ -17,6 +17,7 @@ mod input;
 mod mesh_preparation;
 mod placement;
 mod preferences;
+mod seam_assembly;
 pub(super) mod shadow_controls;
 mod state;
 mod ui;

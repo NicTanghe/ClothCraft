@@ -245,6 +245,7 @@ impl MeshDraft {
 pub fn apply(state: &mut CssRunnerState, physics: bool) -> Result<(), String> {
     if state.playing
         || state.worker_pending
+        || state.seam_assembly.is_some()
         || state.draft_2d.is_some()
         || state.drag_2d.is_some()
         || state.preview_template.is_some()

@@ -180,6 +180,9 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                             state.solver_menu_open = false;
                             return true;
                         }
+                        if super::super::seam_assembly::cancel(state) {
+                            return true;
+                        }
                         if state.draft_2d.is_some() {
                             state.draft_2d = None;
                             state.status_message = "Cancelled 2D tool draft".into();

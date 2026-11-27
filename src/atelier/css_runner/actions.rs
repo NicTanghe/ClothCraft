@@ -259,6 +259,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         state.clear_2d_subselection();
     }
     let placement_committed = super::placement::commit_finished_placement_draft(state);
+    let seam_changed = super::seam_assembly::tick(state, frame.delta);
 
     let selected_mesh_panel = state
         .project
@@ -276,6 +277,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
 
     if number_changed
         || placement_committed
+        || seam_changed
         || shadow_changed
         || input_changed
         || had_actions
@@ -747,6 +749,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
             let next_template = basic_garment(kind, subdivisions);
             match next_template.compile() {
                 Ok(compiled) => {
+                    state.seam_assembly = None;
                     let old = state.project.template.clone();
                     state.history.record(old);
                     state.preview_template = None;
